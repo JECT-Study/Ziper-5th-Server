@@ -1,0 +1,12 @@
+**
+!gradlew
+!gradle/
+!gradle/**
+!build.gradle
+!settings.gradle
+!gradle.properties
+!src/
+!src/**
+!config/
+!config/formatter/
+!config/formatter/**
