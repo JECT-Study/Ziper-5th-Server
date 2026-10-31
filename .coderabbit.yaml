@@ -1,0 +1,12 @@
+language: ko-KR
+reviews:
+  profile: chill
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - develop
+      - main
+  path_instructions:
+    - path: "**/*"
+      instructions: "AGENTS.md의 작업 및 검증 규칙을 검토 기준으로 사용하세요. 보안 경계, 실제 동작과 문서의 일치, 최소 변경을 확인하세요."
