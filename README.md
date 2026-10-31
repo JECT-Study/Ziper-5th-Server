@@ -33,6 +33,7 @@ curl -i http://localhost:8080/readyz
 - [보안·상태 점검·Sentry 운영](docs/operations.md)
 - [리뷰와 저장소 설정](docs/repository.md)
 - [에이전트 작업 규칙](AGENTS.md)
+- [초기화 검증 기록](docs/verification.md)
 
 Spring Boot 4에 대한 팀의 경험이 부족해 3.5 계열로 시작했습니다. 3.5.16은 마지막 OSS 지원 릴리스이므로, 2026-11-01 기준으로 이 선택을 장기 지원으로 간주하면 안 됩니다. 후속 지원 또는 상위 버전 전환 계획을 별도로 정해야 합니다. [Spring 공식 안내](https://spring.io/blog/2026/06/25/spring-boot-3-5-16-available-now/)
 

@@ -74,14 +74,22 @@ checkstyle {
 
 tasks.named('check') { dependsOn 'spotlessCheck', 'checkstyleMain', 'checkstyleTest' }
 
+def sourceUploadEnabled = providers.environmentVariable('SENTRY_UPLOAD').map { it == 'true' }.getOrElse(false) &&
+    providers.environmentVariable('SENTRY_AUTH_TOKEN').map { !it.isBlank() }.getOrElse(false)
+
 sentry {
     includeSourceContext = true
-    autoUploadSourceContext = providers.environmentVariable('SENTRY_UPLOAD').map { it == 'true' }.getOrElse(false) &&
-        providers.environmentVariable('SENTRY_AUTH_TOKEN').map { !it.isBlank() }.getOrElse(false)
+    autoUploadSourceContext = sourceUploadEnabled
     org = 'ject-5th-team6'
     projectName = 'ject-5th-team6-api-server'
     authToken = providers.environmentVariable('SENTRY_AUTH_TOKEN').getOrElse('')
     autoInstallation { enabled = false }
+}
+
+tasks.named('bootJar') {
+    if (sourceUploadEnabled) {
+        finalizedBy 'sentryUploadSourceBundleJava'
+    }
 }
 
 // Generate the source bundle even when uploads are deliberately disabled.

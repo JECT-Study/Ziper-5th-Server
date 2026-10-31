@@ -1,4 +1,8 @@
 language: ko-KR
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - AGENTS.md
 reviews:
   profile: chill
   auto_review:
