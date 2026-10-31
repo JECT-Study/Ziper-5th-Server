@@ -39,13 +39,14 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
 @SpringBootTest(classes = SecurityConfigurationTest.Fixture.class, properties = {
-	"app.security.jwt-secret-base64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
-	"app.security.jwt-issuer=ziper-server", "app.security.jwt-audience=ziper-api",
-	"app.security.allowed-origins=https://app.example.com", "spring.flyway.enabled=false",
-	"sentry.enabled=false", "management.endpoint.health.group.readiness.include=readinessState"})
+		"app.security.jwt-secret-base64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+		"app.security.jwt-issuer=ziper-server", "app.security.jwt-audience=ziper-api",
+		"app.security.allowed-origins=https://app.example.com", "spring.flyway.enabled=false", "sentry.enabled=false",
+		"management.endpoint.health.group.readiness.include=readinessState"})
 @AutoConfigureMockMvc
 class SecurityConfigurationTest {
-	private static final byte[] KEY = "0123456789abcdef0123456789abcdef".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+	private static final byte[] KEY = "0123456789abcdef0123456789abcdef"
+			.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
 	@Autowired
 	MockMvc mvc;
@@ -53,39 +54,35 @@ class SecurityConfigurationTest {
 	@Test
 	void validSignedTokenAuthenticatesWithoutSession() throws Exception {
 		var result = mvc.perform(get("/private").header("Authorization", "Bearer " + token(claims(), KEY)))
-			.andExpect(status().isOk()).andExpect(header().doesNotExist("Set-Cookie"))
-			.andReturn();
+				.andExpect(status().isOk()).andExpect(header().doesNotExist("Set-Cookie")).andReturn();
 		assertThat(result.getRequest().getSession(false)).isNull();
 		mvc.perform(get("/private")).andExpect(status().isUnauthorized())
-			.andExpect(header().string("WWW-Authenticate", "Bearer"))
-			.andExpect(jsonPath("status").value(401))
-			.andExpect(jsonPath("detail").value("Authentication is required"));
+				.andExpect(header().string("WWW-Authenticate", "Bearer")).andExpect(jsonPath("status").value(401))
+				.andExpect(jsonPath("detail").value("Authentication is required"));
 	}
 
 	@Test
 	void invalidClaimsAndSignaturesAreRejected() throws Exception {
 		List<JWTClaimsSet.Builder> invalid = List.of(
-			claims().expirationTime(Date.from(Instant.now().minusSeconds(300))),
-			claims().expirationTime(null), claims().issuer("wrong"), claims().audience("wrong"), claims().audience((String)null),
-			claims().subject(null), claims().subject(" "),
-			claims().notBeforeTime(Date.from(Instant.now().plusSeconds(300))));
+				claims().expirationTime(Date.from(Instant.now().minusSeconds(300))), claims().expirationTime(null),
+				claims().issuer("wrong"), claims().audience("wrong"), claims().audience((String) null),
+				claims().subject(null), claims().subject(" "),
+				claims().notBeforeTime(Date.from(Instant.now().plusSeconds(300))));
 		for (var claims : invalid) {
 			mvc.perform(get("/private").header("Authorization", "Bearer " + token(claims, KEY)))
-				.andExpect(status().isUnauthorized()).andExpect(jsonPath("status").value(401))
-				.andExpect(header().doesNotExist("Set-Cookie"));
+					.andExpect(status().isUnauthorized()).andExpect(jsonPath("status").value(401))
+					.andExpect(header().doesNotExist("Set-Cookie"));
 		}
-		mvc.perform(get("/private").header("Authorization", "Bearer broken"))
-			.andExpect(status().isUnauthorized());
+		mvc.perform(get("/private").header("Authorization", "Bearer broken")).andExpect(status().isUnauthorized());
 		mvc.perform(get("/private").header("Authorization", "Bearer " + token(claims(), new byte[32])))
-			.andExpect(status().isUnauthorized());
+				.andExpect(status().isUnauthorized());
 	}
 
 	@Test
 	void onlyAuthorizationHeaderCarriesTokens() throws Exception {
 		String token = token(claims(), KEY);
 		mvc.perform(get("/private").param("access_token", token)).andExpect(status().isUnauthorized());
-		mvc.perform(get("/private").cookie(new Cookie("access_token", token)))
-			.andExpect(status().isUnauthorized());
+		mvc.perform(get("/private").cookie(new Cookie("access_token", token))).andExpect(status().isUnauthorized());
 	}
 
 	@Test
@@ -96,9 +93,9 @@ class SecurityConfigurationTest {
 			mvc.perform(post(path)).andExpect(status().isUnauthorized());
 		}
 		mvc.perform(get("/actuator/env").header("Authorization", "Bearer " + token(claims(), KEY)))
-			.andExpect(status().isForbidden()).andExpect(jsonPath("status").value(403));
+				.andExpect(status().isForbidden()).andExpect(jsonPath("status").value(403));
 		mvc.perform(get("/actuator/health").header("Authorization", "Bearer " + token(claims(), KEY)))
-			.andExpect(status().isForbidden());
+				.andExpect(status().isForbidden());
 		mvc.perform(get("/error")).andExpect(status().isUnauthorized());
 		mvc.perform(get("/private").with(request -> {
 			request.setDispatcherType(DispatcherType.ERROR);
@@ -109,29 +106,30 @@ class SecurityConfigurationTest {
 	@Test
 	void corsAllowsOnlyConfiguredOriginsWithoutCredentials() throws Exception {
 		mvc.perform(options("/private").header("Origin", "https://app.example.com")
-			.header("Access-Control-Request-Method", "POST")
-			.header("Access-Control-Request-Headers", "Authorization, Content-Type"))
-			.andExpect(status().isOk()).andExpect(header().string("Access-Control-Allow-Origin", "https://app.example.com"))
-			.andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
+				.header("Access-Control-Request-Method", "POST")
+				.header("Access-Control-Request-Headers", "Authorization, Content-Type")).andExpect(status().isOk())
+				.andExpect(header().string("Access-Control-Allow-Origin", "https://app.example.com"))
+				.andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
 		mvc.perform(options("/private").header("Origin", "https://evil.example.com")
-			.header("Access-Control-Request-Method", "POST"))
-			.andExpect(status().isForbidden()).andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+				.header("Access-Control-Request-Method", "POST")).andExpect(status().isForbidden())
+				.andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
 	}
 
 	@Test
 	void propertiesRejectInvalidSecretsAndWildcardOrigins() {
 		for (String secret : List.of("", "not-base64!", Base64.getEncoder().encodeToString(new byte[31]))) {
 			new ApplicationContextRunner().withUserConfiguration(PropertiesFixture.class)
-				.withPropertyValues("app.security.jwt-secret-base64=" + secret)
-				.run(context -> assertThat(context).hasFailed());
+					.withPropertyValues("app.security.jwt-secret-base64=" + secret)
+					.run(context -> assertThat(context).hasFailed());
 		}
-		assertThatIllegalArgumentException().isThrownBy(() -> new SecurityProperties(
-			Base64.getEncoder().encodeToString(KEY), null, null, List.of("https://*.example.com")));
+		assertThatIllegalArgumentException()
+				.isThrownBy(() -> new SecurityProperties(Base64.getEncoder().encodeToString(KEY), null, null,
+						List.of("https://*.example.com")));
 	}
 
 	private JWTClaimsSet.Builder claims() {
 		return new JWTClaimsSet.Builder().issuer("ziper-server").audience("ziper-api").subject("member-1")
-			.expirationTime(Date.from(Instant.now().plusSeconds(300)));
+				.expirationTime(Date.from(Instant.now().plusSeconds(300)));
 	}
 
 	private String token(JWTClaimsSet.Builder claims, byte[] key) throws Exception {

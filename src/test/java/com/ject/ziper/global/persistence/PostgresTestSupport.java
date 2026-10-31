@@ -11,13 +11,10 @@ public abstract class PostgresTestSupport {
 	protected static final String RUNTIME_PASSWORD = "test-runtime-password";
 	protected static final String MIGRATION_PASSWORD = "test-migration-password";
 	protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17.6")
-		.withDatabaseName("ziper")
-		.withUsername("ziper_admin")
-		.withPassword("test-admin-password")
-		.withEnv("DB_PASSWORD", RUNTIME_PASSWORD)
-		.withEnv("MIGRATION_PASSWORD", MIGRATION_PASSWORD)
-		.withCopyFileToContainer(MountableFile.forHostPath(Path.of("db/init/001-roles.sh"), 0755),
-			"/docker-entrypoint-initdb.d/001-roles.sh");
+			.withDatabaseName("ziper").withUsername("ziper_admin").withPassword("test-admin-password")
+			.withEnv("DB_PASSWORD", RUNTIME_PASSWORD).withEnv("MIGRATION_PASSWORD", MIGRATION_PASSWORD)
+			.withCopyFileToContainer(MountableFile.forHostPath(Path.of("db/init/001-roles.sh"), 0755),
+					"/docker-entrypoint-initdb.d/001-roles.sh");
 
 	static {
 		POSTGRES.start();

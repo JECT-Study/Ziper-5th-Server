@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("app.security")
 public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
-	List<String> allowedOrigins) {
+		List<String> allowedOrigins) {
 	public SecurityProperties {
 		if (jwtSecretBase64 == null || jwtSecretBase64.isBlank()) {
 			throw new IllegalArgumentException("app.security.jwt-secret-base64 is required");
@@ -27,13 +27,14 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 		if (jwtIssuer.isBlank() || jwtAudience.isBlank()) {
 			throw new IllegalArgumentException("JWT issuer and audience must not be blank");
 		}
-		allowedOrigins = allowedOrigins == null ? List.of() : allowedOrigins.stream()
-			.map(String::trim).filter(origin -> !origin.isEmpty()).toList();
+		allowedOrigins = allowedOrigins == null
+				? List.of()
+				: allowedOrigins.stream().map(String::trim).filter(origin -> !origin.isEmpty()).toList();
 		for (String origin : allowedOrigins) {
 			URI uri = URI.create(origin);
 			if (origin.contains("*") || !("https".equals(uri.getScheme()) || "http".equals(uri.getScheme()))
-				|| uri.getHost() == null || uri.getRawUserInfo() != null || uri.getRawQuery() != null
-				|| uri.getRawFragment() != null || (uri.getRawPath() != null && !uri.getRawPath().isEmpty())) {
+					|| uri.getHost() == null || uri.getRawUserInfo() != null || uri.getRawQuery() != null
+					|| uri.getRawFragment() != null || (uri.getRawPath() != null && !uri.getRawPath().isEmpty())) {
 				throw new IllegalArgumentException("CORS origins must be explicit HTTP(S) origins");
 			}
 		}
