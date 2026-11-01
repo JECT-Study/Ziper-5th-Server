@@ -8,7 +8,7 @@ import org.springframework.mock.env.MockEnvironment;
 
 class OpenApiConfigurationTest {
 	@Test
-	void requiresExplicitLocalRuntimeAndSoleLocalProfileForEitherEndpoint() {
+	void 프로필과실행모드조합_Swagger엔드포인트를켜면_로컬단독프로필과로컬실행모드에서만허용한다() {
 		for (String[] profiles : new String[][]{{}, {"prod"}, {"dev"}, {"test"}, {"local", "prod"}}) {
 			for (String property : new String[]{"springdoc.api-docs.enabled", "springdoc.swagger-ui.enabled"}) {
 				var environment = new MockEnvironment().withProperty(property, "true").withProperty("app.runtime-mode",

@@ -14,17 +14,20 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import jakarta.servlet.RequestDispatcher;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.ject.ziper.global.observability.RequestIdFilter;
+
 import io.sentry.Sentry;
 
 class ApiExceptionHandlerTest {
 	@Test
-	void preservesClientStatusesWithoutCapturingAndCapturesUnexpectedFailureOnce() throws Exception {
+	void 클라이언트오류와예상하지못한실패_요청을처리하면_4xx는수집없이응답하고5xx는세부정보를숨겨한번만수집한다() throws Exception {
 		var mvc = MockMvcBuilders.standaloneSetup(new Endpoints())
 				.setControllerAdvice(new ApiExceptionHandler(new ProblemFactory())).build();
 		try (var sentry = mockStatic(Sentry.class)) {
@@ -43,20 +46,22 @@ class ApiExceptionHandlerTest {
 	}
 
 	@Test
-	void validationMalformedBodyAndErrorFallbackNeverExposeSubmittedValues() throws Exception {
+	void 검증실패본문과깨진JSON본문과오류폴백요청_요청을처리하면_제출값과내부메시지를노출하지않고상태와요청ID를응답한다() throws Exception {
 		var mvc = MockMvcBuilders.standaloneSetup(new Endpoints(), new SafeErrorController(new ProblemFactory()))
-				.setControllerAdvice(new ApiExceptionHandler(new ProblemFactory()))
-				.addFilters(new com.ject.ziper.global.observability.RequestIdFilter()).build();
+				.setControllerAdvice(new ApiExceptionHandler(new ProblemFactory())).addFilters(new RequestIdFilter())
+				.build();
 		for (String body : new String[]{"{\"name\":\"\"}", "{secret-token"}) {
 			var result = mvc.perform(post("/validate").contentType("application/json").content(body))
 					.andExpect(status().isBadRequest()).andExpect(jsonPath("code").value("INVALID_REQUEST")).andReturn()
 					.getResponse();
 			assertThat(result.getContentAsString()).doesNotContain("secret-token", "NotBlank", "rejectedValue");
 		}
-		mvc.perform(get("/error").requestAttr(jakarta.servlet.RequestDispatcher.ERROR_STATUS_CODE, 404)
-				.requestAttr(jakarta.servlet.RequestDispatcher.ERROR_MESSAGE, "secret-token SQL"))
+		var fallback = mvc
+				.perform(get("/error").requestAttr(RequestDispatcher.ERROR_STATUS_CODE, 404)
+						.requestAttr(RequestDispatcher.ERROR_MESSAGE, "secret-token SQL"))
 				.andExpect(status().isNotFound()).andExpect(jsonPath("code").value("NOT_FOUND"))
-				.andExpect(jsonPath("requestId").isNotEmpty());
+				.andExpect(jsonPath("requestId").isNotEmpty()).andReturn().getResponse();
+		assertThat(fallback.getContentAsString()).doesNotContain("secret-token", "SQL");
 	}
 
 	@RestController

@@ -30,7 +30,7 @@ class LocalOpenApiIntegrationTest {
 	MockMvc mvc;
 
 	@Test
-	void localOptInPublishesUiAssetsAndBothFormatsWhileApisRequireAuthentication() throws Exception {
+	void 로컬에서Swagger를켠환경_문서와API를요청하면_업무경로없는JWT스킴문서를JSON과YAML과UI로공개하고API는인증을요구한다() throws Exception {
 		mvc.perform(get("/swagger-ui.html")).andExpect(status().is3xxRedirection());
 		mvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
 		mvc.perform(get("/swagger-ui/swagger-ui-bundle.js")).andExpect(status().isOk());

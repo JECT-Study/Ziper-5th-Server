@@ -3,6 +3,8 @@ package com.ject.ziper.global.architecture;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import java.util.Locale;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
@@ -36,7 +38,7 @@ final class ArchitectureRules {
 									.add(SimpleConditionEvent.violated(item, dependency.getDescription())));
 					item.getMethodCallsFromSelf().stream()
 							.filter(call -> call.getTargetOwner().isAssignableTo(HttpServletRequest.class))
-							.filter(call -> call.getName().toLowerCase(java.util.Locale.ROOT).contains("session"))
+							.filter(call -> call.getName().toLowerCase(Locale.ROOT).contains("session"))
 							.forEach(call -> events.add(SimpleConditionEvent.violated(item, call.getDescription())));
 				}
 			});

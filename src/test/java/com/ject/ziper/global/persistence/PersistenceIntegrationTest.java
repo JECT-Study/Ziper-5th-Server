@@ -27,13 +27,13 @@ class PersistenceIntegrationTest extends PostgresTestSupport {
 	private Flyway flyway;
 
 	@Test
-	void startupCanRepeatAgainstTheSameDatabase() {
+	void 이미사용중인DB_애플리케이션을다시기동하면_대기마이그레이션없이런타임역할로연결한다() {
 		assertThat(flyway.info().pending()).isEmpty();
 		assertThat(jdbc.queryForObject("SELECT current_user", String.class)).isEqualTo("ziper_app");
 	}
 
 	@Test
-	void migrationsAreRepeatableAndRuntimeHasOnlyDataPrivileges() throws SQLException {
+	void 마이그레이션이끝난DB_다시마이그레이션하고런타임역할로쿼리하면_추가실행없이업무테이블DML만허용하고DDL과이력테이블접근은거부한다() throws SQLException {
 		assertThat(flyway.migrate().migrationsExecuted).isZero();
 		assertThat(jdbc.queryForObject("SELECT current_user", String.class)).isEqualTo("ziper_app");
 		assertThat(jdbc.queryForObject("SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'ziper'",

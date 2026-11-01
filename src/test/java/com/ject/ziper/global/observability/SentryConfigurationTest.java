@@ -10,6 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.ject.ziper.global.error.BusinessException;
+import com.ject.ziper.global.error.ErrorCode;
+
 import io.sentry.CustomSamplingContext;
 import io.sentry.Hint;
 import io.sentry.SamplingContext;
@@ -22,7 +25,7 @@ class SentryConfigurationTest {
 	private final SentryConfiguration configuration = new SentryConfiguration();
 
 	@Test
-	void removesSensitiveRequestFieldsAndUrlCredentials() {
+	void 민감한요청정보가담긴이벤트_전송전처리하면_사용자와요청민감필드를지우고URL은경로까지만남긴다() {
 		var event = new SentryEvent(new IllegalStateException("failure"));
 		event.setUser(new User());
 		var request = new Request();
@@ -44,9 +47,8 @@ class SentryConfigurationTest {
 	}
 
 	@Test
-	void dropsExpectedClientErrors() {
-		assertThat(configuration.privacyBeforeSend().execute(new SentryEvent(
-				new com.ject.ziper.global.error.BusinessException(com.ject.ziper.global.error.ErrorCode.CONFLICT)),
+	void 예상한클라이언트오류이벤트_전송전처리하면_전송하지않는다() {
+		assertThat(configuration.privacyBeforeSend().execute(new SentryEvent(new BusinessException(ErrorCode.CONFLICT)),
 				new Hint())).isNull();
 		assertThat(configuration.privacyBeforeSend()
 				.execute(new SentryEvent(new ResponseStatusException(HttpStatus.BAD_REQUEST, "secret")), new Hint()))
@@ -54,7 +56,7 @@ class SentryConfigurationTest {
 	}
 
 	@Test
-	void excludesProbeRequestsAndAliasesAndDelegatesOtherSampling() {
+	void 프로브와별칭경로및일반경로요청_트레이스를샘플링하면_프로브만제외하고일반경로는기본샘플링에맡긴다() {
 		for (String path : new String[]{"/livez", "/readyz", "/actuator/health", "/actuator/health/liveness",
 				"/actuator/health/readiness"}) {
 			var custom = new CustomSamplingContext();

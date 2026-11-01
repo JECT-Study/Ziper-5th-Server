@@ -9,7 +9,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 
 class ArchitectureRulesTest {
 	@Test
-	void productionClassesRespectArchitectureBoundaries() {
+	void 운영클래스전체_아키텍처규칙을검사하면_위반이없다() {
 		var production = new ClassFileImporter().withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
 				.importPackages("com.ject.ziper");
 		assertThat(production).isNotEmpty();

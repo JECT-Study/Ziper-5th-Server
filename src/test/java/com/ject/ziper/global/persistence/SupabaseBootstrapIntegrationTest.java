@@ -16,7 +16,7 @@ import org.testcontainers.utility.MountableFile;
 
 class SupabaseBootstrapIntegrationTest {
 	@Test
-	void nonSuperuserDatabaseOwnerCanBootstrapAndUpgradeExistingHistory() throws Exception {
+	void 슈퍼유저가아닌DB소유자_부트스트랩하고V1이력에서최신으로마이그레이션하면_소유자는생성역할을쓸수없고런타임역할은업무DML만허용된다() throws Exception {
 		try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.6").withDatabaseName("postgres")
 				.withUsername("test_root").withPassword("test-root-password").withCopyFileToContainer(
 						MountableFile.forHostPath(Path.of("db/supabase/bootstrap.sql")), "/tmp/bootstrap.sql")) {

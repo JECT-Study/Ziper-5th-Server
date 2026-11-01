@@ -43,7 +43,7 @@ class ProbeIntegrationTest extends PostgresTestSupport {
 	MockMvc mvc;
 
 	@Test
-	void authenticatedActuatorAccessIsDeniedAndErrorsAreSafe() throws Exception {
+	void 인증된사용자_actuator와오류경로를요청하면_actuator는거부하고5xx만Sentry에수집한다() throws Exception {
 		mvc.perform(get("/actuator/env").with(jwt())).andExpect(status().isForbidden());
 		mvc.perform(get("/actuator/health").with(jwt())).andExpect(status().isForbidden());
 		try (var sentry = mockStatic(Sentry.class, CALLS_REAL_METHODS)) {
@@ -69,7 +69,7 @@ class ProbeIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
-	void probesExposeOnlyStatusAndNeverCache() {
+	void 정상동작중인서버_프로브를요청하면_상태만노출하고캐시를금지한다() {
 		for (String path : List.of("/livez", "/readyz", "/actuator/health/liveness", "/actuator/health/readiness")) {
 			var response = http.getForEntity(path, Map.class);
 			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -79,7 +79,7 @@ class ProbeIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
-	void databaseOutageMakesReadinessUnavailableWhileLivenessSurvivesAndThenRecovers() throws Exception {
+	void DB를일시중단한상태_프로브를요청하고DB를복구하면_중단중에는readiness만DOWN이고복구후UP으로돌아온다() throws Exception {
 		var docker = POSTGRES.getDockerClient();
 		docker.pauseContainerCmd(POSTGRES.getContainerId()).exec();
 		try {

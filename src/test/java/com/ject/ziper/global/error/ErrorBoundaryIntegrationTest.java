@@ -48,7 +48,7 @@ class ErrorBoundaryIntegrationTest {
 	RecordingTransport transport;
 
 	@Test
-	void springSentryIntegrationCapturesUnexpectedFailureExactlyOnceAndCorrelatesSafeErrors() throws Exception {
+	void 업무오류와예상하지못한실패_Spring과Sentry로처리하면_5xx만한번수집하고서버생성요청ID로연결한다() throws Exception {
 		transport.events.clear();
 		mvc.perform(get("/business").with(jwt())).andExpect(status().isConflict())
 				.andExpect(jsonPath("code").value("CONFLICT"));

@@ -1,6 +1,7 @@
 package com.ject.ziper.global.observability;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -74,7 +75,7 @@ public class SentryConfiguration {
 		try {
 			URI uri = URI.create(url);
 			return new URI(uri.getScheme(), null, uri.getHost(), uri.getPort(), uri.getPath(), null, null).toString();
-		} catch (java.net.URISyntaxException | IllegalArgumentException exception) {
+		} catch (URISyntaxException | IllegalArgumentException exception) {
 			return null;
 		}
 	}

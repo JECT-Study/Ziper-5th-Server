@@ -22,11 +22,13 @@ Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키
 
 Checkstyle의 `MatchXpath` 규칙 `BusinessCatch`는 `com.ject.ziper.domain` 아래 `service`, `controller`와 그 하위 패키지의 실제 `catch` 구문을 금지합니다. 문자열·주석의 단어는 대상이 아니며, 정리용 `try/finally`와 `try-with-resources`는 허용합니다. 전역 오류 처리와 외부 I/O 경계의 예외 처리는 이 규칙의 대상이 아닙니다. 예외가 필요하면 `config/checkstyle/business-catch-suppressions.xml`에 정확한 파일과 한정된 줄 범위만 등록하고 PR에 이유를 기록해 소유자 승인을 받습니다. 기본 허용 목록은 비어 있습니다.
 
+Checkstyle의 `MatchXpath` 규칙 `FullyQualifiedName`은 운영·테스트 코드에서 `import`, `package` 선언 밖의 패키지 한정 이름(`java.util.Locale.ROOT`, `@org.springframework.stereotype.Service` 등)을 금지합니다. 타입과 정적 멤버는 항상 `import` 또는 `import static`으로 가져옵니다. 소문자로 시작하는 이름 뒤에 대문자로 시작하는 이름이 이어지는 점 표기를 위반으로 판단하므로 인스턴스로 정적 상수에 접근하는 코드도 함께 거부됩니다. 문자열·주석은 대상이 아니며 허용 목록에 등록할 수 없습니다.
+
 ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업무 서비스의 Servlet·Spring Web 의존, 세션 의존·요청 세션 API 호출, 업무 패키지의 사용자 정의 `RuntimeException`을 검사합니다. 예상한 업무 4xx에는 공통 `BusinessException`을 사용합니다. 현재 업무 클래스가 없으므로 별도 정상·위반 fixture 계약 테스트로 규칙의 탐지 동작도 확인합니다. 이 검사는 모든 메모리 상태나 모든 동적 호출의 안전성을 보장하지 않습니다.
 
 ## 변경 검증
 
-테스트는 관찰 가능한 동작을 확인합니다. PostgreSQL 기능은 실제 PostgreSQL 17.6으로 검증합니다. DB 스키마 변경은 Flyway 마이그레이션으로 기록합니다. Hibernate는 스키마를 검증하며 자동 생성하거나 수정하지 않습니다. OSIV는 꺼져 있습니다.
+테스트는 관찰 가능한 동작을 확인합니다. 테스트 메서드 이름은 `주어진상황_행동하면_기대결과`처럼 given·when·then 세 부분을 `_`로만 구분해 한국어로 씁니다. 각 부분 안에서는 `_`를 쓰지 않으며 `JWT`, `BusinessCatch` 같은 고유 식별자는 섞어 쓸 수 있습니다. Checkstyle 규칙 `TestMethodName`이 JUnit 테스트 애너테이션이 붙은 메서드의 형식을 검사하고, 이 메서드에는 일반 메서드의 `MethodName` 규칙을 적용하지 않습니다. PostgreSQL 기능은 실제 PostgreSQL 17.6으로 검증합니다. DB 스키마 변경은 Flyway 마이그레이션으로 기록합니다. Hibernate는 스키마를 검증하며 자동 생성하거나 수정하지 않습니다. OSIV는 꺼져 있습니다.
 
 공개 API의 오류는 Spring `ProblemDetail` 형식을 사용합니다. 4xx와 5xx 응답에 SQL, 스택 트레이스, 비밀 값이나 내부 예외 메시지를 노출하지 않습니다.
 
