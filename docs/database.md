@@ -8,7 +8,7 @@
 | Flyway | `ziper_migrator` | `ziper` 스키마의 DDL |
 | 애플리케이션 | `ziper_app` | 업무 데이터 DML, DDL 없음 |
 
-로컬 데이터베이스와 스키마 이름은 모두 `ziper`입니다. 앱 시작 시 Flyway가 별도 마이그레이션 자격 증명으로 실행됩니다. 런타임 계정에 DDL 권한을 추가해 마이그레이션 실패를 우회하지 않습니다. PostgreSQL 이미지의 초기화 스크립트는 새 볼륨에서만 실행되므로 `.env`의 비밀번호를 바꿔도 기존 역할 비밀번호는 바뀌지 않습니다.
+로컬 데이터베이스와 스키마 이름은 모두 `ziper`입니다. 앱 시작 시 Flyway가 별도 마이그레이션 자격 증명으로 실행됩니다. 런타임 계정에 DDL 권한을 추가해 마이그레이션 실패를 우회하지 않습니다. `flyway_schema_history`는 마이그레이션 전용이며 런타임 계정에는 조회·변경 권한을 주지 않습니다. 새 테이블의 기본 권한에서도 이 경계를 유지합니다. 이미 적용한 `V1`은 checksum 보존을 위해 수정하지 않고 `V2__protect_flyway_history.sql`에서 런타임의 history 권한을 회수합니다. PostgreSQL 이미지의 초기화 스크립트는 새 볼륨에서만 실행되므로 `.env`의 비밀번호를 바꿔도 기존 역할 비밀번호는 바뀌지 않습니다.
 
 ## 로컬 시드 실행
 
@@ -20,7 +20,7 @@
 
 ## Supabase 연결 준비
 
-Supabase 프로젝트는 아직 없으며 `db/supabase/bootstrap.sql`도 실행하지 않았습니다. 파일은 DBA가 새 프로젝트 권한을 검토한 뒤 실행할 템플릿입니다. 실제 비밀번호는 파일에 넣지 말고 안전하게 `psql` 변수 `runtime_password`, `migration_password`로 전달합니다. 재실행 전에 기존 역할과 스키마를 확인합니다. Supabase 관리 역할을 수정하지 않습니다.
+Supabase 프로젝트는 아직 없으며 `db/supabase/bootstrap.sql`도 실행하지 않았습니다. 파일은 DBA가 새 프로젝트 권한을 검토한 뒤 실행할 템플릿입니다. 실제 비밀번호는 파일에 넣지 말고 안전하게 `psql` 변수 `runtime_password`, `migration_password`로 전달합니다. 재실행 전에 기존 역할과 스키마를 확인합니다. 관리형 DB의 비슈퍼유저는 `CREATEROLE`만으로 새 migrator 역할에 `SET ROLE`할 수 있다고 가정하지 않습니다. 템플릿은 트랜잭션 안에서 migrator에 대한 임시 `SET` 멤버십을 부여하고 DBA가 전용 스키마를 생성한 뒤 `SET LOCAL ROLE`로 ACL을 설정합니다. 이후 현재 관리자가 부여한 임시 멤버십만 회수하고 커밋합니다. migrator에 DB 전체 스키마 생성 권한을 주지 않습니다. Supabase 관리 역할을 수정하지 않습니다.
 
 1. 프로젝트의 PostgreSQL 버전과 서버 CA 인증서를 확인합니다.
 2. DBA가 템플릿으로 `ziper_app`, `ziper_migrator`와 전용 `ziper` 스키마를 만듭니다.

@@ -50,7 +50,7 @@ class ProbeIntegrationTest extends PostgresTestSupport {
 			mvc.perform(get("/test/client-error").with(jwt())).andExpect(status().isBadRequest());
 			sentry.verify(() -> Sentry.captureException(any(Exception.class)), never());
 			mvc.perform(get("/test/server-error").with(jwt())).andExpect(status().isInternalServerError())
-					.andExpect(jsonPath("detail").value("An unexpected error occurred"));
+					.andExpect(jsonPath("detail").value("서버 오류가 발생했습니다."));
 			sentry.verify(() -> Sentry.captureException(any(Exception.class)));
 		}
 	}

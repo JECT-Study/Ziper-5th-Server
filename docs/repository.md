@@ -2,7 +2,7 @@
 
 CI는 `quality`, `test`, `container-smoke` 작업으로 스타일, 테스트와 컨테이너 동작을 검사합니다. 저장소 관리자는 실제 워크플로가 등록되고 성공한 뒤 `develop`과 `main`의 브랜치 보호에 필요한 상태 검사를 지정합니다. 이 문서는 보호 설정이 이미 적용됐다는 증거가 아닙니다.
 
-PR에는 변경 목적, 동작 변화와 실행한 검사를 기록합니다. 스타일 설정은 NAVER 문서에서 필요한 규칙을 직접 작성한 것이며 외부 XML의 라이선스를 추정하지 않습니다. Dependabot 변경도 일반 변경과 동일하게 CI와 리뷰를 통과해야 합니다.
+PR은 feature·bug·chore 의도를 구분하고 변경 목적, 동작 변화와 실행한 검사를 기록합니다. 기능 PR에는 사용자 이야기의 E2E 검증을 포함합니다. 문서 동기화 체크박스를 확인하고 문서 영향이 없으면 이유를 남깁니다. 기능별 구현 설명은 PR에만 기록하며 장기 결정은 ADR과 문서 지도에 연결합니다. 스타일 설정은 NAVER 문서에서 필요한 규칙을 직접 작성한 것이며 외부 XML의 라이선스를 추정하지 않습니다. Dependabot 변경도 일반 변경과 동일하게 CI와 리뷰를 통과해야 합니다.
 
 ## CodeRabbit 연결
 
@@ -13,3 +13,20 @@ PR에는 변경 목적, 동작 변화와 실행한 검사를 기록합니다. �
 2026-11-01 기준 공개 저장소의 OSS 제공 정책과 일반 Free 플랜의 요약 기능은 서로 다릅니다. 현재 별 0개인 저장소는 연결 후 `@coderabbitai review` 수동 요청 방식으로 시작합니다. 공개 OSS 저장소에는 Team 기능이 무료로 제공될 수 있지만 무제한 리뷰는 아닙니다. 개발자·저장소 범위에 따라 시간당 1~10회 리뷰 제한이 적용되므로 실제 계정 상태와 정책을 확인합니다. [플랜 안내](https://docs.coderabbit.ai/management/plans), [요청 제한 안내](https://docs.coderabbit.ai/management/rate-limits)
 
 배포 대상과 호스팅이 확정되면 별도 CD를 설계합니다. 공개 저장소라는 이유만으로 라이선스를 임의로 선택하지 않습니다.
+
+## PR 작성 계약
+
+제목은 `feature: 설명`, `bug: 설명`, `chore: 설명` 중 하나이며 본문의 `## Type`과 일치해야 합니다. 공통 필수 절은 `## Intent`, `## Validation`, `## Documentation`, `## Durable decision`, `## Checklist`입니다. Type은 `feature|bug|chore`, Durable decision은 `yes|no` 중 정확히 하나입니다.
+
+- feature: `## User story`, `## Observable behavior`, `## E2E evidence`, `## Implementation details`
+- bug: `## Reproduction`, `## Before and after`
+- chore: `## Purpose and impact`
+
+Documentation에는 변경한 문서의 Markdown 링크 또는 `No documentation impact: 구체적인 이유` 중 하나를 적습니다. Durable decision이 yes면 `docs/adr/*.md`와 `docs/context-map.md` 링크가 필요합니다. Checklist의 다음 두 항목은 실제 증거를 확인한 뒤 체크합니다.
+
+```markdown
+- [x] Documentation synchronized or no-impact reason recorded
+- [x] Validation evidence recorded
+```
+
+`.github/PULL_REQUEST_TEMPLATE.md`와 유형별 템플릿에서 시작합니다. `PR policy` 워크플로는 본문 수정 시에도 `scripts/check-pr-policy.py`로 형식을 검사합니다. 검사는 증거의 진실성이나 문서 내용까지 보장하지 않으므로 사람이 검토합니다. PR head의 코드를 읽기 전용 `pull_request` 권한으로 실행하는 초기 구조여서 검사기·워크플로 자체를 바꾸는 PR도 별도 사람 검토가 필요합니다. 자체 검사는 `python3 scripts/test-pr-policy.py`입니다.

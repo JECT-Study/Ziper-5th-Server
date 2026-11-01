@@ -1,0 +1,23 @@
+name: PR policy
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+permissions:
+  contents: read
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  pr-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Standard untrusted PR CI: no secrets, write token, or privileged trigger.
+      # Changes to this workflow/checker still require human review.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test policy validator
+        run: python3 scripts/test-pr-policy.py
+      - name: Validate PR event
+        run: python3 scripts/check-pr-policy.py

@@ -38,6 +38,14 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v4
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew test bootJar
+      - run: python3 scripts/test-release-artifact.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tested-release
+          path: |
+            build/libs/ziper-server.jar
+            build/intermediates/sentry/java/source-bundle/*.zip
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -47,12 +55,19 @@ jobs:
             build/test-results/
           if-no-files-found: ignore
   container-smoke:
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: gradle/actions/wrapper-validation@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tested-release
+          path: build
       - run: scripts/smoke-test.sh
+        env:
+          ZIPER_PREBUILT_ARTIFACT: 'true'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

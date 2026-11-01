@@ -58,7 +58,7 @@ class SecurityConfigurationTest {
 		assertThat(result.getRequest().getSession(false)).isNull();
 		mvc.perform(get("/private")).andExpect(status().isUnauthorized())
 				.andExpect(header().string("WWW-Authenticate", "Bearer")).andExpect(jsonPath("status").value(401))
-				.andExpect(jsonPath("detail").value("Authentication is required"));
+				.andExpect(jsonPath("detail").value("인증이 필요합니다."));
 	}
 
 	@Test
@@ -112,7 +112,18 @@ class SecurityConfigurationTest {
 				.andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
 		mvc.perform(options("/private").header("Origin", "https://evil.example.com")
 				.header("Access-Control-Request-Method", "POST")).andExpect(status().isForbidden())
-				.andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+				.andExpect(header().doesNotExist("Access-Control-Allow-Origin"))
+				.andExpect(jsonPath("code").value("FORBIDDEN")).andExpect(jsonPath("requestId").isNotEmpty());
+	}
+
+	@Test
+	void disabledDocumentationIsDeniedEvenWithAuthentication() throws Exception {
+		for (String path : List.of("/v3/api-docs", "/v3/api-docs.yaml", "/swagger-ui.html", "/swagger-ui/index.html",
+				"/swagger-ui/swagger-ui-bundle.js")) {
+			mvc.perform(get(path)).andExpect(status().isUnauthorized());
+			mvc.perform(get(path).header("Authorization", "Bearer " + token(claims(), KEY)))
+					.andExpect(status().isForbidden());
+		}
 	}
 
 	@Test
@@ -145,7 +156,9 @@ class SecurityConfigurationTest {
 
 	@Configuration(proxyBeanMethods = false)
 	@EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
-	@Import({SecurityConfiguration.class, Endpoints.class})
+	@Import({SecurityConfiguration.class, Endpoints.class, com.ject.ziper.global.error.ProblemFactory.class,
+			com.ject.ziper.global.config.OpenApiConfiguration.class,
+			com.ject.ziper.global.observability.RequestIdFilter.class})
 	static class Fixture {
 	}
 

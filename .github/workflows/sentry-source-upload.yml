@@ -26,11 +26,18 @@ jobs:
           ./gradlew bootJar
           mkdir -p build/release
           printf '%s\n' "$SENTRY_RELEASE" > build/release/SENTRY_RELEASE
+      - name: Package and verify the same release JAR (no deployment)
+        run: |
+          docker build --target release --tag ziper-release:${{ github.sha }} .
+          python3 scripts/test-release-artifact.py
+          python3 scripts/verify-release-artifact.py --image ziper-release:${{ github.sha }}
+          docker save ziper-release:${{ github.sha }} | gzip > build/release/image.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: ziper-server-${{ github.sha }}
           path: |
             build/libs/ziper-server.jar
             build/release/SENTRY_RELEASE
+            build/release/image.tar.gz
             build/intermediates/sentry/java/source-bundle/*.zip
           if-no-files-found: error

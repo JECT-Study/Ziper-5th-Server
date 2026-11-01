@@ -44,6 +44,13 @@ class PersistenceIntegrationTest extends PostgresTestSupport {
 				Boolean.class)).isFalse();
 		assertThat(jdbc.queryForObject("SELECT has_schema_privilege(current_user, 'public', 'CREATE')", Boolean.class))
 				.isFalse();
+		for (String sql : new String[]{"SELECT * FROM ziper.flyway_schema_history WHERE false",
+				"INSERT INTO ziper.flyway_schema_history(installed_rank) SELECT 999 WHERE false",
+				"UPDATE ziper.flyway_schema_history SET success = false WHERE false",
+				"DELETE FROM ziper.flyway_schema_history WHERE false"}) {
+			assertThatThrownBy(() -> jdbc.execute(sql)).hasRootCauseInstanceOf(SQLException.class)
+					.satisfies(error -> assertThat(((SQLException) error.getCause()).getSQLState()).isEqualTo("42501"));
+		}
 		try (Connection migration = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "ziper_migrator",
 				MIGRATION_PASSWORD); Statement statement = migration.createStatement()) {
 			statement.execute("CREATE TABLE ziper.persistence_fixture (id bigserial PRIMARY KEY, value text NOT NULL)");

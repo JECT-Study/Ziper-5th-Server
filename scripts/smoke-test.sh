@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 # Dedicated project and random ports/credentials protect an existing local setup.
 unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
 unset POSTGRES_PASSWORD DB_PASSWORD MIGRATION_PASSWORD JWT_SECRET_BASE64
+unset APP_RUNTIME_MODE SWAGGER_ENABLED PORT
 unset SENTRY_ENABLED SENTRY_DSN SENTRY_ENVIRONMENT SENTRY_RELEASE SENTRY_TRACES_SAMPLE_RATE
 work=$(mktemp -d)
 project="ziper-smoke-$(date +%s)-$$"
@@ -30,7 +31,20 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
-compose up --build --wait --wait-timeout 240
+# CI supplies its tested artifact; local invocation builds once, then packages it.
+if [ "${ZIPER_PREBUILT_ARTIFACT:-false}" != true ]; then
+  SENTRY_UPLOAD=false ./gradlew --no-daemon bootJar
+fi
+image="$project:release"
+docker build --target release --tag "$image" .
+python3 scripts/verify-release-artifact.py --image "$image"
+cat > "$work/release.yml" <<YAML
+services:
+  app:
+    image: $image
+YAML
+compose() { docker compose --env-file "$ZIPER_ENV_FILE" -f compose.yml -f "$work/release.yml" -p "$project" "$@"; }
+compose up --no-build --wait --wait-timeout 240
 address=$(compose port app 8080)
 base="http://$address"
 probe() {

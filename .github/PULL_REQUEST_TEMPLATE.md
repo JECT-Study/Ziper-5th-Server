@@ -1,11 +1,10 @@
-## 변경 목적과 동작
+Choose a template by adding `?template=feature.md`, `?template=bug.md`, or
+`?template=chore.md` to the new pull request URL (use `&template=` if it already
+has query parameters). GitHub does not automatically offer a template dropdown.
 
-<!-- 해결한 문제와 변경 후 동작을 설명하세요. 관련 이슈가 있으면 연결하세요. -->
+- [Feature template](PULL_REQUEST_TEMPLATE/feature.md)
+- [Bug template](PULL_REQUEST_TEMPLATE/bug.md)
+- [Chore template](PULL_REQUEST_TEMPLATE/chore.md)
 
-## 검증
-
-<!-- 실제 실행한 명령과 결과를 적으세요. 실행하지 못한 검사는 이유를 적으세요. -->
-
-## 검토할 사항
-
-<!-- DB 마이그레이션, 환경 변수, 호환성 영향이나 남은 결정을 적으세요. 없으면 이 항목을 삭제하세요. -->
+Use a matching `feature:`, `bug:`, or `chore:` title. Replace this chooser with the
+completed template. Leave checks unchecked until you have verified them.

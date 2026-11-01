@@ -1,8 +1,6 @@
 spring:
   application:
     name: ziper-server
-  profiles:
-    default: local
   jmx:
     enabled: false
   lifecycle:
@@ -36,6 +34,7 @@ spring:
     default-schema: ziper
     schemas: ziper
 server:
+  port: ${PORT:8080}
   shutdown: graceful
   servlet:
     session:
@@ -61,6 +60,7 @@ management:
         readiness:
           include: readinessState,db
 app:
+  runtime-mode: ${APP_RUNTIME_MODE:server}
   security:
     jwt-secret-base64: ${JWT_SECRET_BASE64:}
     jwt-issuer: ${JWT_ISSUER:ziper-server}
@@ -69,7 +69,7 @@ app:
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}
-  environment: ${SENTRY_ENVIRONMENT:${spring.profiles.active:local}}
+  environment: ${SENTRY_ENVIRONMENT:${spring.profiles.active:server}}
   release: ${SENTRY_RELEASE:local}
   traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.1}
   send-default-pii: false
@@ -90,3 +90,15 @@ sentry:
       response:
         mode: 'OFF'
     database-query-data: false
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+    persist-authorization: false
+    validator-url: ""
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

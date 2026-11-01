@@ -19,9 +19,13 @@ services:
       timeout: 5s
       retries: 20
   app:
-    build: .
+    build:
+      context: .
+      target: source
     environment:
       SPRING_PROFILES_ACTIVE: local
+      APP_RUNTIME_MODE: local
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       DB_JDBC_URL: jdbc:postgresql://db:5432/ziper
       DB_USERNAME: ziper_app
       DB_PASSWORD: ${DB_PASSWORD:?Run scripts/local-setup.sh first}

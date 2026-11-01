@@ -8,9 +8,16 @@ spring:
     user: ${MIGRATION_USERNAME:${spring.datasource.username}}
     password: ${MIGRATION_PASSWORD:${spring.datasource.password}}
 app:
+  runtime-mode: server
   security:
     jwt-secret-base64: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
     allowed-origins: http://localhost:3000
 sentry:
   enabled: false
   environment: test
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

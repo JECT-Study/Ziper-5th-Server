@@ -45,6 +45,9 @@ class SentryConfigurationTest {
 
 	@Test
 	void dropsExpectedClientErrors() {
+		assertThat(configuration.privacyBeforeSend().execute(new SentryEvent(
+				new com.ject.ziper.global.error.BusinessException(com.ject.ziper.global.error.ErrorCode.CONFLICT)),
+				new Hint())).isNull();
 		assertThat(configuration.privacyBeforeSend()
 				.execute(new SentryEvent(new ResponseStatusException(HttpStatus.BAD_REQUEST, "secret")), new Hint()))
 				.isNull();

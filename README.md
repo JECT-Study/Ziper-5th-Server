@@ -22,12 +22,13 @@ curl -i http://localhost:8080/readyz
 ./scripts/smoke-test.sh
 ```
 
-`check.sh`는 스타일 검사와 테스트를 실행합니다. PostgreSQL 17.6 Testcontainers 테스트에 Docker가 필요하며 H2로 대체하지 않습니다. `smoke-test.sh`는 별도 Compose 프로젝트, 임시 자격 증명과 임의 포트를 사용합니다. DB 중단 시 준비 상태 `503`, 생존 상태 `200`, DB 재시작 후 복구를 검사하고 컨테이너와 볼륨을 정리합니다.
+`check.sh`는 스타일 검사와 테스트를 실행합니다. PostgreSQL 17.6 Testcontainers 테스트에 Docker가 필요하며 H2로 대체하지 않습니다. `smoke-test.sh`는 별도 Compose 프로젝트, 임시 자격 증명과 임의 포트를 사용합니다. JAR를 한 번 빌드해 release 이미지에 넣고 이미지 내부 JAR의 해시와 Sentry 소스 번들 ID 일치도 확인합니다. DB 중단 시 준비 상태 `503`, 생존 상태 `200`, DB 재시작 후 복구를 검사하고 컨테이너와 볼륨을 정리합니다.
 
 로컬 앱을 중지하려면 `docker compose down`을 실행합니다. `docker compose down -v`는 로컬 DB 데이터도 삭제하므로 초기화할 때만 사용합니다.
 
 ## 개발 안내
 
+- [문서 지도 — 작업 전 먼저 읽기](docs/context-map.md)
 - [구조와 개발 규칙](docs/development.md)
 - [데이터베이스와 Supabase 준비](docs/database.md)
 - [보안·상태 점검·Sentry 운영](docs/operations.md)
@@ -37,4 +38,4 @@ curl -i http://localhost:8080/readyz
 
 Spring Boot 4에 대한 팀의 경험이 부족해 3.5 계열로 시작했습니다. 3.5.16은 마지막 OSS 지원 릴리스이므로, 2026-11-01 기준으로 이 선택을 장기 지원으로 간주하면 안 됩니다. 후속 지원 또는 상위 버전 전환 계획을 별도로 정해야 합니다. [Spring 공식 안내](https://spring.io/blog/2026/06/25/spring-boot-3-5-16-available-now/)
 
-배포 환경과 CD는 아직 정하지 않았습니다. Supabase 프로젝트도 아직 생성하지 않았습니다. 업무 API를 처음 구현할 때 OpenAPI 문서화를 추가합니다. 라이선스는 소유자가 선택하기 전까지 임의로 추가하지 않습니다.
+배포 환경과 CD는 아직 정하지 않았습니다. Supabase 프로젝트도 아직 생성하지 않았습니다. OpenAPI 생성 계약은 명시적으로 선택한 로컬 환경에서만 확인합니다. 기본값과 서버 환경에서는 비활성입니다. 장애 전환과 비밀 관리는 [향후 인프라 계약](docs/infrastructure.md)만 정했으며 아직 구현하지 않았습니다. 라이선스는 소유자가 선택하기 전까지 임의로 추가하지 않습니다.

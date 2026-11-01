@@ -13,3 +13,9 @@ app:
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   environment: ${SENTRY_ENVIRONMENT:local}
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}

@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.ErrorResponse;
 
+import com.ject.ziper.global.error.BusinessException;
+
 import io.sentry.SentryOptions;
 import io.sentry.protocol.Request;
 
@@ -16,6 +18,9 @@ public class SentryConfiguration {
 	@Bean
 	SentryOptions.BeforeSendCallback privacyBeforeSend() {
 		return (event, hint) -> {
+			if (event.getThrowable() instanceof BusinessException) {
+				return null;
+			}
 			if (event.getThrowable() instanceof ErrorResponse error && error.getStatusCode().is4xxClientError()) {
 				return null;
 			}
