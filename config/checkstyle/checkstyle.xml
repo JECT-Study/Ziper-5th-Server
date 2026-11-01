@@ -3,7 +3,17 @@
     "https://checkstyle.org/dtds/configuration_1_3.dtd">
 <module name="Checker">
     <property name="charset" value="UTF-8"/>
+    <module name="SuppressionFilter">
+        <property name="file" value="${catchSuppressionFile}"/>
+    </module>
     <module name="TreeWalker">
+        <module name="MatchXpath">
+            <property name="id" value="BusinessCatch"/>
+            <property name="query"
+                value="//LITERAL_CATCH[ancestor::COMPILATION_UNIT/PACKAGE_DEF/DOT/descendant-or-self::DOT[IDENT[@text='service' or @text='controller'] and DOT/IDENT and DOT/DOT/IDENT[@text='domain'] and DOT/DOT/DOT/IDENT[@text='ziper'] and DOT/DOT/DOT/DOT/IDENT[@text='com'] and DOT/DOT/DOT/DOT/IDENT[@text='ject']]]"/>
+            <message key="matchxpath.match"
+                value="Business service/controller must not catch exceptions: throw BusinessException for expected business failures; propagate technical failures to global handling. Put external I/O handling in a boundary adapter."/>
+        </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="^ +\S"/>
             <property name="message" value="Use hard tabs for Java indentation (tab width 4)."/>

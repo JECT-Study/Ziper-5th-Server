@@ -81,6 +81,56 @@ class PolicyTests(unittest.TestCase):
         for value in (no_impact, '[ADR](docs/adr/0003-policy.md)', '[Map](docs/context-map.md)', original):
             self.assertTrue(policy.validate('chore: review', durable.replace(original, value)))
 
+    def test_candidate_routing_and_durable_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {
+                'README.md': 'Read me',
+                'docs/repository.md': 'Review policy',
+                'docs/context-map.md': '| [Readme](../README.md) | Start | Commands |\n| [Repository](repository.md) | Reviews | Policy |\n',
+                'docs/adr/0003-policy.md': 'Decision',
+                'config/checkstyle/business-catch-suppressions.xml': '<suppressions/>',
+                'config/harness/doc-policy.json': json.dumps({'version': 1, 'maintained_docs': ['README.md', 'docs/repository.md'], 'routes': [{'prefix': 'scripts/', 'docs': ['docs/repository.md']}]})
+            }
+            for path, content in files.items():
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
+            good = example()
+            self.assertEqual([], policy.validate('chore: review', good, root, ['scripts/check.py'], baseline_root=root))
+            original = '[Repository policy](docs/repository.md)'
+            reason = 'No documentation impact: Test data changes only; review behavior is unchanged.\nReviewed: ' + original
+            self.assertEqual([], policy.validate('chore: review', good.replace(original, reason), root, ['scripts/test.py'], baseline_root=root))
+            for link in ('[Readme](README.md)', '[Missing](docs/missing.md)', '[Remote](https://example.org/docs/repository.md)', '[Escape](../docs/repository.md)'):
+                self.assertTrue(policy.validate('chore: review', good.replace(original, link), root, ['scripts/test.py'], baseline_root=root))
+            self.assertTrue(policy.validate('chore: review', good, root, ['../bad'], baseline_root=root))
+            self.assertTrue(policy.validate('chore: review', good, root, None, baseline_root=root))
+            durable = good.replace('## Durable decision\n\nno', '## Durable decision\n\nyes').replace(original, original + ' [ADR](docs/adr/0003-policy.md) [Map](docs/context-map.md)')
+            self.assertTrue(policy.validate('chore: review', durable, root, ['scripts/test.py'], baseline_root=root))
+            self.assertEqual([], policy.validate('chore: review', durable, root, ['scripts/test.py', 'docs/context-map.md', 'docs/adr/0003-policy.md'], baseline_root=root))
+
+    def test_candidate_routes_cannot_weaken_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            baseline, candidate = Path(directory) / 'base', Path(directory) / 'head'
+            for root in (baseline, candidate):
+                (root / 'config/harness').mkdir(parents=True)
+                (root / 'config/checkstyle').mkdir(parents=True)
+                (root / 'docs').mkdir()
+                (root / 'README.md').write_text('Intro')
+                (root / 'docs/repository.md').write_text('Reviews')
+                (root / 'docs/context-map.md').write_text('| [Intro](../README.md) | Start | Commands |\n| [Review](repository.md) | Reviews | Rules |\n')
+                (root / 'config/checkstyle/business-catch-suppressions.xml').write_text('<suppressions/>')
+            config = {'version': 1, 'maintained_docs': ['README.md', 'docs/repository.md'], 'routes': [{'prefix': 'scripts/', 'docs': ['docs/repository.md']}, {'prefix': 'build.gradle', 'docs': ['docs/repository.md']}]}
+            (baseline / 'config/harness/doc-policy.json').write_text(json.dumps(config))
+            body = example().replace('[Repository policy](docs/repository.md)', '[Intro](README.md)')
+            for routes in ([{'prefix': 'unrelated/', 'docs': ['README.md']}], [{'prefix': 'scripts/', 'docs': ['README.md']}]):
+                config['routes'] = routes
+                (candidate / 'config/harness/doc-policy.json').write_text(json.dumps(config))
+                errors = policy.validate('chore: review', body, candidate, ['scripts/check.py'], baseline_root=baseline)
+                self.assertTrue(any('docs/repository.md' in error for error in errors), errors)
+            self.assertEqual([], policy.validate('chore: review', body, candidate, ['build.gradle.evil'], baseline_root=baseline))
+            self.assertTrue(policy.validate('chore: review', body, candidate, ['build.gradle'], baseline_root=baseline))
+
     def test_event_json_entrypoint_and_hostile_text_are_data(self):
         with tempfile.TemporaryDirectory() as directory:
             event = Path(directory) / 'event.json'

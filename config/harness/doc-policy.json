@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "maintained_docs": [
+    "README.md",
+    "AGENTS.md",
+    "docs/development.md",
+    "docs/database.md",
+    "docs/operations.md",
+    "docs/infrastructure.md",
+    "docs/repository.md",
+    "docs/verification.md"
+  ],
+  "routes": [
+    {
+      "prefix": ".github/",
+      "docs": [
+        "docs/repository.md"
+      ]
+    },
+    {
+      "prefix": "scripts/",
+      "docs": [
+        "docs/development.md",
+        "docs/repository.md"
+      ]
+    },
+    {
+      "prefix": "config/",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
+      "prefix": "build.gradle",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
+      "prefix": "gradle/",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
+      "prefix": "src/main/resources/db/",
+      "docs": [
+        "docs/database.md"
+      ]
+    },
+    {
+      "prefix": "src/main/resources/",
+      "docs": [
+        "docs/operations.md",
+        "docs/database.md"
+      ]
+    },
+    {
+      "prefix": "src/main/java/",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
+      "prefix": "src/main/java/com/ject/ziper/global/security/",
+      "docs": [
+        "docs/operations.md"
+      ]
+    },
+    {
+      "prefix": "Dockerfile",
+      "docs": [
+        "docs/operations.md"
+      ]
+    },
+    {
+      "prefix": "compose.yml",
+      "docs": [
+        "docs/database.md",
+        "docs/infrastructure.md"
+      ]
+    },
+    {
+      "prefix": "AGENTS.md",
+      "docs": [
+        "AGENTS.md"
+      ]
+    },
+    {
+      "prefix": "gradle.properties",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
+      "prefix": "gradlew",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
+      "prefix": "gradlew.bat",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
+      "prefix": "settings.gradle",
+      "docs": [
+        "docs/development.md"
+      ]
+    }
+  ]
+}

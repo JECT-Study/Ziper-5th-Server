@@ -34,3 +34,17 @@ Sentry에는 실제 앱의 HTTP 요청으로 `IllegalStateException: Ziper Sentr
 | `ZIPER_PREBUILT_ARTIFACT=true scripts/smoke-test.sh` | 현재 JAR 그대로 release 이미지 구성, 이미지 JAR SHA256·현재 소스 번들 ID 일치; 실제 HTTP liveness·readiness 200, DB 중단 시 readiness 503·liveness 200, 복구 후 readiness 200, 컨테이너·볼륨 정리 성공 |
 
 실제 호스팅된 Supabase 연결, Worker·GCP 배포·IAM 적용은 검사하지 않았습니다. 최종 전체 포맷과 이후 검사 결과는 아직 실행 완료로 기록하지 않으며 PR의 최종 검증 증거로 남깁니다.
+
+## 2026-11-01 하네스 강화 검증
+
+후속 하네스 구현을 통합한 뒤 조정 담당자가 `./gradlew spotlessApply`를 한 번 실행하고 아래 검사를 수행했습니다. 이전 초기화 단계의 실행과 별도 기록입니다.
+
+| 검사 | 실제 결과와 범위 |
+| --- | --- |
+| `./scripts/check.sh bootJar` | 문서 정책 1개 그룹(정상·위반 11개 사례), PR 정책 9개 그룹, JUnit 33개 성공; 실패·오류·건너뜀 0; Spotless·Checkstyle·JAR 생성 성공 |
+| AST·ArchUnit 계약 | 업무 catch 거부, 주석·문자열·자원 정리 허용, 정확한 파일·줄 억제, 인라인 억제 거부; 저장소·웹·세션·업무 예외의 정상·위반 fixture 확인 |
+| `python3 scripts/test-release-artifact.py` | 정상·변조·누락·중복·과거 번들 공존 사례 성공 |
+| `actionlint`, `git diff --check` | 성공 |
+| GitHub API 조회 | `@hj-k66` Write 권한, `develop`·`main` 코드 소유자 필수 승인·승인 1명·오래된 승인 무효화·관리자 적용 확인 |
+
+기본 브랜치에는 CODEOWNERS가 아직 없으므로 소유자 지정은 첫 병합 이후 적용됩니다. 새 `harness` CI의 성공과 필수 검사 등록은 별도 확인 대상입니다. 이번 실행에서는 release 컨테이너 smoke나 외부 Sentry 수신, 호스팅 Supabase·클라우드 배포를 재검증하지 않았습니다.

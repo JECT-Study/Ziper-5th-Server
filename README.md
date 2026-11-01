@@ -22,7 +22,7 @@ curl -i http://localhost:8080/readyz
 ./scripts/smoke-test.sh
 ```
 
-`check.sh`는 스타일 검사와 테스트를 실행합니다. PostgreSQL 17.6 Testcontainers 테스트에 Docker가 필요하며 H2로 대체하지 않습니다. `smoke-test.sh`는 별도 Compose 프로젝트, 임시 자격 증명과 임의 포트를 사용합니다. JAR를 한 번 빌드해 release 이미지에 넣고 이미지 내부 JAR의 해시와 Sentry 소스 번들 ID 일치도 확인합니다. DB 중단 시 준비 상태 `503`, 생존 상태 `200`, DB 재시작 후 복구를 검사하고 컨테이너와 볼륨을 정리합니다.
+`check.sh`는 문서 정책과 검사기 자체 테스트, Java 스타일·아키텍처 검사와 테스트를 실행합니다. 변경 경로별 문서 검토와 PR 작성 방법은 [저장소 규칙](docs/repository.md)을 따릅니다. PostgreSQL 17.6 Testcontainers 테스트에 Docker가 필요하며 H2로 대체하지 않습니다. `smoke-test.sh`는 별도 Compose 프로젝트, 임시 자격 증명과 임의 포트를 사용합니다. JAR를 한 번 빌드해 release 이미지에 넣고 이미지 내부 JAR의 해시와 Sentry 소스 번들 ID 일치도 확인합니다. DB 중단 시 준비 상태 `503`, 생존 상태 `200`, DB 재시작 후 복구를 검사하고 컨테이너와 볼륨을 정리합니다.
 
 로컬 앱을 중지하려면 `docker compose down`을 실행합니다. `docker compose down -v`는 로컬 DB 데이터도 삭제하므로 초기화할 때만 사용합니다.
 

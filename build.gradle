@@ -16,6 +16,8 @@ java {
 
 repositories { mavenCentral() }
 
+def checkstyleVersion = '10.26.1'
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.10.0'
@@ -31,6 +33,8 @@ dependencies {
     runtimeOnly 'org.postgresql:postgresql'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'com.tngtech.archunit:archunit:1.5.1'
+    testImplementation "com.puppycrawl.tools:checkstyle:${checkstyleVersion}"
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:postgresql'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -67,8 +71,9 @@ spotless {
 }
 
 checkstyle {
-    toolVersion = '10.26.1'
+    toolVersion = checkstyleVersion
     configFile = file('config/checkstyle/checkstyle.xml')
+    configProperties['catchSuppressionFile'] = file('config/checkstyle/business-catch-suppressions.xml').absolutePath
     maxWarnings = 0
     ignoreFailures = false
 }

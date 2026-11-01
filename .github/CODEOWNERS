@@ -1,0 +1,14 @@
+# Requires branch protection with code-owner approval and an owner with write access.
+/AGENTS.md @hj-k66
+/docs/ @hj-k66
+/.github/ @hj-k66
+/scripts/ @hj-k66
+/config/ @hj-k66
+/build.gradle @hj-k66
+/settings.gradle @hj-k66
+/gradle/ @hj-k66
+/gradlew @hj-k66
+/gradlew.bat @hj-k66
+
+/src/test/java/com/ject/ziper/global/architecture/ @hj-k66
+/src/test/java/com/ject/ziper/domain/harnessfixture/ @hj-k66

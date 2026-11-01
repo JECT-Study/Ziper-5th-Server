@@ -27,7 +27,7 @@ def substantive(value):
     ) and not re.fullmatch(r'<[^>]+>', value)
 
 
-def validate(title, body):
+def validate(title, body, repo=None, changed=None, baseline_root=None):
     errors = []
     body = re.sub(r'<!--.*?-->', '', body or '', flags=re.S)
     # Code examples are evidence, never declarations or checked attestations.
@@ -59,7 +59,7 @@ def validate(title, body):
     if no_impact:
         if not substantive(no_impact.group(1)):
             errors.append('No documentation impact needs a concrete reason')
-        if doc_links:
+        if doc_links and repo is None:
             errors.append('Choose documentation links or no-impact reason, not both')
     elif not doc_links:
         errors.append('Documentation needs Markdown doc links or No documentation impact: reason')
@@ -73,13 +73,49 @@ def validate(title, body):
             errors.append('Durable decisions require an ADR link')
         if not any(re.search(r'(?:^|/)docs/context-map\.md(?:[?#].*)?$', link) for link in links):
             errors.append('Durable decisions require a context-map link')
+    if repo is not None:
+        try:
+            # This module is loaded from the trusted checker directory, never candidate code.
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('harness_policy', Path(__file__).with_name('check-harness-policy.py'))
+            harness = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(harness)
+            harness.check(repo)
+            config = harness.load_policy(Path(baseline_root) if baseline_root is not None else Path(__file__).resolve().parent.parent)
+            if not isinstance(changed, list) or any(not isinstance(path, str) for path in changed):
+                raise ValueError('Changed files must be a JSON array of normalized paths')
+            for path in changed:
+                harness.normalized(path)
+            reviewed = {harness.doc_link(repo, link) for link in links}
+            relevant = {doc for route in config['routes'] if any(path.startswith(route['prefix']) if route['prefix'].endswith('/') else path == route['prefix'] for path in changed) for doc in route['docs']}
+            for doc in sorted(relevant - reviewed):
+                errors.append(f'Documentation review reference required: {doc}')
+            if no_impact and relevant and not re.search(r'^Reviewed:', docs, re.M):
+                errors.append('No-impact decisions require Reviewed: document links and a specific reason')
+            if durable == 'yes':
+                if 'docs/context-map.md' not in changed:
+                    errors.append('Durable decisions require a changed context map')
+                if not any(path.startswith('docs/adr/') and path.endswith('.md') and path in reviewed for path in changed):
+                    errors.append('Durable decisions require an actually changed, linked ADR')
+        except (ValueError, OSError, TypeError, KeyError) as error:
+            errors.append(f'Documentation policy: {error}')
     return errors
 
 
 def main():
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
     pr = event['pull_request']
-    errors = validate(pr.get('title', ''), pr.get('body', ''))
+    repo_env = os.environ.get('ZIPER_POLICY_REPO')
+    changed_env = os.environ.get('ZIPER_CHANGED_FILES_JSON')
+    if bool(repo_env) != bool(changed_env):
+        print('PR policy: candidate repository and changed-file JSON are both required', file=sys.stderr)
+        return 1
+    try:
+        changed = json.loads(Path(changed_env).read_text()) if changed_env else None
+        errors = validate(pr.get('title', ''), pr.get('body', ''), Path(repo_env).resolve() if repo_env else None, changed)
+    except (ValueError, OSError, TypeError) as error:
+        print(f'PR policy: {error}', file=sys.stderr)
+        return 1
     if errors:
         for error in errors:
             print(f'PR policy: {error}', file=sys.stderr)
