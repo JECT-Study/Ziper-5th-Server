@@ -80,6 +80,13 @@ checkstyle {
 
 tasks.named('check') { dependsOn 'spotlessCheck', 'checkstyleMain', 'checkstyleTest' }
 
+// Same setting as scripts/local-setup.sh so the first Gradle build or IDE import installs the hooks.
+tasks.register('installGitHooks', Exec) {
+    onlyIf { file('.git').exists() }
+    commandLine 'git', 'config', 'core.hooksPath', '.githooks'
+}
+tasks.named('compileJava') { dependsOn 'installGitHooks' }
+
 def sourceUploadEnabled = providers.environmentVariable('SENTRY_UPLOAD').map { it == 'true' }.getOrElse(false) &&
     providers.environmentVariable('SENTRY_AUTH_TOKEN').map { !it.isBlank() }.getOrElse(false)
 

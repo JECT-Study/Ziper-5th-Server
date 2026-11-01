@@ -18,7 +18,7 @@ Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키
 
 ## 자동 검사 범위
 
-`check.sh`는 `scripts/test-harness-policy.py`, `scripts/check-harness-policy.py --repo .`, `scripts/test-pr-policy.py`를 실행한 뒤 Gradle `check`를 실행합니다. 커밋 훅과 푸시 훅도 문서 정책 검사를 포함합니다. 훅은 우회할 수 있으므로 CI와 리뷰를 함께 사용합니다.
+`check.sh`는 `scripts/test-harness-policy.py`, `scripts/check-harness-policy.py --repo .`, `scripts/test-pr-policy.py`를 실행한 뒤 Gradle `check`를 실행합니다. 커밋 훅과 푸시 훅도 문서 정책 검사를 포함합니다. 훅은 `./scripts/local-setup.sh` 외에도 Gradle `compileJava`가 의존하는 `installGitHooks` 태스크가 `core.hooksPath`를 `.githooks`로 설정해 설치합니다. 첫 Gradle 빌드나 IDE 가져오기에서 실행되며 `.git`이 없는 Docker 빌드에서는 건너뜁니다. 훅은 우회할 수 있고 로컬 설정이므로 CI와 리뷰를 함께 사용합니다.
 
 Checkstyle의 `MatchXpath` 규칙 `BusinessCatch`는 `com.ject.ziper.domain` 아래 `service`, `controller`와 그 하위 패키지의 실제 `catch` 구문을 금지합니다. 문자열·주석의 단어는 대상이 아니며, 정리용 `try/finally`와 `try-with-resources`는 허용합니다. 전역 오류 처리와 외부 I/O 경계의 예외 처리는 이 규칙의 대상이 아닙니다. 예외가 필요하면 `config/checkstyle/business-catch-suppressions.xml`에 정확한 파일과 한정된 줄 범위만 등록하고 PR에 이유를 기록해 소유자 승인을 받습니다. 기본 허용 목록은 비어 있습니다.
 
