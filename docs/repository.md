@@ -1,10 +1,14 @@
 # 리뷰와 저장소 설정
 
-CI checkout은 자격 증명을 남기지 않습니다. PR 문서 검토 대상은 병합 기준점과 head의 세 점 diff로 계산하며, 기본 브랜치만 변경한 경로는 포함하지 않습니다. `No documentation impact:`의 구체적인 이유는 같은 줄에 작성합니다. `.githooks/`와 `.coderabbit.yaml`도 `@hj-k66`의 소유자 검토 대상입니다.
+CI checkout은 자격 증명을 남기지 않습니다. PR 문서 검토 대상은 병합 기준점과 head의 세 점 diff로 계산하며, 기본 브랜치만 변경한 경로는 포함하지 않습니다. `No documentation impact:`의 구체적인 이유는 같은 줄에 작성합니다. `.githooks/`와 `.coderabbit.yaml`도 `@hj-k66`과 `@joonamin`의 공동 소유자 검토 대상입니다.
 
 CI는 `harness`, `quality`, `test`, `container-smoke` 작업으로 문서 정책, 스타일, 테스트와 컨테이너 동작을 검사합니다. 저장소 관리자는 실제 워크플로가 등록되고 성공한 뒤 `develop`과 `main`의 브랜치 보호에 필요한 상태 검사를 지정합니다. 이 문서는 보호 설정이 이미 적용됐다는 증거가 아닙니다.
 
+`container-smoke`는 같은 JAR를 사용하는 release 이미지의 동작을 검증한 뒤 로컬 `source` 이미지도 빌드합니다. 실행 이미지와 컴파일용 JDK가 달라도 소스 빌드가 가능한지 함께 확인합니다.
+
 PR은 feature·bug·chore 의도를 구분하고 변경 목적, 동작 변화와 실행한 검사를 기록합니다. 기능 PR에는 사용자 이야기의 E2E 검증을 포함합니다. 문서 동기화 체크박스를 확인하고 문서 영향이 없으면 이유를 남깁니다. 기능별 구현 설명은 PR에만 기록하며 장기 결정은 ADR과 문서 지도에 연결합니다. 스타일 설정은 NAVER 문서에서 필요한 규칙을 직접 작성한 것이며 외부 XML의 라이선스를 추정하지 않습니다. Dependabot 변경도 일반 변경과 동일하게 CI와 리뷰를 통과해야 합니다.
+
+Spring Boot 3.5를 사용하는 동안 springdoc-openapi는 호환되는 2.x를 유지합니다. Dependabot은 Spring Boot와 springdoc의 메이저 업데이트를 제외하며, 프레임워크 메이저 이전은 두 라이브러리의 호환성을 함께 확인하는 변경으로 진행합니다. [springdoc 호환성 안내](https://springdoc.org/faq.html)
 
 ## CodeRabbit 연결
 
@@ -35,6 +39,6 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 
 첫 도입 PR의 기본 브랜치에는 새 검사기가 없습니다. 이 경우 `4aa71645b050c95a9dcdd3d072af9cba4ca6daa6`의 기존 PR 구조 검사기를 사용합니다. 새 검사는 후보 코드의 자체 테스트와 사람의 승인으로 확인하고, 첫 병합 이후 기본 브랜치의 새 검사가 자동 적용됩니다. 이 초기 검사를 새 정책의 자동 강제 증거로 기록하지 않습니다.
 
-`.github/CODEOWNERS`는 AGENTS, 문서 지도, CODEOWNERS, 워크플로, 검사기, 스타일·빌드 설정과 아키텍처 테스트를 `@hj-k66`의 검토 대상으로 지정합니다. 2026-11-01 GitHub API로 `@hj-k66`의 Write 권한과 `develop`·`main`의 필수 소유자 승인, 승인 1명, 오래된 승인 무효화, 관리자 적용 설정을 확인했습니다. CODEOWNERS는 기본 브랜치에 병합된 뒤 적용됩니다. 첫 PR은 별도 사람 검토가 필요하며, 기본 브랜치 병합 전에는 소유자 지정이 강제된다고 간주하지 않습니다. 다른 이메일 계정은 소유자로 확인하지 않았습니다.
+`.github/CODEOWNERS`는 AGENTS, 문서 지도, CODEOWNERS, 워크플로, 검사기, 스타일·빌드 설정과 아키텍처 테스트를 `@hj-k66`과 `@joonamin`의 공동 검토 대상으로 지정합니다. 2026-11-01 GitHub API로 `@hj-k66`의 Write 권한과 `develop`·`main`의 필수 소유자 승인, 승인 1명, 오래된 승인 무효화, 관리자 적용 설정을 확인했습니다. CODEOWNERS는 기본 브랜치에 병합된 뒤 적용됩니다. 첫 PR은 별도 사람 검토가 필요하며, 기본 브랜치 병합 전에는 소유자 지정이 강제된다고 간주하지 않습니다. 2026-11-02 GitHub API로 `@joonamin`의 관리자 권한을 확인해 공동 소유자로 추가했습니다. 여러 소유자를 같은 줄에 지정하므로 PR 작성자가 아닌 두 소유자 중 한 명의 승인으로 소유자 검토 요건을 충족합니다.
 
 워크플로는 비밀 값과 쓰기 토큰 없이 `pull_request`로 실행합니다. 워크플로 자체를 바꾸는 PR의 안전성은 사람의 소유자 검토에 의존합니다. 기본 브랜치 스크립트를 사용해도 워크플로 변경까지 자체적으로 보호하지는 않습니다. 상세한 신뢰 경계는 [ADR 0003](adr/0003-harness-contract.md)에 기록합니다.

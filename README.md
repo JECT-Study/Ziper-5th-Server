@@ -2,9 +2,11 @@
 
 JECT 5기 6팀의 Java 21 · Spring Boot 3.5.16 API 서버입니다. 현재는 인증 검증, 오류 처리, 데이터베이스 연결과 운영 점검을 위한 초기 기반만 구현했습니다. 소셜 로그인, 회원 기능과 업무 API는 아직 없습니다.
 
+소스와 테스트는 JDK 21을 사용하고 Docker 실행 이미지는 JRE 25를 사용합니다. 소스 이미지의 컴파일 단계도 JDK 21을 사용합니다.
+
 ## 로컬에서 시작하기
 
-JDK 21, Docker Compose v2, Python 3, curl을 준비합니다. Gradle은 저장소의 Wrapper 8.14.6을 사용합니다.
+JDK 21, Docker Compose v2, Python 3, curl을 준비합니다. Gradle은 저장소의 [Wrapper 설정](gradle/wrapper/gradle-wrapper.properties)을 사용합니다.
 
 ```sh
 ./scripts/local-setup.sh

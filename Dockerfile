@@ -1,4 +1,4 @@
-FROM eclipse-temurin:25-jdk-jammy AS build
+FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /workspace
 COPY gradlew build.gradle settings.gradle gradle.properties ./
 COPY gradle ./gradle

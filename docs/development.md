@@ -18,6 +18,8 @@ Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키
 
 자동 포맷은 변경 범위를 확인한 뒤 실행합니다. 이번 초기화 작업에서는 모든 구현·문서·통합 수정이 끝난 후 조정 담당자만 최종 포맷을 한 번 실행합니다. 다른 작업자는 포매터나 `spotlessApply`를 실행하지 않습니다.
 
+Checkstyle API 계약 테스트는 `testImplementation`으로 검사기를 사용합니다. 이 의존성에서만 `slf4j-simple`을 제외해 테스트 애플리케이션의 Logback과 충돌하지 않도록 합니다. Gradle Checkstyle 작업은 별도 의존성 구성을 사용합니다.
+
 ## 자동 검사 범위
 
 `check.sh`는 `scripts/test-harness-policy.py`, `scripts/check-harness-policy.py --repo .`, `scripts/test-pr-policy.py`를 실행한 뒤 Gradle `check`를 실행합니다. 커밋 훅과 푸시 훅도 문서 정책 검사를 포함합니다. 훅은 `./scripts/local-setup.sh` 외에도 Gradle `compileJava`가 의존하는 `installGitHooks` 태스크가 `core.hooksPath`를 `.githooks`로 설정해 설치합니다. 첫 Gradle 빌드나 IDE 가져오기에서 실행되며 `.git`이 없는 Docker 빌드에서는 건너뜁니다. 훅은 우회할 수 있고 로컬 설정이므로 CI와 리뷰를 함께 사용합니다.

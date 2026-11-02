@@ -1,16 +1,16 @@
 # Requires branch protection with code-owner approval and an owner with write access.
-/AGENTS.md @hj-k66
-/docs/ @hj-k66
-/.github/ @hj-k66
-/.githooks/ @hj-k66
-/.coderabbit.yaml @hj-k66
-/scripts/ @hj-k66
-/config/ @hj-k66
-/build.gradle @hj-k66
-/settings.gradle @hj-k66
-/gradle/ @hj-k66
-/gradlew @hj-k66
-/gradlew.bat @hj-k66
+/AGENTS.md @hj-k66 @joonamin
+/docs/ @hj-k66 @joonamin
+/.github/ @hj-k66 @joonamin
+/.githooks/ @hj-k66 @joonamin
+/.coderabbit.yaml @hj-k66 @joonamin
+/scripts/ @hj-k66 @joonamin
+/config/ @hj-k66 @joonamin
+/build.gradle @hj-k66 @joonamin
+/settings.gradle @hj-k66 @joonamin
+/gradle/ @hj-k66 @joonamin
+/gradlew @hj-k66 @joonamin
+/gradlew.bat @hj-k66 @joonamin
 
-/src/test/java/com/ject/ziper/global/architecture/ @hj-k66
-/src/test/java/com/ject/ziper/domain/harnessfixture/ @hj-k66
+/src/test/java/com/ject/ziper/global/architecture/ @hj-k66 @joonamin
+/src/test/java/com/ject/ziper/domain/harnessfixture/ @hj-k66 @joonamin
