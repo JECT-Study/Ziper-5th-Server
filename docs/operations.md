@@ -21,6 +21,12 @@ CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향
 
 향후 장애 전환과 비밀 관리는 [인프라 계획](infrastructure.md)을 따릅니다. Worker나 외부 알림 배포는 없으며 probe 간격·임계치·회복 조건은 미정입니다.
 
+## Java 빌드와 실행 환경
+
+Gradle 컴파일과 테스트의 toolchain은 Java 21입니다. Docker의 `build` 단계는 JDK 21을 사용하고 `runtime-base`는 JRE 25를 사용합니다. `source`와 `release`는 같은 실행 기반을 공유합니다. 컴파일용 JDK를 단독으로 올리면 Java 21 toolchain을 찾지 못하므로 빌드 JDK와 Gradle toolchain은 함께 검토합니다.
+
+CI의 `container-smoke`는 기존 JAR를 사용하는 release 이미지의 DB 중단·복구 검증 후 `source` 이미지도 빌드해 로컬 소스 빌드 경로를 확인합니다.
+
 ## Sentry
 
 프로젝트는 [JECT-5th-TEAM6-API-SERVER](https://ject-5th-team6.sentry.io/settings/projects/ject-5th-team6-api-server/)입니다. 조직 표시명은 `JECT-5th-TEAM6`, 조직·팀 slug는 `ject-5th-team6`, 프로젝트 slug는 `ject-5th-team6-api-server`입니다.

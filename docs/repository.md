@@ -4,6 +4,8 @@ CI checkout은 자격 증명을 남기지 않습니다. PR 문서 검토 대상�
 
 CI는 `harness`, `quality`, `test`, `container-smoke` 작업으로 문서 정책, 스타일, 테스트와 컨테이너 동작을 검사합니다. 저장소 관리자는 실제 워크플로가 등록되고 성공한 뒤 `develop`과 `main`의 브랜치 보호에 필요한 상태 검사를 지정합니다. 이 문서는 보호 설정이 이미 적용됐다는 증거가 아닙니다.
 
+`container-smoke`는 같은 JAR를 사용하는 release 이미지의 동작을 검증한 뒤 로컬 `source` 이미지도 빌드합니다. 실행 이미지와 컴파일용 JDK가 달라도 소스 빌드가 가능한지 함께 확인합니다.
+
 PR은 feature·bug·chore 의도를 구분하고 변경 목적, 동작 변화와 실행한 검사를 기록합니다. 기능 PR에는 사용자 이야기의 E2E 검증을 포함합니다. 문서 동기화 체크박스를 확인하고 문서 영향이 없으면 이유를 남깁니다. 기능별 구현 설명은 PR에만 기록하며 장기 결정은 ADR과 문서 지도에 연결합니다. 스타일 설정은 NAVER 문서에서 필요한 규칙을 직접 작성한 것이며 외부 XML의 라이선스를 추정하지 않습니다. Dependabot 변경도 일반 변경과 동일하게 CI와 리뷰를 통과해야 합니다.
 
 Spring Boot 3.5를 사용하는 동안 springdoc-openapi는 호환되는 2.x를 유지합니다. Dependabot은 Spring Boot와 springdoc의 메이저 업데이트를 제외하며, 프레임워크 메이저 이전은 두 라이브러리의 호환성을 함께 확인하는 변경으로 진행합니다. [springdoc 호환성 안내](https://springdoc.org/faq.html)

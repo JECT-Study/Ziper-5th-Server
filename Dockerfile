@@ -6,7 +6,7 @@ COPY config/formatter ./config/formatter
 COPY src ./src
 RUN chmod +x gradlew && SENTRY_UPLOAD=false ./gradlew --no-daemon bootJar
 
-FROM eclipse-temurin:21-jre-jammy AS runtime-base
+FROM eclipse-temurin:25-jre-jammy AS runtime-base
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 ziper && useradd --uid 10001 --gid ziper --no-create-home ziper
