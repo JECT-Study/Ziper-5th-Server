@@ -2,6 +2,8 @@ package com.ject.ziper.global.error;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -18,6 +20,7 @@ import io.sentry.Sentry;
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
+	private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 	private final ProblemFactory problems;
 
 	public ApiExceptionHandler(ProblemFactory problems) {
@@ -29,6 +32,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 			HttpStatusCode status, WebRequest request) {
 		HttpServletRequest servlet = ((ServletWebRequest) request).getRequest();
 		if (status.is5xxServerError()) {
+			log.error("서버 오류 requestId={}", RequestIdFilter.requestId(servlet), exception);
 			Sentry.withScope(scope -> {
 				scope.setTag("requestId", RequestIdFilter.requestId(servlet));
 				Sentry.captureException(exception);

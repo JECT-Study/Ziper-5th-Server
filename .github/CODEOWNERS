@@ -2,6 +2,8 @@
 /AGENTS.md @hj-k66
 /docs/ @hj-k66
 /.github/ @hj-k66
+/.githooks/ @hj-k66
+/.coderabbit.yaml @hj-k66
 /scripts/ @hj-k66
 /config/ @hj-k66
 /build.gradle @hj-k66

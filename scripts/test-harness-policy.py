@@ -56,9 +56,15 @@ class HarnessTests(unittest.TestCase):
                 elif fault == 'allchecks':
                     suppression.write_text('<suppressions><suppress checks=".*" files=".*"/></suppressions>')
                 elif fault == 'unbounded':
-                    suppression.write_text('<suppressions><suppress id="BusinessCatch" files="^src/main/A\\.java$" lines="1-999"/></suppressions>')
+                    source = root / 'src/main/java/A.java'
+                    source.parent.mkdir(parents=True)
+                    source.write_text('class A {}')
+                    suppression.write_text('<suppressions><suppress id="BusinessCatch" files="' + r'[\\/]src[\\/]main[\\/]java[\\/]A\.java$' + '" lines="1-999"/></suppressions>')
                 if fault in ('valid', 'valid-suppression'):
                     harness.check(root)
+                elif fault == 'unbounded':
+                    with self.assertRaisesRegex(ValueError, 'cannot cover more than 20 lines'):
+                        harness.check(root)
                 else:
                     with self.assertRaises((ValueError, OSError)):
                         harness.check(root)

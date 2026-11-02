@@ -9,6 +9,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("app.security")
 public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
 		List<String> allowedOrigins) {
+	@Override
+	public String toString() {
+		return "SecurityProperties[jwtSecretBase64=[REDACTED], jwtIssuer=" + jwtIssuer + ", jwtAudience=" + jwtAudience
+				+ ", allowedOrigins=" + allowedOrigins + "]";
+	}
+
 	public SecurityProperties {
 		if (jwtSecretBase64 == null || jwtSecretBase64.isBlank()) {
 			throw new IllegalArgumentException("app.security.jwt-secret-base64 is required");

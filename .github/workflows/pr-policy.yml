@@ -33,7 +33,7 @@ jobs:
           base, head = os.environ['BASE_SHA'], os.environ['HEAD_SHA']
           if not all(re.fullmatch('[0-9a-f]{40}', sha) for sha in (base, head)):
               raise SystemExit('Invalid commit SHA')
-          diff = subprocess.check_output(['git', '-C', 'candidate', '--no-pager', 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '-z', base, head])
+          diff = subprocess.check_output(['git', '-C', 'candidate', '--no-pager', 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '-z', base + '...' + head])
           pathlib.Path('changed-files.json').write_text(json.dumps(diff.decode().rstrip('\0').split('\0') if diff else []))
           checker = pathlib.Path('baseline/scripts/check-pr-policy.py')
           if not checker.is_file():

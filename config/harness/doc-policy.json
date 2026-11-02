@@ -12,6 +12,18 @@
   ],
   "routes": [
     {
+      "prefix": "db/",
+      "docs": [
+        "docs/database.md"
+      ]
+    },
+    {
+      "prefix": ".githooks/",
+      "docs": [
+        "docs/development.md"
+      ]
+    },
+    {
       "prefix": ".github/",
       "docs": [
         "docs/repository.md"

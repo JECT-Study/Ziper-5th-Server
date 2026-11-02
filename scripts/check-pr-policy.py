@@ -55,7 +55,7 @@ def validate(title, body, repo=None, changed=None, baseline_root=None):
     docs = sections.get('Documentation', '')
     links = re.findall(r'\[[^\]]+\]\(([^\s)]+)\)', docs)
     doc_links = [link for link in links if re.search(r'(?:^|/)docs/[^?#]+\.md(?:[?#].*)?$', link) or re.search(r'(?:^|/)(?:README|AGENTS)\.md(?:[?#].*)?$', link)]
-    no_impact = re.search(r'^No documentation impact:\s*(.*)$', docs, re.M)
+    no_impact = re.search(r'^No documentation impact:[ \t]*(.*)$', docs, re.M)
     if no_impact:
         if not substantive(no_impact.group(1)):
             errors.append('No documentation impact needs a concrete reason')

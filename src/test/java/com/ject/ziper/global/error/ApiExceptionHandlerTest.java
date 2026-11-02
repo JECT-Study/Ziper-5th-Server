@@ -9,6 +9,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -62,6 +68,33 @@ class ApiExceptionHandlerTest {
 				.andExpect(status().isNotFound()).andExpect(jsonPath("code").value("NOT_FOUND"))
 				.andExpect(jsonPath("requestId").isNotEmpty()).andReturn().getResponse();
 		assertThat(fallback.getContentAsString()).doesNotContain("secret-token", "SQL");
+	}
+
+	@Test
+	void Sentry가꺼진환경_서버오류를처리하면_요청ID와스택을기록하고응답은상세정보를숨긴다() throws Exception {
+		Logger logger = (Logger) LoggerFactory.getLogger(ApiExceptionHandler.class);
+		var appender = new ListAppender<ILoggingEvent>();
+		appender.start();
+		logger.addAppender(appender);
+		try (var sentry = mockStatic(Sentry.class)) {
+			var mvc = MockMvcBuilders.standaloneSetup(new Endpoints())
+					.setControllerAdvice(new ApiExceptionHandler(new ProblemFactory()))
+					.addFilters(new RequestIdFilter()).build();
+			mvc.perform(get("/number")).andExpect(status().isBadRequest());
+			assertThat(appender.list).isEmpty();
+			var response = mvc.perform(get("/failure")).andExpect(status().isInternalServerError()).andReturn()
+					.getResponse();
+			assertThat(response.getContentAsString()).doesNotContain("secret-token", "IllegalStateException");
+			assertThat(appender.list).singleElement().satisfies(event -> {
+				assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+				assertThat(event.getFormattedMessage()).contains(response.getHeader("X-Request-Id"));
+				assertThat(event.getThrowableProxy().getClassName()).isEqualTo(IllegalStateException.class.getName());
+				assertThat(event.getThrowableProxy().getStackTraceElementProxyArray()).isNotEmpty();
+			});
+		} finally {
+			logger.detachAppender(appender);
+			appender.stop();
+		}
 	}
 
 	@RestController

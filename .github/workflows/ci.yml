@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-harness-policy.py
       - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/check-harness-policy.py --repo .
       - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-pr-policy.py
@@ -21,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -38,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -67,6 +73,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: gradle/actions/wrapper-validation@v4
       - uses: actions/download-artifact@v4
         with:

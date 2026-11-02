@@ -101,6 +101,10 @@ class PolicyTests(unittest.TestCase):
             original = '[Repository policy](docs/repository.md)'
             reason = 'No documentation impact: Test data changes only; review behavior is unchanged.\nReviewed: ' + original
             self.assertEqual([], policy.validate('chore: review', good.replace(original, reason), root, ['scripts/test.py'], baseline_root=root))
+            for blank in ('', ' ', '\t', '\r'):
+                missing_reason = 'No documentation impact:' + blank + '\nReviewed: ' + original
+                self.assertIn('No documentation impact needs a concrete reason',
+                              policy.validate('chore: review', good.replace(original, missing_reason), root, ['scripts/test.py'], baseline_root=root))
             for link in ('[Readme](README.md)', '[Missing](docs/missing.md)', '[Remote](https://example.org/docs/repository.md)', '[Escape](../docs/repository.md)'):
                 self.assertTrue(policy.validate('chore: review', good.replace(original, link), root, ['scripts/test.py'], baseline_root=root))
             self.assertTrue(policy.validate('chore: review', good, root, ['../bad'], baseline_root=root))
@@ -130,6 +134,40 @@ class PolicyTests(unittest.TestCase):
                 self.assertTrue(any('docs/repository.md' in error for error in errors), errors)
             self.assertEqual([], policy.validate('chore: review', body, candidate, ['build.gradle.evil'], baseline_root=baseline))
             self.assertTrue(policy.validate('chore: review', body, candidate, ['build.gradle'], baseline_root=baseline))
+
+    def test_workflow_excludes_base_only_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / 'candidate'
+            candidate.mkdir()
+            fixture_env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(candidate), *args], env=fixture_env, stderr=subprocess.DEVNULL).decode().strip()
+            git('init')
+            git('config', 'user.name', 'Policy fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            (candidate / 'common').write_text('initial')
+            git('add', '.')
+            git('commit', '-m', 'common')
+            common = git('rev-parse', 'HEAD')
+            (candidate / 'base-only').write_text('base change')
+            git('add', '.')
+            git('commit', '-m', 'advance base')
+            base = git('rev-parse', 'HEAD')
+            git('checkout', '--detach', common)
+            (candidate / 'head-only').write_text('PR change')
+            git('add', '.')
+            git('commit', '-m', 'advance head')
+            head = git('rev-parse', 'HEAD')
+            baseline = root / 'baseline/scripts'
+            baseline.mkdir(parents=True)
+            (baseline / 'check-pr-policy.py').write_text('# trusted checker exists')
+            workflow = (ROOT / '.github/workflows/pr-policy.yml').read_text()
+            script = workflow.split("          python3 - <<'PY'\n", 1)[1].split('\n          PY', 1)[0]
+            script = '\n'.join(line[10:] for line in script.splitlines())
+            subprocess.run([sys.executable, '-c', script], cwd=root,
+                           env={**fixture_env, 'BASE_SHA': base, 'HEAD_SHA': head}, check=True)
+            self.assertEqual(['head-only'], json.loads((root / 'changed-files.json').read_text()))
 
     def test_event_json_entrypoint_and_hostile_text_are_data(self):
         with tempfile.TemporaryDirectory() as directory:
