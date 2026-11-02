@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/check-harness-policy.py --repo .
+./gradlew spotlessCheck checkstyleMain checkstyleTest

@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    commit-message:
+      prefix: chore
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: org.springframework.boot
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    commit-message:
+      prefix: chore
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    commit-message:
+      prefix: chore
+    directory: /
+    schedule:
+      interval: weekly

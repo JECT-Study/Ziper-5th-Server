@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <module name="SuppressionFilter">
+        <property name="file" value="${catchSuppressionFile}"/>
+    </module>
+    <module name="TreeWalker">
+        <module name="MatchXpath">
+            <property name="id" value="BusinessCatch"/>
+            <property name="query"
+                value="//LITERAL_CATCH[ancestor::COMPILATION_UNIT/PACKAGE_DEF/DOT/descendant-or-self::DOT[IDENT[@text='service' or @text='controller'] and DOT/IDENT and DOT/DOT/IDENT[@text='domain'] and DOT/DOT/DOT/IDENT[@text='ziper'] and DOT/DOT/DOT/DOT/IDENT[@text='com'] and DOT/DOT/DOT/DOT/IDENT[@text='ject']]]"/>
+            <message key="matchxpath.match"
+                value="Business service/controller must not catch exceptions: throw BusinessException for expected business failures; propagate technical failures to global handling. Put external I/O handling in a boundary adapter."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="^ +\S"/>
+            <property name="message" value="Use hard tabs for Java indentation (tab width 4)."/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+        <module name="MatchXpath">
+            <property name="id" value="FullyQualifiedName"/>
+            <property name="query"
+                value="//IDENT[matches(@text, '^[a-z]') and parent::DOT and not(preceding-sibling::*) and not(ancestor::IMPORT or ancestor::STATIC_IMPORT or ancestor::PACKAGE_DEF) and exists(ancestor::DOT[IDENT[preceding-sibling::* and matches(@text, '^[A-Z]')]] intersect ancestor::DOT[not(parent::DOT)][1]/descendant-or-self::DOT)]"/>
+            <message key="matchxpath.match"
+                value="Do not use fully qualified type names in code: import the type (or static member) instead."/>
+        </module>
+        <module name="MatchXpath">
+            <property name="id" value="TestMethodName"/>
+            <property name="query"
+                value="//METHOD_DEF[MODIFIERS/ANNOTATION/IDENT[@text='Test' or @text='ParameterizedTest' or @text='RepeatedTest' or @text='TestFactory' or @text='TestTemplate']]/IDENT[not(matches(@text, '^[^_]*\p{IsHangulSyllables}[^_]*_[^_]*\p{IsHangulSyllables}[^_]*_[^_]*\p{IsHangulSyllables}[^_]*$'))]"/>
+            <message key="matchxpath.match"
+                value="Name test methods in Korean as given_when_then: exactly three Hangul segments separated by '_'."/>
+        </module>
+        <module name="SuppressionXpathSingleFilter">
+            <property name="checks" value="MethodNameCheck"/>
+            <property name="query"
+                value="//METHOD_DEF[MODIFIERS/ANNOTATION/IDENT[@text='Test' or @text='ParameterizedTest' or @text='RepeatedTest' or @text='TestFactory' or @text='TestTemplate']]/IDENT"/>
+        </module>
+        <module name="AvoidStarImport"/>
+        <module name="UnusedImports"/>
+        <module name="TypeName"/>
+        <module name="MethodName"/>
+        <module name="ParameterName"/>
+        <module name="LocalVariableName"/>
+        <module name="RecordComponentName"/>
+        <module name="EmptyCatchBlock">
+            <property name="commentFormat" value="(?!)"/>
+            <property name="exceptionVariableName" value="(?!)"/>
+        </module>
+    </module>
+</module>

@@ -1,0 +1,9 @@
+-- Flyway creates ziper as ziper_migrator before running this migration.
+REVOKE ALL ON SCHEMA ziper FROM PUBLIC;
+GRANT USAGE ON SCHEMA ziper TO ziper_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ziper TO ziper_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ziper TO ziper_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ziper_migrator IN SCHEMA ziper
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ziper_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ziper_migrator IN SCHEMA ziper
+    GRANT USAGE, SELECT ON SEQUENCES TO ziper_app;

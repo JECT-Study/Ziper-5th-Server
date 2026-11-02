@@ -1,0 +1,113 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.diffplug.spotless' version '7.2.1'
+    id 'checkstyle'
+    id 'io.sentry.jvm.gradle' version '6.25.0'
+}
+
+group = 'com.ject'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+repositories { mavenCentral() }
+
+def checkstyleVersion = '10.26.1'
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.10.0'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation platform('io.sentry:sentry-bom:8.62.0')
+    implementation 'io.sentry:sentry-spring-boot-starter-jakarta'
+    runtimeOnly 'org.postgresql:postgresql'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'com.tngtech.archunit:archunit:1.5.1'
+    testImplementation "com.puppycrawl.tools:checkstyle:${checkstyleVersion}"
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+    options.debug = true
+    options.debugOptions.debugLevel = 'source,lines,vars'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+}
+
+tasks.named('bootJar') { archiveFileName = 'ziper-server.jar' }
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+spotless {
+    java {
+        target 'src/**/*.java'
+        eclipse('4.32').configFile('config/formatter/naver-eclipse-formatter.xml')
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+checkstyle {
+    toolVersion = checkstyleVersion
+    configFile = file('config/checkstyle/checkstyle.xml')
+    configProperties['catchSuppressionFile'] = file('config/checkstyle/business-catch-suppressions.xml').absolutePath
+    maxWarnings = 0
+    ignoreFailures = false
+}
+
+tasks.named('check') { dependsOn 'spotlessCheck', 'checkstyleMain', 'checkstyleTest' }
+
+// Same setting as scripts/local-setup.sh so the first Gradle build or IDE import installs the hooks.
+tasks.register('installGitHooks', Exec) {
+    onlyIf { file('.git').exists() }
+    commandLine 'git', 'config', 'core.hooksPath', '.githooks'
+}
+tasks.named('compileJava') { dependsOn 'installGitHooks' }
+
+def sourceUploadEnabled = providers.environmentVariable('SENTRY_UPLOAD').map { it == 'true' }.getOrElse(false) &&
+    providers.environmentVariable('SENTRY_AUTH_TOKEN').map { !it.isBlank() }.getOrElse(false)
+
+sentry {
+    includeSourceContext = true
+    autoUploadSourceContext = sourceUploadEnabled
+    org = 'ject-5th-team6'
+    projectName = 'ject-5th-team6-api-server'
+    authToken = providers.environmentVariable('SENTRY_AUTH_TOKEN').getOrElse('')
+    autoInstallation { enabled = false }
+}
+
+tasks.named('bootJar') {
+    if (sourceUploadEnabled) {
+        finalizedBy 'sentryUploadSourceBundleJava'
+    }
+}
+
+// Generate the source bundle even when uploads are deliberately disabled.
+tasks.withType(AbstractArchiveTask).configureEach {
+    if (!name.startsWith('sentry')) {
+        dependsOn 'sentryBundleSourcesJava'
+    }
+}

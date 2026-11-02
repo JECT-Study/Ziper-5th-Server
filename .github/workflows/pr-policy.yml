@@ -1,0 +1,52 @@
+name: PR policy
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+permissions:
+  contents: read
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  pr-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline
+          persist-credentials: false
+      - name: Select trusted baseline checker and collect changed paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess
+          base, head = os.environ['BASE_SHA'], os.environ['HEAD_SHA']
+          if not all(re.fullmatch('[0-9a-f]{40}', sha) for sha in (base, head)):
+              raise SystemExit('Invalid commit SHA')
+          diff = subprocess.check_output(['git', '-C', 'candidate', '--no-pager', 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '-z', base + '...' + head])
+          pathlib.Path('changed-files.json').write_text(json.dumps(diff.decode().rstrip('\0').split('\0') if diff else []))
+          checker = pathlib.Path('baseline/scripts/check-pr-policy.py')
+          if not checker.is_file():
+              # Initial develop has no policy. Immutable bootstrap is structural only.
+              fallback = '4aa71645b050c95a9dcdd3d072af9cba4ca6daa6'
+              content = subprocess.check_output(['git', '-C', 'candidate', 'show', fallback + ':scripts/check-pr-policy.py'])
+              checker.parent.mkdir(parents=True, exist_ok=True)
+              checker.write_bytes(content)
+              print('::notice::Bootstrap checker validates PR structure only; candidate harness CI and human review must verify routing until policy is merged into the base branch.')
+          PY
+      - name: Validate PR with base policy against candidate data
+        env:
+          ZIPER_POLICY_REPO: ${{ github.workspace }}/candidate
+          ZIPER_CHANGED_FILES_JSON: ${{ github.workspace }}/changed-files.json
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 baseline/scripts/check-pr-policy.py

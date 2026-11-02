@@ -1,0 +1,6 @@
+spring:
+  flyway:
+    user: ${MIGRATION_USERNAME}
+    password: ${MIGRATION_PASSWORD}
+sentry:
+  environment: ${SENTRY_ENVIRONMENT:prod}
