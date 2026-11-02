@@ -16,7 +16,7 @@ java {
 
 repositories { mavenCentral() }
 
-def checkstyleVersion = '10.26.1'
+def checkstyleVersion = '14.3.0'
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -34,7 +34,9 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'com.tngtech.archunit:archunit:1.5.1'
-    testImplementation "com.puppycrawl.tools:checkstyle:${checkstyleVersion}"
+    testImplementation("com.puppycrawl.tools:checkstyle:${checkstyleVersion}") {
+        exclude group: 'org.slf4j', module: 'slf4j-simple'
+    }
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:postgresql'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
