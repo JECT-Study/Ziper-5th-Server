@@ -76,7 +76,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: gradle/actions/wrapper-validation@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: tested-release
           path: build
