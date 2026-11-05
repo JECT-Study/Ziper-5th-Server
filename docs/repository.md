@@ -42,3 +42,5 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 `.github/CODEOWNERS`는 AGENTS, 문서 지도, CODEOWNERS, 워크플로, 검사기, 스타일·빌드 설정과 아키텍처 테스트를 `@hj-k66`과 `@joonamin`의 공동 검토 대상으로 지정합니다. 2026-11-01 GitHub API로 `@hj-k66`의 Write 권한과 `develop`·`main`의 필수 소유자 승인, 승인 1명, 오래된 승인 무효화, 관리자 적용 설정을 확인했습니다. CODEOWNERS는 기본 브랜치에 병합된 뒤 적용됩니다. 첫 PR은 별도 사람 검토가 필요하며, 기본 브랜치 병합 전에는 소유자 지정이 강제된다고 간주하지 않습니다. 2026-11-02 GitHub API로 `@joonamin`의 관리자 권한을 확인해 공동 소유자로 추가했습니다. 여러 소유자를 같은 줄에 지정하므로 PR 작성자가 아닌 두 소유자 중 한 명의 승인으로 소유자 검토 요건을 충족합니다.
 
 워크플로는 비밀 값과 쓰기 토큰 없이 `pull_request`로 실행합니다. 워크플로 자체를 바꾸는 PR의 안전성은 사람의 소유자 검토에 의존합니다. 기본 브랜치 스크립트를 사용해도 워크플로 변경까지 자체적으로 보호하지는 않습니다. 상세한 신뢰 경계는 [ADR 0003](adr/0003-harness-contract.md)에 기록합니다.
+
+첫 홈서버 배포는 [ADR 0006](adr/0006-initial-production-deployment.md)의 부트스트랩 절차를 사용합니다. 원격 `main`의 초기 상태와 실행한 검사를 구분해 기록하며 브랜치 보호는 변경하지 않습니다. 공개 상태 검사기는 로컬 `check.sh`와 CI `harness`에서 검사합니다. Sentry 소스 업로드 대상은 `joonamin-project/ziper-server`이며 `sentry-source-upload` 환경의 조직 토큰을 사용합니다.

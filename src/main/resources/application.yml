@@ -60,6 +60,9 @@ management:
         readiness:
           include: readinessState,db
 app:
+  monitoring:
+    metrics-enabled: ${APP_MONITORING_METRICS_ENABLED:false}
+    origin: ${APP_MONITORING_ORIGIN:local}
   runtime-mode: ${APP_RUNTIME_MODE:server}
   security:
     jwt-secret-base64: ${JWT_SECRET_BASE64:}

@@ -60,3 +60,5 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 - 결정이 바뀌면 기존 ADR을 지우거나 고치지 않고 새 ADR을 쓰고, 기존 ADR의 상태를 `대체됨`으로 바꿔 새 ADR에 연결합니다.
 
 기능 구현 상세는 PR에 기록하고 기능별 영구 문서를 중복 생성하지 않습니다. 기능 PR은 사용자 이야기의 E2E 동작 증거를 포함합니다. 구조·인증·데이터·일관성·장애 전환·아티팩트 결정이 달라지면 ADR과 [문서 지도](context-map.md)를 함께 갱신합니다.
+
+외부 Sentry 지표와 opt-in 전송 검증은 [운영 문서](operations.md#애플리케이션-지표)를 따릅니다. 공개 HTTPS 상태 검증 도구 `scripts/verify-public-health.py`는 `/livez`·`/readyz`의 직접 200 응답, 상태 전용 JSON, 캐시 금지와 세션 미생성을 확인합니다. `scripts/test-public-health.py`가 실제 로컬 HTTP fixture에서 정상 응답과 리다이렉트·오류·캐시·정보 노출 응답의 거부를 검사하며 `check.sh`에 포함됩니다. 이 테스트는 운영 TLS와 Sentry의 외부 점검을 대신하지 않습니다.
