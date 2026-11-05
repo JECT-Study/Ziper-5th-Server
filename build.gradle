@@ -95,8 +95,8 @@ def sourceUploadEnabled = providers.environmentVariable('SENTRY_UPLOAD').map { i
 sentry {
     includeSourceContext = true
     autoUploadSourceContext = sourceUploadEnabled
-    org = 'ject-5th-team6'
-    projectName = 'ject-5th-team6-api-server'
+    org = 'joonamin-project'
+    projectName = 'ziper-server'
     authToken = providers.environmentVariable('SENTRY_AUTH_TOKEN').getOrElse('')
     autoInstallation { enabled = false }
 }

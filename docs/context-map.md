@@ -20,6 +20,11 @@
 장기적인 구조·인증·데이터·일관성·장애 전환·아티팩트 결정은 `docs/adr/`에 배경·결정·영향·상태를 기록하고 이 목록에서 연결합니다. 결정이 바뀌면 과거 기록을 지우지 않고 대체 ADR을 연결합니다.
 
 - [0001 공통 실행·오류·아티팩트 경계](adr/0001-runtime-contract.md)
-- [0002 향후 장애 전환과 비밀 번들](adr/0002-infrastructure-contract.md)
+- [0002 향후 장애 전환과 비밀 번들](adr/0002-infrastructure-contract.md) — 0004로 대체
 
 - [0003 검사 정책의 신뢰 경계와 적용 범위](adr/0003-harness-contract.md)
+
+- [0004 홈서버 우선 배포와 Cloud Run 장애 전환](adr/0004-deployment-and-failover.md)
+- [0005 공유 Education 조직의 프로젝트별 모니터링 접근](adr/0005-monitoring-project-access.md)
+- [0006 홈서버 첫 운영 배포와 Uptime 검증](adr/0006-initial-production-deployment.md)
+- [0007 수동 운영 배포 진입점과 응답 식별](adr/0007-manual-production-entrypoint.md)

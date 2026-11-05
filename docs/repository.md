@@ -42,3 +42,13 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 `.github/CODEOWNERS`는 AGENTS, 문서 지도, CODEOWNERS, 워크플로, 검사기, 스타일·빌드 설정과 아키텍처 테스트를 `@hj-k66`과 `@joonamin`의 공동 검토 대상으로 지정합니다. 2026-11-01 GitHub API로 `@hj-k66`의 Write 권한과 `develop`·`main`의 필수 소유자 승인, 승인 1명, 오래된 승인 무효화, 관리자 적용 설정을 확인했습니다. CODEOWNERS는 기본 브랜치에 병합된 뒤 적용됩니다. 첫 PR은 별도 사람 검토가 필요하며, 기본 브랜치 병합 전에는 소유자 지정이 강제된다고 간주하지 않습니다. 2026-11-02 GitHub API로 `@joonamin`의 관리자 권한을 확인해 공동 소유자로 추가했습니다. 여러 소유자를 같은 줄에 지정하므로 PR 작성자가 아닌 두 소유자 중 한 명의 승인으로 소유자 검토 요건을 충족합니다.
 
 워크플로는 비밀 값과 쓰기 토큰 없이 `pull_request`로 실행합니다. 워크플로 자체를 바꾸는 PR의 안전성은 사람의 소유자 검토에 의존합니다. 기본 브랜치 스크립트를 사용해도 워크플로 변경까지 자체적으로 보호하지는 않습니다. 상세한 신뢰 경계는 [ADR 0003](adr/0003-harness-contract.md)에 기록합니다.
+
+첫 홈서버 배포는 [ADR 0006](adr/0006-initial-production-deployment.md)의 부트스트랩 절차를 사용합니다. 원격 `main`의 초기 상태와 실행한 검사를 구분해 기록하며 브랜치 보호는 변경하지 않습니다. 공개 상태 검사기는 로컬 `check.sh`와 CI `harness`에서 검사합니다. Sentry 소스 업로드 대상은 `joonamin-project/ziper-server`이며 `sentry-source-upload` 환경의 조직 토큰을 사용합니다.
+
+## main 수동 배포 진입점
+
+`Deploy production manually`는 workflow_dispatch로만 시작하고 main만 허용합니다. 실제 배포 코드는 공개 Infra 저장소의 고정 SHA workflow를 재사용합니다. 홈·후속 검증은 같은 production concurrency를 사용하고 실행 중인 배포를 취소하지 않습니다. PR은 운영 Secret이나 배포 권한을 사용하지 않습니다.
+
+현재 고정 SHA는 Infra PR #1의 후보이며 아직 성공한 Infra main CI가 없으므로 배포 gate를 통과할 수 없습니다. Infra PR #1을 정상 리뷰·병합한 후 이 파일의 두 SHA를 검증된 main 커밋으로 갱신해야 합니다. 그 다음 이 변경을 develop와 main에 정상 반영하고, Server main CI 성공 후 main에서 수동 실행합니다. 기본 브랜치 develop에도 진입 workflow가 있어야 GitHub UI에 수동 실행이 표시됩니다.
+
+CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으며, private SSH key·host key pin·Discord webhook은 production 환경에 둡니다. production 환경은 main만 허용합니다. Secret 등록 여부와 인증·채널 수신의 실제 성공은 별개로 검증합니다. 정책·배포 구현·운영 E2E 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 모읍니다.

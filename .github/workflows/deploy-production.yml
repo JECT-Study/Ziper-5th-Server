@@ -1,0 +1,16 @@
+name: Deploy production manually
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ziper-production
+  cancel-in-progress: false
+jobs:
+  home:
+    if: github.ref == 'refs/heads/main'
+    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@974c6b74b0e0d52c2250e5a0dbfd1138151566e5
+    with:
+      infra_sha: 974c6b74b0e0d52c2250e5a0dbfd1138151566e5
+    secrets: inherit
