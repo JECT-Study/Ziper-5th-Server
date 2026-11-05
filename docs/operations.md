@@ -122,3 +122,9 @@ python3 scripts/verify-public-health.py --url https://api-ziper.joonamin.dev --o
 공개 검사는 10초 간격으로 세 차례 실행하며 두 probe의 직접 200 응답, `{"status":"UP"}`, `Cache-Control: no-store`와 세션 미생성을 요구합니다. HTTP 리다이렉트와 캐시된 응답도 거부합니다. 이 성공은 Sentry Uptime의 외부 점검 성공을 대신하지 않습니다. Uptime에는 같은 호스트의 `/readyz`를 등록하고 실제 체크·장애·복구를 별도로 확인합니다.
 
 원격 SSH 세션에서는 Docker Desktop의 대화형 credential store를 사용하지 않습니다. 배포 스크립트가 전용 `DOCKER_CONFIG=/opt/ziper/docker-client`를 사용하며 그 안의 `config.json`은 `{"auths":{}}`입니다. 기존 Docker 클라이언트 설정과 다른 프로젝트의 로그인은 변경하지 않습니다.
+
+## 운영 E2E 응답 식별
+
+기존 probe 응답(`/livez`, `/readyz`, Actuator probe)에 `X-Ziper-Origin`과 `X-Ziper-Release`를 추가합니다. origin은 `home|cloudrun|local`만, release는 소문자 40자리 소스 SHA 또는 로컬 표식만 출력합니다. 다른 값은 헤더에 넣지 않습니다. 새 업무 API·비밀 값·인스턴스 주소는 노출하지 않습니다.
+
+예약 전환·배포·E2E 정책과 실제 운영 증거는 [Infra 저장소](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에서 관리합니다. 헤더 존재만으로 동일 이미지 배포를 증명하지 않으며 배포 manifest·이미지 digest·제공업체 revision과 대조합니다. 실제 운영 검증은 아직 수행하지 않았습니다.

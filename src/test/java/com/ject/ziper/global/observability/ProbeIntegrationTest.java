@@ -74,6 +74,8 @@ class ProbeIntegrationTest extends PostgresTestSupport {
 			var response = http.getForEntity(path, Map.class);
 			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 			assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+			assertThat(response.getHeaders().getFirst("X-Ziper-Origin")).isEqualTo("local");
+			assertThat(response.getHeaders().getFirst("X-Ziper-Release")).isEqualTo("local");
 			assertThat(response.getBody()).isEqualTo(Map.of("status", "UP"));
 		}
 	}
