@@ -27,3 +27,4 @@
 - [0004 홈서버 우선 배포와 Cloud Run 장애 전환](adr/0004-deployment-and-failover.md)
 - [0005 공유 Education 조직의 프로젝트별 모니터링 접근](adr/0005-monitoring-project-access.md)
 - [0006 홈서버 첫 운영 배포와 Uptime 검증](adr/0006-initial-production-deployment.md)
+- [0007 수동 운영 배포 진입점과 응답 식별](adr/0007-manual-production-entrypoint.md)

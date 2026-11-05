@@ -1,0 +1,17 @@
+name: Deploy production manually
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ziper-production
+  cancel-in-progress: false
+jobs:
+  home:
+    if: github.ref == 'refs/heads/main'
+    # Dependency: update both pins to the approved Infra main commit after Infra PR #1 merges.
+    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@9a8866ade37e2d8661be7a00694e5f9aee19f034
+    with:
+      infra_sha: 9a8866ade37e2d8661be7a00694e5f9aee19f034
+    secrets: inherit
