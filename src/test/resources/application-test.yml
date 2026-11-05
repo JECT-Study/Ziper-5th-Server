@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: ${DB_JDBC_URL:jdbc:postgresql://localhost:5432/ziper_test}
+    username: ${DB_USERNAME:ziper}
+    password: ${DB_PASSWORD:ziper}
+  flyway:
+    url: ${MIGRATION_JDBC_URL:${spring.datasource.url}}
+    user: ${MIGRATION_USERNAME:${spring.datasource.username}}
+    password: ${MIGRATION_PASSWORD:${spring.datasource.password}}
+app:
+  runtime-mode: server
+  security:
+    jwt-secret-base64: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
+    allowed-origins: http://localhost:3000
+sentry:
+  enabled: false
+  environment: test
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

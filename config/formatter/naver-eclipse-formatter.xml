@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles version="23">
+    <profile kind="CodeFormatterProfile" name="Ziper NAVER conventions" version="23">
+        <setting id="org.eclipse.jdt.core.formatter.tabulation.char" value="tab"/>
+        <setting id="org.eclipse.jdt.core.formatter.tabulation.size" value="4"/>
+        <setting id="org.eclipse.jdt.core.formatter.indentation.size" value="4"/>
+        <setting id="org.eclipse.jdt.core.formatter.continuation_indentation" value="2"/>
+        <setting id="org.eclipse.jdt.core.formatter.lineSplit" value="120"/>
+        <setting id="org.eclipse.jdt.core.formatter.brace_position_for_type_declaration" value="end_of_line"/>
+        <setting id="org.eclipse.jdt.core.formatter.brace_position_for_method_declaration" value="end_of_line"/>
+        <setting id="org.eclipse.jdt.core.formatter.brace_position_for_constructor_declaration" value="end_of_line"/>
+        <setting id="org.eclipse.jdt.core.formatter.brace_position_for_block" value="end_of_line"/>
+        <setting id="org.eclipse.jdt.core.formatter.brace_position_for_record_declaration" value="end_of_line"/>
+        <setting id="org.eclipse.jdt.core.formatter.insert_new_line_after_annotation_on_type" value="insert"/>
+        <setting id="org.eclipse.jdt.core.formatter.insert_new_line_after_annotation_on_method" value="insert"/>
+        <setting id="org.eclipse.jdt.core.formatter.blank_lines_between_import_groups" value="1"/>
+        <setting id="org.eclipse.jdt.core.formatter.blank_lines_after_imports" value="1"/>
+        <setting id="org.eclipse.jdt.core.formatter.use_on_off_tags" value="false"/>
+    </profile>
+</profiles>

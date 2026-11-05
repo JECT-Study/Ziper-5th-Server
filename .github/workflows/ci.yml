@@ -1,0 +1,94 @@
+name: CI
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-harness-policy.py
+      - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/check-harness-policy.py --repo .
+      - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-pr-policy.py
+      - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-public-health.py
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew spotlessCheck checkstyleMain checkstyleTest
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: quality-reports
+          path: build/reports/
+          if-no-files-found: ignore
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew test bootJar
+      - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-release-artifact.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tested-release
+          path: |
+            build/libs/ziper-server.jar
+            build/intermediates/sentry/java/source-bundle/*.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-reports
+          path: |
+            build/reports/
+            build/test-results/
+          if-no-files-found: ignore
+  container-smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: tested-release
+          path: build
+      - run: scripts/smoke-test.sh
+        env:
+          ZIPER_PREBUILT_ARTIFACT: 'true'
+      - name: Build local source image
+        run: docker build --target source --tag ziper-source:${{ github.sha }} .
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: container-smoke-reports
+          path: build/reports/container-smoke/
+          if-no-files-found: ignore

@@ -1,0 +1,370 @@
+{
+  "title": "Ziper Server",
+  "projects": [
+    4512351718408192
+  ],
+  "widgets": [
+    {
+      "title": "Requests",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "sum(value,ziper.http.requests,counter,none)"
+          ],
+          "aggregates": [
+            "sum(value,ziper.http.requests,counter,none)"
+          ],
+          "columns": [],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      }
+    },
+    {
+      "title": "5xx ratio (0–1)",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "avg(value,ziper.http.failure,distribution,none)"
+          ],
+          "aggregates": [
+            "avg(value,ziper.http.failure,distribution,none)"
+          ],
+          "columns": [],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 3,
+        "y": 0,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      }
+    },
+    {
+      "title": "Latency p50 / p95",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "p50(value,ziper.http.duration,distribution,millisecond)",
+            "p95(value,ziper.http.duration,distribution,millisecond)"
+          ],
+          "aggregates": [
+            "p50(value,ziper.http.duration,distribution,millisecond)",
+            "p95(value,ziper.http.duration,distribution,millisecond)"
+          ],
+          "columns": [],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 0,
+        "y": 2,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      }
+    },
+    {
+      "title": "Heap used / max",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "avg(value,ziper.jvm.heap.used,gauge,byte)",
+            "avg(value,ziper.jvm.heap.max,gauge,byte)"
+          ],
+          "aggregates": [
+            "avg(value,ziper.jvm.heap.used,gauge,byte)",
+            "avg(value,ziper.jvm.heap.max,gauge,byte)"
+          ],
+          "columns": [
+            "instance"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 3,
+        "y": 2,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "Heap ratio",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "avg(value,ziper.jvm.heap.ratio,gauge,none)"
+          ],
+          "aggregates": [
+            "avg(value,ziper.jvm.heap.ratio,gauge,none)"
+          ],
+          "columns": [
+            "instance"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 0,
+        "y": 4,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "Process CPU",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "avg(value,ziper.process.cpu,gauge,none)"
+          ],
+          "aggregates": [
+            "avg(value,ziper.process.cpu,gauge,none)"
+          ],
+          "columns": [
+            "instance"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 3,
+        "y": 4,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "Live threads",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "avg(value,ziper.jvm.threads,gauge,none)"
+          ],
+          "aggregates": [
+            "avg(value,ziper.jvm.threads,gauge,none)"
+          ],
+          "columns": [
+            "instance"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 0,
+        "y": 6,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "GC pauses",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "sum(value,ziper.jvm.gc.count,counter,none)"
+          ],
+          "aggregates": [
+            "sum(value,ziper.jvm.gc.count,counter,none)"
+          ],
+          "columns": [
+            "instance"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 3,
+        "y": 6,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "GC pause seconds",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "sum(value,ziper.jvm.gc.time,counter,second)"
+          ],
+          "aggregates": [
+            "sum(value,ziper.jvm.gc.time,counter,second)"
+          ],
+          "columns": [
+            "instance"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 0,
+        "y": 8,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "DB active / idle / max",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "pool",
+            "avg(value,ziper.db.active,gauge,none)",
+            "avg(value,ziper.db.idle,gauge,none)",
+            "avg(value,ziper.db.max,gauge,none)"
+          ],
+          "aggregates": [
+            "avg(value,ziper.db.active,gauge,none)",
+            "avg(value,ziper.db.idle,gauge,none)",
+            "avg(value,ziper.db.max,gauge,none)"
+          ],
+          "columns": [
+            "instance",
+            "pool"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 3,
+        "y": 8,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "DB waiting",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "pool",
+            "max(value,ziper.db.pending,gauge,none)"
+          ],
+          "aggregates": [
+            "max(value,ziper.db.pending,gauge,none)"
+          ],
+          "columns": [
+            "instance",
+            "pool"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    },
+    {
+      "title": "DB timeouts",
+      "displayType": "line",
+      "widgetType": "tracemetrics",
+      "queries": [
+        {
+          "name": "",
+          "fields": [
+            "instance",
+            "pool",
+            "sum(value,ziper.db.timeouts,counter,none)"
+          ],
+          "aggregates": [
+            "sum(value,ziper.db.timeouts,counter,none)"
+          ],
+          "columns": [
+            "instance",
+            "pool"
+          ],
+          "conditions": "",
+          "orderby": ""
+        }
+      ],
+      "layout": {
+        "x": 3,
+        "y": 10,
+        "w": 3,
+        "h": 2,
+        "minH": 2
+      },
+      "limit": 3
+    }
+  ]
+}

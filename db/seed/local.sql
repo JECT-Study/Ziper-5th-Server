@@ -1,0 +1,2 @@
+-- Manual local-only seed template. No domain tables or seed rows exist yet.
+-- Keep future seed statements idempotent; this file is never a Flyway migration.

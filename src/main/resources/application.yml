@@ -1,0 +1,107 @@
+spring:
+  application:
+    name: ziper-server
+  jmx:
+    enabled: false
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: ${DB_JDBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 3000
+      validation-timeout: 1000
+      data-source-properties:
+        connectTimeout: 3
+        socketTimeout: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: ziper
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    url: ${MIGRATION_JDBC_URL:${DB_JDBC_URL}}
+    user: ${MIGRATION_USERNAME:${DB_USERNAME}}
+    password: ${MIGRATION_PASSWORD:${DB_PASSWORD}}
+    default-schema: ziper
+    schemas: ziper
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  servlet:
+    session:
+      tracking-modes: []
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+    jmx:
+      exposure:
+        exclude: '*'
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+        add-additional-paths: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+app:
+  monitoring:
+    metrics-enabled: ${APP_MONITORING_METRICS_ENABLED:false}
+    origin: ${APP_MONITORING_ORIGIN:local}
+  runtime-mode: ${APP_RUNTIME_MODE:server}
+  security:
+    jwt-secret-base64: ${JWT_SECRET_BASE64:}
+    jwt-issuer: ${JWT_ISSUER:ziper-server}
+    jwt-audience: ${JWT_AUDIENCE:ziper-api}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+sentry:
+  enabled: ${SENTRY_ENABLED:false}
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:${spring.profiles.active:server}}
+  release: ${SENTRY_RELEASE:local}
+  traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.1}
+  send-default-pii: false
+  max-request-body-size: none
+  logs:
+    enabled: false
+  send-client-reports: false
+  data-collection:
+    user-info: false
+    cookies:
+      mode: 'OFF'
+    url-query-params:
+      mode: 'OFF'
+    http-bodies: []
+    http-headers:
+      request:
+        mode: 'OFF'
+      response:
+        mode: 'OFF'
+    database-query-data: false
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+    persist-authorization: false
+    validator-url: ""
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"
