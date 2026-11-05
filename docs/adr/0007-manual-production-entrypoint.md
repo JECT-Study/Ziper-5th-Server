@@ -11,7 +11,7 @@
 
 Server에는 workflow_dispatch 진입점만 두고 공개 Infra의 고정 SHA workflow를 재사용한다. main 외 참조는 배포하지 않으며 source와 Infra의 성공한 main CI를 모두 요구한다. Source의 tested-release JAR와 Sentry source bundle을 재사용하고 새 JAR를 빌드하지 않는다. 초기에는 홈 단독 배포와 공개 readiness부터 검증하고 Cloud Run과 실제 장애 전환은 별도로 기록한다.
 
-예약 시간, 접속 수신기, Discord 전송과 운영 E2E의 상세 계약은 [Infra ADR 0002](https://github.com/JECT-Study/Ziper-5th-Infra/blob/codex/home-circuit-breaker/docs/adr/0002-scheduled-operation-and-e2e.md)에 둔다. main 보호를 우회하지 않는다. Infra가 정상 병합된 후 두 pin을 승인된 main SHA로 갱신하기 전에는 배포할 수 없다.
+예약 시간, 접속 수신기, Discord 전송과 운영 E2E의 상세 계약은 [Infra ADR 0002](https://github.com/JECT-Study/Ziper-5th-Infra/blob/codex/home-circuit-breaker/docs/adr/0002-scheduled-operation-and-e2e.md)에 둔다. 사용자가 요청한 관리자 bypass를 허용하되 force push·브랜치 삭제 금지와 일반 PR 리뷰 정책은 유지한다. 최초 연결에서는 CI 통과 후 관리자 병합을 사용하며 이를 리뷰 승인으로 기록하지 않는다. Infra PR #1의 main 병합 SHA `974c6b74b0e0d52c2250e5a0dbfd1138151566e5`와 해당 main CI 성공을 확인해 두 pin에 반영했다.
 
 기존 probe는 X-Ziper-Origin을 home/cloudrun/local로, X-Ziper-Release를 소문자 40자리 SHA 또는 local로만 노출한다. 이 값은 비밀·실제 인스턴스 주소를 포함하지 않는다. 응답 헤더만 신뢰해 배포를 완료 처리하지 않고 이미지 digest·제공업체 revision·실제 readiness와 대조한다. 업무 API는 추가하지 않는다.
 

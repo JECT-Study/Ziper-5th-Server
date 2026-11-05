@@ -10,8 +10,7 @@ concurrency:
 jobs:
   home:
     if: github.ref == 'refs/heads/main'
-    # Dependency: update both pins to the approved Infra main commit after Infra PR #1 merges.
-    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@9a8866ade37e2d8661be7a00694e5f9aee19f034
+    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@974c6b74b0e0d52c2250e5a0dbfd1138151566e5
     with:
-      infra_sha: 9a8866ade37e2d8661be7a00694e5f9aee19f034
+      infra_sha: 974c6b74b0e0d52c2250e5a0dbfd1138151566e5
     secrets: inherit
