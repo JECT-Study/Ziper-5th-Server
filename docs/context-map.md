@@ -29,3 +29,4 @@
 - [0006 홈서버 첫 운영 배포와 Uptime 검증](adr/0006-initial-production-deployment.md)
 - [0007 수동 운영 배포 진입점과 응답 식별](adr/0007-manual-production-entrypoint.md)
   - 실제 SSH 입력 경로·1MiB 검증·이식 가능한 이미지 식별자는 Infra 저장소가 관리합니다. 외부 결정 위치와 운영 실행 증거는 0007과 저장소 문서에서 연결합니다.
+  - 공개 readiness의 제한된 준비 시간 정책은 Infra ADR 0006이 소유합니다. Server CLI와 고정 참조의 관계는 0007에서 연결합니다.

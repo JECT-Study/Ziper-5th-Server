@@ -54,3 +54,5 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으며, private SSH key·host key pin·Discord webhook은 production 환경에 둡니다. production 환경은 main만 허용합니다. Secret 등록 여부와 인증·채널 수신의 실제 성공은 별개로 검증합니다. 정책·배포 구현·운영 E2E 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 모읍니다.
 
 공개 probe 검사는 JSON content negotiation을 명시합니다. 실제 서버의 기본 Actuator 미디어 타입과 검사기의 `application/json` 기대가 달라 정상 상태도 실패했던 문제를 수정했습니다. 읽기 기반 Tunnel 준비 대기와 실패 진단은 Infra workflow에 둡니다.
+
+제한된 공개 준비 검사는 Server의 `scripts/verify-public-health.py` 한 곳에서 계약·오류 분류·시간 한도를 구현합니다. Infra 재사용 workflow는 opt-in CLI 옵션과 artifact 보존만 설정하며 별도 계약 import/retry 루프를 두지 않습니다. 새 옵션을 쓰는 Infra를 고정하기 전에 Server 검사기 변경을 함께 반영해야 합니다. 현재 main의 고정 참조는 `bdc15a71bfd478187932eeb063822e307022c323`이며 새 참조는 Infra main의 실제 커밋과 성공한 push CI를 확인한 뒤 갱신합니다.
