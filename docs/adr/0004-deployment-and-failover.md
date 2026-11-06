@@ -1,6 +1,6 @@
 # 0004 홈서버 우선 배포와 Cloud Run 장애 전환
 
-- 상태: 채택, 설계만 확정; Worker·Durable Object·Tunnel·GCP 리소스·배포 워크플로는 미구현이며 운영값은 실제 연동에서 검증 필요
+- 상태: 대체됨 — 수동 진입점은 [0007](0007-manual-production-entrypoint.md), 상세 운영 정책은 [인프라 연결 계약](../infrastructure.md)이 연결한 Infra ADR 0001·0002·0007·0008을 따른다. 아래 본문은 과거 설계이며 현재 구현·운영 성공을 뜻하지 않는다.
 - 날짜: 2026-11-01
 
 ## 배경
