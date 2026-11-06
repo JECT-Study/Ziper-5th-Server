@@ -59,4 +59,6 @@ CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으�
 
 쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
 
-GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `efc751f0cb72837261f913274a27a621e72b094d`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42278011398)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.
+GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `bb929769d23b60ca2990812c6a2f80e22b444d53`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42295135144)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.
+
+예약 종료 뒤 Docker가 기존 정지 상태를 유지한 사례에 대한 재기동 정책은 Infra ADR 0009가 소유합니다. 새 컨테이너의 실제 정책과 다음 전체 BIOS 부팅은 구분해 검증합니다.
