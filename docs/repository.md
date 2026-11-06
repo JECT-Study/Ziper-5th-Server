@@ -56,3 +56,7 @@ CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으�
 공개 probe 검사는 JSON content negotiation을 명시합니다. 실제 서버의 기본 Actuator 미디어 타입과 검사기의 `application/json` 기대가 달라 정상 상태도 실패했던 문제를 수정했습니다. 읽기 기반 Tunnel 준비 대기와 실패 진단은 Infra workflow에 둡니다.
 
 제한된 공개 준비 검사는 Server의 `scripts/verify-public-health.py` 한 곳에서 계약·오류 분류·시간 한도를 구현합니다. Infra 재사용 workflow는 opt-in CLI 옵션과 artifact 보존만 설정하며 별도 계약 import/retry 루프를 두지 않습니다. 검사기 변경과 함께 두 Infra 참조를 `b44518bcf31a9c6eba57765ac4f1c610cbb7099f`로 고정합니다. 이 커밋은 [Infra PR #7](https://github.com/JECT-Study/Ziper-5th-Infra/pull/7)의 실제 main 병합 SHA이며 [해당 push CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42227381391)의 성공을 확인했습니다. Server main CI와 실제 수동 운영 배포의 성공은 별도로 확인합니다.
+
+쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
+
+GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `b9f617699c569c38023ca8561476220357765389`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42272528826)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.

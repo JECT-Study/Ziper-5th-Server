@@ -4,13 +4,15 @@ on:
 permissions:
   contents: read
   actions: read
+  packages: write
+  id-token: write
 concurrency:
   group: ziper-production
   cancel-in-progress: false
 jobs:
   home:
     if: github.ref == 'refs/heads/main'
-    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@b44518bcf31a9c6eba57765ac4f1c610cbb7099f
+    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@b9f617699c569c38023ca8561476220357765389
     with:
-      infra_sha: b44518bcf31a9c6eba57765ac4f1c610cbb7099f
+      infra_sha: b9f617699c569c38023ca8561476220357765389
     secrets: inherit
