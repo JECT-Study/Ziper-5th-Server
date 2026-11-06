@@ -28,6 +28,8 @@ Server에는 workflow_dispatch 진입점만 두고 공개 Infra의 고정 SHA wo
 
 ## 영향과 한계
 
-source와 Infra의 main 병합·CI 및 실제 수동 보류 실행과 Discord 보류 수신을 확인했다. 실제 앱 배포·Worker·Cloud Run·복구 FSM은 별도로 검증한다. 수신 경로 수정은 Infra ADR 0004를 따르며 release 전 1MiB 바이너리 검증을 추가했다. GCP·Cloudflare 접속 자격·Discord Secret의 존재와 실제 동작은 별개로 확인한다. 운영 데이터 마이그레이션과 이미지 롤백의 호환성은 실행 전에 검토한다.
+source와 Infra의 main 병합·CI 및 실제 수동 보류 실행과 Discord 보류 수신을 확인했다. 실제 앱 배포·Worker·Cloud Run·복구 FSM은 별도로 검증한다. 초기 archive 수신 경로와 1MiB 진단 이력은 Infra ADR 0004·0005에 남기고, 현재 전달은 Infra ADR 0007의 GHCR digest pull을 따른다. GCP·Cloudflare 접속 자격·Discord Secret의 존재와 실제 동작은 별개로 확인한다. 운영 데이터 마이그레이션과 이미지 롤백의 호환성은 실행 전에 검토한다.
 
 GHCR 쌍 배포는 [Infra PR #8](https://github.com/JECT-Study/Ziper-5th-Infra/pull/8)의 ADR 0007·0008을 따른다. caller에 packages:write와 id-token:write를 허용하고 called workflow의 publish·backup·home job이 필요한 범위로 다시 제한한다. CI용 장기 GCP 키 없이 main·production·저장소 ID로 한정한 WIF를 사용한다. 앱 runtime은 02:30–06:00에 보류하되 이미지 발행·미러 준비는 가능하다. 실제 동작은 새 Infra main SHA를 고정하고 운영 실행 증거로 검증한다.
+
+WIF는 저장소의 불변 owner/repository ID가 포함된 정확한 production subject와 main ref를 요구한다. 알려진 구형 subject만 검토된 bootstrap으로 이행하고 다른 trust drift는 중단한다. 복구 lease가 있으면 공통 잠금 아래 배포를 거부하는 정책과 독립 timer의 검증 절차는 Infra ADR 0008에서 관리한다.

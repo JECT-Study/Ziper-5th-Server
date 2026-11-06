@@ -49,14 +49,14 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 
 `Deploy production manually`는 workflow_dispatch로만 시작하고 main만 허용합니다. 실제 배포 코드는 공개 Infra 저장소의 고정 SHA workflow를 재사용합니다. 홈·후속 검증은 같은 production concurrency를 사용하고 실행 중인 배포를 취소하지 않습니다. PR은 운영 Secret이나 배포 권한을 사용하지 않습니다.
 
-현재 고정 SHA는 성공한 Infra main CI의 커밋입니다. 실제 release 전달 직전에 같은 접속 설정으로 제한 명령과 1MiB 바이너리 길이·해시·잘못된 archive 거부를 검증합니다. 수신 경로는 [Infra ADR 0004](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0004-native-ssh-release-input.md), 서로 다른 Docker 저장소 간 OCI config digest 비교는 [Infra ADR 0005](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0005-portable-image-identity.md)를 따릅니다. 두 SHA를 함께 갱신하고 Server·Infra의 해당 main CI 성공 후 main에서 수동 실행합니다. develop에도 진입 workflow가 있어 GitHub UI에서 수동 실행을 발견할 수 있습니다.
+현재 이미지는 [Infra ADR 0007](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0007-ghcr-home-delivery.md)에 따라 GHCR에 발행하고 홈서버가 정확한 registry digest를 pull합니다. JAR 해시·OCI config digest를 검증한 뒤 로컬 release tag로 실행하며 SSH에는 8KiB 이하 제어 정보만 전달합니다. 과거 archive·1MiB 진단 이력은 Infra ADR 0004·0005에 남아 있습니다. workflow의 uses와 infra_sha는 같은 실제 Infra main SHA로 함께 갱신하고, 두 저장소의 해당 main CI 성공 후 main에서 수동 실행합니다. develop에도 진입 workflow가 있어 GitHub UI에서 수동 실행을 발견할 수 있습니다.
 
 CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으며, private SSH key·host key pin·Discord webhook은 production 환경에 둡니다. production 환경은 main만 허용합니다. Secret 등록 여부와 인증·채널 수신의 실제 성공은 별개로 검증합니다. 정책·배포 구현·운영 E2E 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 모읍니다.
 
 공개 probe 검사는 JSON content negotiation을 명시합니다. 실제 서버의 기본 Actuator 미디어 타입과 검사기의 `application/json` 기대가 달라 정상 상태도 실패했던 문제를 수정했습니다. 읽기 기반 Tunnel 준비 대기와 실패 진단은 Infra workflow에 둡니다.
 
-제한된 공개 준비 검사는 Server의 `scripts/verify-public-health.py` 한 곳에서 계약·오류 분류·시간 한도를 구현합니다. Infra 재사용 workflow는 opt-in CLI 옵션과 artifact 보존만 설정하며 별도 계약 import/retry 루프를 두지 않습니다. 검사기 변경과 함께 두 Infra 참조를 `b44518bcf31a9c6eba57765ac4f1c610cbb7099f`로 고정합니다. 이 커밋은 [Infra PR #7](https://github.com/JECT-Study/Ziper-5th-Infra/pull/7)의 실제 main 병합 SHA이며 [해당 push CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42227381391)의 성공을 확인했습니다. Server main CI와 실제 수동 운영 배포의 성공은 별도로 확인합니다.
+제한된 공개 준비 검사는 Server의 `scripts/verify-public-health.py` 한 곳에서 계약·오류 분류·시간 한도를 구현합니다. Infra 재사용 workflow는 180초 전체 한도와 연속 정상 3회를 지정하며 별도 계약 import/retry 루프를 두지 않습니다. Server main CI와 실제 수동 운영 배포의 성공은 별도로 확인합니다.
 
 쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
 
-GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `b9f617699c569c38023ca8561476220357765389`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42272528826)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.
+GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `efc751f0cb72837261f913274a27a621e72b094d`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42278011398)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.

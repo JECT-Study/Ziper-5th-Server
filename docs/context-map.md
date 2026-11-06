@@ -32,3 +32,5 @@
   - 공개 readiness의 제한된 준비 시간 정책은 Infra ADR 0006이 소유합니다. Server CLI와 고정 참조의 관계는 0007에서 연결합니다.
 
 - 0007의 수동 진입점은 GHCR 발행·WIF와 비공개 Cloud Run 쌍 배포를 호출합니다. 세부 정책과 운영 증거는 Infra가 소유합니다.
+
+- 0007의 고정 Infra workflow는 불변 OIDC subject와 복구 lease 중 배포 차단도 포함합니다. 실제 인증·독립 timer·장애 실험 증거는 Infra PR #1에서 구분합니다.
