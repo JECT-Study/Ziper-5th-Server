@@ -128,3 +128,15 @@ python3 scripts/verify-public-health.py --url https://api-ziper.joonamin.dev --o
 기존 probe 응답(`/livez`, `/readyz`, Actuator probe)에 `X-Ziper-Origin`과 `X-Ziper-Release`를 추가합니다. origin은 `home|cloudrun|local`만, release는 소문자 40자리 소스 SHA 또는 로컬 표식만 출력합니다. 다른 값은 헤더에 넣지 않습니다. 새 업무 API·비밀 값·인스턴스 주소는 노출하지 않습니다.
 
 예약 전환·배포·E2E 정책과 실제 운영 증거는 [Infra 저장소](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에서 관리합니다. 헤더 존재만으로 동일 이미지 배포를 증명하지 않으며 배포 manifest·이미지 digest·제공업체 revision과 대조합니다. 실제 운영 검증은 아직 수행하지 않았습니다.
+
+2026-11-06 운영 Actuator는 Accept 미지정 시 `application/vnd.spring-boot.actuator.v3+json`을 반환했습니다. 공개 배포 검사는 `Accept: application/json`을 명시하고 `application/json`만 허용합니다. 협상을 무시한 vendor JSON과 HTML은 실패합니다. 기존 User-Agent, 200, 직접 응답, no-store, 세션 쿠키 미생성, 캐시 HIT·STALE·UPDATING 거부, 본문 4096바이트 한도와 정확한 UP 상태 검사를 유지합니다.
+
+`verify-public-health.py`의 기본 모드는 기존처럼 첫 오류에서 실패하며 `--checks`는 정상 검사 쌍의 횟수입니다. `--startup-timeout`을 양수로 지정한 경우만 제한된 준비 시간 동안 재시도합니다. Infra workflow는 `--checks 3 --interval 10 --timeout 10 --startup-timeout 180 --retry-interval 5`를 전달합니다. `/livez`와 `/readyz`가 모두 통과한 검사 쌍 3회가 연속으로 필요합니다. 일시적 실패는 연속 횟수와 성공 표본을 초기화합니다.
+
+재시도 대상은 HTTP 502·503·504·520·521·522·523·524·530, 연결 거부·중단·재설정·도달 불가·시간 초과, 일시적 DNS 오류 EAI_AGAIN입니다. 401·403을 포함한 나머지 HTTP 상태, TLS 검증 오류, 영구 DNS 오류, 리다이렉트와 200 응답의 계약 위반은 즉시 실패합니다. 응답 본문에서 Cloudflare 원인을 추정하거나 오류 코드를 추출하지 않습니다.
+
+요청 하나는 POSIX runner의 타이머로 DNS·TLS·헤더·본문 읽기를 합쳐 최대 10초로 제한하며 남은 전체 시간보다 짧게 조정합니다. 실패 후 5초, 정상 검사 쌍 뒤 10초를 기다리되 모두 180초에 포함합니다. 한도에 도달하면 정상 횟수와 관계없이 실패하고 배포 명령은 재실행하지 않습니다. CI의 Linux와 로컬 macOS가 대상이며 POSIX 타이머가 없는 환경에서는 차단합니다.
+
+`--output` JSON과 stdout에는 경로별 시도 번호, HTTP 상태 또는 미수신 시 null, 성공·실패, 재시도 여부, 정적 오류 이유, 경과 시간과 요청 제한을 기록합니다. 최종 종료 이유와 연속 정상 횟수도 구분합니다. 비밀·전체 응답 본문·원본 네트워크 예외는 출력하지 않습니다. 전체 한도는 검사 시작부터 측정하며 CLI 인자 처리와 결과 파일 저장 시간은 제외합니다.
+
+Linux Infra workflow는 검사 명령 전체를 `timeout --signal=KILL 180s`로 제한합니다. Python의 신호 처리가 지연되는 네이티브 호출에도 상한을 적용하기 위한 외부 제한입니다. JSON은 요청 전후 `.next` 파일을 원자적으로 교체해 갱신합니다. 강제 종료 시 마지막 요청이 `requesting`, 최종 이유가 `running`인 기록을 남길 수 있으며 Actions의 비정상 종료와 함께 실패로 해석합니다.

@@ -17,6 +17,8 @@ Server에는 workflow_dispatch 진입점만 두고 공개 Infra의 고정 SHA wo
 
 서로 다른 Docker 저장소 간 이미지 동일성은 [Infra ADR 0005](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0005-portable-image-identity.md)의 OCI config digest로 검증한다. 호스트 엔진 Id와 registry manifest digest는 같은 종류의 값으로 비교하지 않는다.
 
+공개 readiness의 제한된 준비 시간 정책은 [Infra ADR 0006](https://github.com/JECT-Study/Ziper-5th-Infra/blob/b44518bcf31a9c6eba57765ac4f1c610cbb7099f/docs/adr/0006-bounded-public-readiness.md)에서 관리한다. Server의 기존 health CLI가 Accept 협상·계약 검사·일시적 오류 분류를 구현하고 Infra workflow가 180초 준비 시간과 연속 정상 3회를 지정한다. 성공한 Infra main CI의 실제 SHA `b44518bcf31a9c6eba57765ac4f1c610cbb7099f`로 두 참조를 함께 갱신한다. Server main CI와 실제 배포 결과는 별도로 검증한다. HTTP 530의 과거 원인을 기동 지연으로 확정하지 않는다.
+
 ## 대안
 
 - Server에 배포 본체 복제: 정책과 구현의 중복을 피하려고 제외한다.
