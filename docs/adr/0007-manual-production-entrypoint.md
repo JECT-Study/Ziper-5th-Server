@@ -1,6 +1,6 @@
 # 0007 수동 운영 배포 진입점과 응답 식별
 
-- 상태: 채택 — 로컬 검사 완료, main 병합 및 운영 실행 미완료
+- 상태: 채택 — 실행별 성공·실패·미검증은 Infra PR #1에 기록
 - 날짜: 2026-11-06
 
 ## 배경
@@ -24,4 +24,4 @@ Server에는 workflow_dispatch 진입점만 두고 공개 Infra의 고정 SHA wo
 
 ## 영향과 한계
 
-현재 source와 Infra의 main 병합·CI 및 실제 수동 실행은 미완료다. GCP·Cloudflare 접속 자격·Discord Secret의 존재와 실제 동작은 별개로 확인한다. 기본 브랜치 develop에도 진입점이 병합되어야 GitHub UI가 수동 workflow를 발견한다. 운영 데이터 마이그레이션과 이미지 롤백의 호환성은 실행 전에 검토한다.
+source와 Infra의 main 병합·CI 및 실제 수동 보류 실행과 Discord 보류 수신을 확인했다. 실제 앱 배포·Worker·Cloud Run·복구 FSM은 별도로 검증한다. 수신 경로 수정은 Infra ADR 0004를 따르며 release 전 1MiB 바이너리 검증을 추가했다. GCP·Cloudflare 접속 자격·Discord Secret의 존재와 실제 동작은 별개로 확인한다. 운영 데이터 마이그레이션과 이미지 롤백의 호환성은 실행 전에 검토한다.
