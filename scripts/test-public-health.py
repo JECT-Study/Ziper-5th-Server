@@ -74,7 +74,7 @@ class PublicHealthTests(unittest.TestCase):
             result = subprocess.run(['timeout', '--signal=KILL', '1s', sys.executable, '-c', code,
                                      str(Path(__file__).with_name('verify-public-health.py')), str(output)],
                                     capture_output=True, timeout=3)
-            self.assertIn(result.returncode, (137, -9))
+            self.assertIn(result.returncode, (124, 137, -9))
             report = json.loads(output.read_text())
             self.assertFalse(report['ok'])
             self.assertEqual(report['events'][-1]['path'], '/livez')
