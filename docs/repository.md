@@ -59,6 +59,8 @@ CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으�
 
 쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
 
-GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `bb929769d23b60ca2990812c6a2f80e22b444d53`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42295135144)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.
+GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `bcc852e5884bbb0d22f8fd651984441faafcd734`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42300015630)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.
 
 예약 종료 뒤 Docker가 기존 정지 상태를 유지한 사례에 대한 재기동 정책은 Infra ADR 0009가 소유합니다. 새 컨테이너의 실제 정책과 다음 전체 BIOS 부팅은 구분해 검증합니다.
+
+보호 origin 사전 검사 실패는 Infra의 `home-origin-health` artifact로 확인합니다. 선택 비교 Secret `HOME_ACCESS_CREDENTIALS_SHA256`은 토큰·비교값을 출력하지 않고 알려진 정상 자격과 일치하는지만 기록합니다. HTTP 403의 Cloudflare challenge 여부를 인증 실패와 구분하며 이 검사 결과로 인증 정책을 완화하지 않습니다. 실제 Actions에서 challenge가 확인되어 운영 E2E는 아직 완료되지 않았습니다.
