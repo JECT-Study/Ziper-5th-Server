@@ -15,6 +15,8 @@ Server에는 workflow_dispatch 진입점만 두고 공개 Infra의 고정 SHA wo
 
 기존 probe는 X-Ziper-Origin을 home/cloudrun/local로, X-Ziper-Release를 소문자 40자리 SHA 또는 local로만 노출한다. 이 값은 비밀·실제 인스턴스 주소를 포함하지 않는다. 응답 헤더만 신뢰해 배포를 완료 처리하지 않고 이미지 digest·제공업체 revision·실제 readiness와 대조한다. 업무 API는 추가하지 않는다.
 
+서로 다른 Docker 저장소 간 이미지 동일성은 [Infra ADR 0005](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0005-portable-image-identity.md)의 OCI config digest로 검증한다. 호스트 엔진 Id와 registry manifest digest는 같은 종류의 값으로 비교하지 않는다.
+
 ## 대안
 
 - Server에 배포 본체 복제: 정책과 구현의 중복을 피하려고 제외한다.
