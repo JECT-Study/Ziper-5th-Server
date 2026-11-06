@@ -9,7 +9,7 @@
 | [개발](development.md) | 코드 구조·오류·스타일·검증 | 공통 경계나 명령 변경 시 현재 코드 기준 갱신 |
 | [DB](database.md) | 역할·마이그레이션·연결 | 스키마·권한·DB 연결 변경 시 최소 권한과 이행 절차 갱신 |
 | [운영](operations.md) | JWT·probe·Sentry·아티팩트 | 인증·관측·배포물 변경 시 런타임 계약 갱신 |
-| [인프라 계획](infrastructure.md) | 미구현 장애 전환·비밀 관리 계약 | 배포 결정 시 미정 항목을 검증하고 ADR로 확정 |
+| [인프라 연결](infrastructure.md) | 외부 Infra 정책의 소유 위치·앱 계약 | 두 저장소의 연결·책임·검증 증거 위치 변경 시 실제 계약 반영 |
 | [저장소](repository.md) | PR·CI·리뷰 운영 | 워크플로·리뷰 정책 변경 시 실제 상태 반영 |
 | [검증 이력](verification.md) | 날짜별 실제 검사 증거 | 새 실행 결과만 날짜·범위·제한과 추가; 과거 결과를 재실행처럼 쓰지 않음 |
 
@@ -24,7 +24,7 @@
 
 - [0003 검사 정책의 신뢰 경계와 적용 범위](adr/0003-harness-contract.md)
 
-- [0004 홈서버 우선 배포와 Cloud Run 장애 전환](adr/0004-deployment-and-failover.md)
+- [0004 홈서버 우선 배포와 Cloud Run 장애 전환](adr/0004-deployment-and-failover.md) — 수동 진입점 0007과 연결된 Infra ADR로 대체
 - [0005 공유 Education 조직의 프로젝트별 모니터링 접근](adr/0005-monitoring-project-access.md)
 - [0006 홈서버 첫 운영 배포와 Uptime 검증](adr/0006-initial-production-deployment.md)
 - [0007 수동 운영 배포 진입점과 응답 식별](adr/0007-manual-production-entrypoint.md)
