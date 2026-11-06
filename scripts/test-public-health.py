@@ -41,6 +41,8 @@ class PublicHealthTests(unittest.TestCase):
             def do_GET(self):
                 self.send_response(self.code)
                 for key, value in self.headers_to_send.items():
+                    if key == 'Content-Type' and value == 'application/json' and self.headers.get('Accept') != 'application/json':
+                        value = 'application/vnd.spring-boot.actuator.v3+json'
                     self.send_header(key, value)
                 self.end_headers()
                 self.wfile.write(json.dumps(self.body).encode())

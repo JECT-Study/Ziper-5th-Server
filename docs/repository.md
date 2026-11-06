@@ -52,3 +52,5 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 현재 고정 SHA는 성공한 Infra main CI의 커밋입니다. 실제 release 전달 직전에 같은 접속 설정으로 제한 명령과 1MiB 바이너리 길이·해시·잘못된 archive 거부를 검증합니다. 수신 경로는 [Infra ADR 0004](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0004-native-ssh-release-input.md), 서로 다른 Docker 저장소 간 OCI config digest 비교는 [Infra ADR 0005](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0005-portable-image-identity.md)를 따릅니다. 두 SHA를 함께 갱신하고 Server·Infra의 해당 main CI 성공 후 main에서 수동 실행합니다. develop에도 진입 workflow가 있어 GitHub UI에서 수동 실행을 발견할 수 있습니다.
 
 CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으며, private SSH key·host key pin·Discord webhook은 production 환경에 둡니다. production 환경은 main만 허용합니다. Secret 등록 여부와 인증·채널 수신의 실제 성공은 별개로 검증합니다. 정책·배포 구현·운영 E2E 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 모읍니다.
+
+공개 probe 검사는 JSON content negotiation을 명시합니다. 실제 서버의 기본 Actuator 미디어 타입과 검사기의 `application/json` 기대가 달라 정상 상태도 실패했던 문제를 수정했습니다. 읽기 기반 Tunnel 준비 대기와 실패 진단은 Infra workflow에 둡니다.

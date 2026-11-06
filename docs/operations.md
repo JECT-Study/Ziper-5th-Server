@@ -128,3 +128,5 @@ python3 scripts/verify-public-health.py --url https://api-ziper.joonamin.dev --o
 기존 probe 응답(`/livez`, `/readyz`, Actuator probe)에 `X-Ziper-Origin`과 `X-Ziper-Release`를 추가합니다. origin은 `home|cloudrun|local`만, release는 소문자 40자리 소스 SHA 또는 로컬 표식만 출력합니다. 다른 값은 헤더에 넣지 않습니다. 새 업무 API·비밀 값·인스턴스 주소는 노출하지 않습니다.
 
 예약 전환·배포·E2E 정책과 실제 운영 증거는 [Infra 저장소](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에서 관리합니다. 헤더 존재만으로 동일 이미지 배포를 증명하지 않으며 배포 manifest·이미지 digest·제공업체 revision과 대조합니다. 실제 운영 검증은 아직 수행하지 않았습니다.
+
+2026-11-06 운영 Actuator는 Accept 미지정 시 `application/vnd.spring-boot.actuator.v3+json`을 반환했습니다. 공개 배포 검사는 `Accept: application/json`을 명시하고 기존 본문·캐시·직접 응답 계약을 유지합니다. Tunnel 준비 대기는 Infra 재사용 workflow가 소유하며 Server 검사기는 계약 한 번을 검사합니다.

@@ -32,6 +32,7 @@ def public_origin(value):
 def check_once(origin, path, timeout):
     request = Request(origin + path, headers={
         'User-Agent': 'ziper-deployment-verification', 'Cache-Control': 'no-cache',
+        'Accept': 'application/json',
     })
     try:
         response = build_opener(NoRedirect()).open(request, timeout=timeout)
