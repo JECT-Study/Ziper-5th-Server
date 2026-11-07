@@ -59,12 +59,11 @@ CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으�
 
 쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
 
-GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `bcc852e5884bbb0d22f8fd651984441faafcd734`입니다. [Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42300015630)의 성공을 확인한 실제 병합 SHA이며 검사기·KST 보류·실행별 검증 범위는 Infra ADR 0007·0008과 PR #1을 따릅니다. 기존 pin 설명은 그 변경 시점의 이력입니다.
+현재 쌍 배포 caller의 두 pin은 `9f799a620df2857e7d84f9ec7b5b2c738fac5e85`이다. [Infra main CI42350196699](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42350196699)가 성공한 실제 병합 SHA이며, SDK592 최초 생성 전 부재 조회의 오류 분류 수정을 포함한다. Server main CI 이후 수동 실행하고 실제 결과는 Infra PR #1에 기록한다.
 
 예약 종료 뒤 Docker가 기존 정지 상태를 유지한 사례에 대한 재기동 정책은 Infra ADR 0009가 소유합니다. 새 컨테이너의 실제 정책과 다음 전체 BIOS 부팅은 구분해 검증합니다.
 
-보호 origin 사전 검사 실패는 Infra의 `home-origin-health` artifact로 확인합니다. 선택 비교 Secret `HOME_ACCESS_CREDENTIALS_SHA256`은 토큰·비교값을 출력하지 않고 알려진 정상 자격과 일치하는지만 기록합니다. HTTP 403의 Cloudflare challenge 여부를 인증 실패와 구분하며 이 검사 결과로 인증 정책을 완화하지 않습니다. 실제 Actions에서 challenge가 확인되어 운영 E2E는 아직 완료되지 않았습니다.
+보호 origin 사전 검사 실패는 Infra의 `home-origin-health` artifact로 확인합니다. 선택 비교 Secret `HOME_ACCESS_CREDENTIALS_SHA256`은 토큰·비교값을 출력하지 않고 알려진 정상 자격과 일치하는지만 기록합니다. HTTP 403의 Cloudflare challenge 여부를 인증 실패와 구분하며 이 검사 결과로 인증 정책을 완화하지 않습니다. 실제 Actions의 challenge는 별도로 조사했습니다. Bot Fight Mode 결정과 후속 접근 검증은 Infra ADR0013, 쌍 배포·반복 실행의 실제 결과는 Infra PR #1에서 확인합니다.
 
 새 릴리스의 쌍 배포 검증은 [Infra ADR0012](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0012-paired-deployment-receipts.md)를 따른다. 운영 public 검사에는 예상 Source SHA와 home origin을 함께 전달하며 이전 릴리스의 UP를 새 배포 성공으로 계산하지 않는다. 시도별 artifact와 Discord POST/GET 영수증은 Infra가 관리한다. CLI 구현과 두 workflow pin 갱신을 같은 PR에 넣고 main CI 이후 실제 실행한다. 운영 E2E의 최초·동일 릴리스 재실행 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 기록한다.
 
-새 쌍 배포 검증의 두 pin은 `a5841b607365402349eebdea70c30543e73e7bb6`으로 함께 갱신한다. [Infra main CI42348421775](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42348421775)가 성공한 실제 병합 커밋이다. 앞의 bcc pin은 이전 변경의 이력이다. 이 참조 갱신과 실제 runtime 배포 성공은 구분한다.
