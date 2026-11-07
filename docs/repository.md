@@ -59,7 +59,7 @@ CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으�
 
 쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
 
-현재 쌍 배포 caller의 두 pin은 `9d391ec84fe59a9c806e7322664de76bc3709139`이다. [Infra main CI42354249767](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42354249767)가 성공한 실제 병합 SHA다. 홈 Docker export 결함에 대한 Registry Raw manifest 식별은 Infra ADR0014를 따른다. 같은 SHA의 검토된 홈 수신기를 설치하고 Server main CI 이후 수동 실행한다. 실제 배포·반복 결과는 Infra PR #1에 기록한다.
+현재 쌍 배포 caller의 두 pin은 `4a0e5b1d71c7107a6b8200d1fe6ab02547041135`이다. [Infra #22](https://github.com/JECT-Study/Ziper-5th-Infra/pull/22)의 Secret 볼륨 교체 수정이 포함된 실제 병합 SHA다. [해당 Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42372626175)와 Server main CI 성공 후 수동 실행한다. 홈 Docker export 결함에 대한 Registry Raw manifest 식별은 Infra ADR0014를 유지하며 홈 제어 파일의 내용 변경은 없다. 실제 배포·반복 결과는 Infra PR #1에 기록한다.
 
 예약 종료 뒤 Docker가 기존 정지 상태를 유지한 사례에 대한 재기동 정책은 Infra ADR 0009가 소유합니다. 새 컨테이너의 실제 정책과 다음 전체 BIOS 부팅은 구분해 검증합니다.
 
