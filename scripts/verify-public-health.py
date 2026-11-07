@@ -7,6 +7,7 @@ import errno
 from http.client import IncompleteRead
 import json
 from pathlib import Path
+import re
 import sys
 import signal
 import socket
@@ -124,16 +125,23 @@ def request_once(origin, path, timeout):
             healthy = False
         if not healthy:
             raise HealthCheckError('Health endpoint must return only the UP status', status=200)
-    return {'path': path, 'status': 200, 'noStore': True, 'statusOnly': True}
+        release = response.headers.get('X-Ziper-Release', '')
+        upstream = response.headers.get('X-Ziper-Origin', '')
+    return {'path': path, 'status': 200, 'noStore': True, 'statusOnly': True,
+            'release': release if re.fullmatch(r'[a-f0-9]{40}', release) else None,
+            'upstreamOrigin': upstream if upstream in ('home', 'cloudrun') else None}
 
 
 def verify(origin, *, checks=3, interval=10, timeout=10, startup_timeout=0, retry_interval=5,
+           expected_release=None, expected_origin=None,
            check=check_once, now=time.monotonic, sleep=time.sleep, progress=None):
     started = now()
     deadline = started + startup_timeout if startup_timeout else None
     report = {'checkedAt': datetime.now(timezone.utc).isoformat(), 'origin': origin,
               'ok': False, 'samples': [], 'events': [], 'attempts': 0,
               'consecutiveSuccesses': 0, 'termination': 'running', 'elapsedSeconds': 0}
+    if expected_release is not None:
+        report.update(expectedRelease=expected_release, expectedOrigin=expected_origin)
 
     def publish():
         report['elapsedSeconds'] = round(now() - started, 3)
@@ -164,6 +172,10 @@ def verify(origin, *, checks=3, interval=10, timeout=10, startup_timeout=0, retr
             publish()
             try:
                 result = check(origin, path, request_timeout)
+                if expected_release is not None and result.get('release') != expected_release:
+                    raise HealthCheckError('Health release does not match the deployment', status=200)
+                if expected_origin is not None and result.get('upstreamOrigin') != expected_origin:
+                    raise HealthCheckError('Health origin does not match the deployment', status=200)
                 sample.append(result)
                 event.update(status=200, retryable=False, result='healthy')
             except HealthCheckError as error:
@@ -206,7 +218,13 @@ def main():
     parser.add_argument('--retry-interval', type=int, choices=range(1, 61), default=5,
                         help='Seconds between retryable failures during startup')
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--expected-release', help='Expected full source SHA; requires --expected-origin')
+    parser.add_argument('--expected-origin', help='Expected home or cloudrun; requires --expected-release')
     args = parser.parse_args()
+    if (args.expected_release is not None or args.expected_origin is not None) and (
+            not re.fullmatch(r'[a-f0-9]{40}', args.expected_release or '')
+            or args.expected_origin not in ('home', 'cloudrun')):
+        parser.error('Supply both a full lowercase source SHA and a home or cloudrun expected origin')
     try:
         args.url = public_origin(args.url)
     except ValueError:
@@ -220,6 +238,7 @@ def main():
 
     report = verify(args.url, checks=args.checks, interval=args.interval, timeout=args.timeout,
                     startup_timeout=args.startup_timeout, retry_interval=args.retry_interval,
+                    expected_release=args.expected_release, expected_origin=args.expected_origin,
                     progress=save_progress)
     text = json.dumps(report, ensure_ascii=False, indent=2) + '\n'
     print(text, end='')

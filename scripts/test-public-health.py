@@ -33,7 +33,7 @@ class Clock:
 
 
 @contextmanager
-def sequence_server(statuses):
+def sequence_server(statuses, *, release=None, upstream=None):
     requests = []
     pending = list(statuses)
 
@@ -45,6 +45,10 @@ def sequence_server(statuses):
             self.send_header('Content-Type', 'application/json' if self.headers.get('Accept') == 'application/json'
                              else 'application/vnd.spring-boot.actuator.v3+json')
             self.send_header('Cache-Control', 'no-store')
+            if release is not None:
+                self.send_header('X-Ziper-Release', release)
+            if upstream is not None:
+                self.send_header('X-Ziper-Origin', upstream)
             self.end_headers()
             self.wfile.write(b'{"status":"UP"}')
 
@@ -62,6 +66,53 @@ def sequence_server(statuses):
 
 
 class PublicHealthTests(unittest.TestCase):
+    def test_expected_release_and_origin_are_checked_on_both_paths(self):
+        clock = Clock()
+        with sequence_server([], release='a' * 40, upstream='home') as (origin, requests):
+            report = verifier.verify(origin, checks=1, expected_release='a' * 40,
+                                     expected_origin='home', now=clock.now, sleep=clock.sleep)
+        self.assertTrue(report['ok'])
+        self.assertEqual([item['path'] for item in requests], ['/livez', '/readyz'])
+        self.assertEqual([item['release'] for item in report['samples'][0]], ['a' * 40] * 2)
+        self.assertEqual(report['expectedRelease'], 'a' * 40)
+
+    def test_old_missing_and_invalid_identity_fail_without_retry_or_disclosure(self):
+        marker = 'private-untrusted-header'
+        for release, upstream in [('b' * 40, 'home'), ('a' * 40, 'cloudrun'),
+                                  (None, None), (marker, marker)]:
+            with self.subTest(release=release, upstream=upstream):
+                clock = Clock()
+                with sequence_server([], release=release, upstream=upstream) as (origin, requests):
+                    report = verifier.verify(origin, startup_timeout=180, expected_release='a' * 40,
+                                             expected_origin='home', now=clock.now, sleep=clock.sleep)
+                self.assertFalse(report['ok'])
+                self.assertEqual(report['termination'], 'non_retryable')
+                self.assertEqual(len(requests), 1)
+                self.assertEqual(clock.elapsed, 0)
+                self.assertNotIn(marker, json.dumps(report))
+
+    def test_readyz_identity_mismatch_cannot_pass_after_livez_matches(self):
+        clock = Clock()
+        def check(origin, path, timeout):
+            return {'path': path, 'status': 200, 'upstreamOrigin': 'home',
+                    'release': ('a' if path == '/livez' else 'b') * 40}
+        report = verifier.verify('https://fixture.test', check=check, startup_timeout=180,
+                                 expected_release='a' * 40, expected_origin='home',
+                                 now=clock.now, sleep=clock.sleep)
+        self.assertFalse(report['ok'])
+        self.assertEqual(report['events'][-1]['path'], '/readyz')
+        self.assertEqual(report['attempts'], 1)
+
+    def test_cli_rejects_partial_or_invalid_identity_without_echoing_values(self):
+        marker = 'private-untrusted-header'
+        for flags in [ ['--expected-release', 'a' * 40], ['--expected-origin', 'home'],
+                       ['--expected-release', marker, '--expected-origin', 'home'],
+                       ['--expected-release', 'a' * 40, '--expected-origin', marker] ]:
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name('verify-public-health.py')),
+                                     '--url', 'https://fixture.test', *flags], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertNotIn(marker, result.stdout + result.stderr)
+
     @unittest.skipUnless(shutil.which('timeout'), 'GNU timeout is provided by the Linux Actions runner')
     def test_outer_deadline_kills_blocked_cli_and_preserves_last_request(self):
         with tempfile.TemporaryDirectory() as directory:
