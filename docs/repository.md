@@ -66,3 +66,5 @@ GHCR·비공개 Cloud Run 쌍 배포의 두 pin은 `bcc852e5884bbb0d22f8fd651984
 보호 origin 사전 검사 실패는 Infra의 `home-origin-health` artifact로 확인합니다. 선택 비교 Secret `HOME_ACCESS_CREDENTIALS_SHA256`은 토큰·비교값을 출력하지 않고 알려진 정상 자격과 일치하는지만 기록합니다. HTTP 403의 Cloudflare challenge 여부를 인증 실패와 구분하며 이 검사 결과로 인증 정책을 완화하지 않습니다. 실제 Actions에서 challenge가 확인되어 운영 E2E는 아직 완료되지 않았습니다.
 
 새 릴리스의 쌍 배포 검증은 [Infra ADR0012](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0012-paired-deployment-receipts.md)를 따른다. 운영 public 검사에는 예상 Source SHA와 home origin을 함께 전달하며 이전 릴리스의 UP를 새 배포 성공으로 계산하지 않는다. 시도별 artifact와 Discord POST/GET 영수증은 Infra가 관리한다. CLI 구현과 두 workflow pin 갱신을 같은 PR에 넣고 main CI 이후 실제 실행한다. 운영 E2E의 최초·동일 릴리스 재실행 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 기록한다.
+
+새 쌍 배포 검증의 두 pin은 `a5841b607365402349eebdea70c30543e73e7bb6`으로 함께 갱신한다. [Infra main CI42348421775](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42348421775)가 성공한 실제 병합 커밋이다. 앞의 bcc pin은 이전 변경의 이력이다. 이 참조 갱신과 실제 runtime 배포 성공은 구분한다.
