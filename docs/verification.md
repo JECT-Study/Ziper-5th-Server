@@ -90,3 +90,24 @@ GitHub API로 커밋 `80678a5`의 check run과 PR #1 댓글을 조회했습니�
 - 전용 `ziper-production` Cloudflare Tunnel과 `api-ziper.joonamin.dev` → `http://app:8080` 경로를 만들었습니다. Docker Desktop의 비대화형 credential store 오류는 프로젝트 전용 Docker 클라이언트 설정으로 해결했습니다. 기존 tocktock 컨테이너와 Tunnel 설정은 변경하지 않았습니다.
 
 이 시점에는 공개 앱의 UP 응답과 Sentry Uptime 수신을 아직 완료로 기록하지 않습니다. 실제 운영 기동과 외부 점검 결과는 후속 실행 기록으로 남깁니다.
+
+## 2026-11-07 서비스·쿼리 추적과 JVM 프로파일 수신
+
+원격 `main`의 `bba59ca`에서 분리한 작업 디렉터리로 검증했습니다. 기존 작업공간의 변경과 운영 컨테이너는 수정하지 않았습니다. 업무 API가 없는 현재 소스에서 테스트 전용 HTTP·서비스·저장소와 실제 PostgreSQL 17.6을 사용한 결과입니다.
+
+| 검사 | 실제 결과와 범위 |
+| --- | --- |
+| `./scripts/check.sh` | JUnit 48개 중 46개 성공, 외부 전송 opt-in 2개 건너뜀. 문서 정책·검사기 자체 테스트·Spotless·Checkstyle·ArchUnit 통과 |
+| 트레이스 통합 검사 | 실제 HTTP에서 부모 서비스→저장소→쿼리, 같은 prepared SQL의 동일 fingerprint, 실패 SQL의 오류 상태, 민감값 제거, Hikari 설정·Flyway 역할 분리, 허용·차단 CORS와 probe 제외 확인 |
+| `./gradlew bootJar`와 release 검사 | 빌드·아티팩트 검사 성공. JDBC·profiler 모듈 포함, 테스트 fixture 클래스 미포함 확인 |
+| `ZIPER_PREBUILT_ARTIFACT=true ./scripts/smoke-test.sh` | 검증한 JAR 그대로 이미지 구성, 해시·bundle ID 대조, 실제 HTTP, DB 중단 시 readiness 503·liveness 200, 복구와 정리 성공 |
+| `./scripts/verify-sentry-performance.sh` | 별도 외부 전송 테스트 1개 성공. native profiler 실행을 검사하고 실제 Sentry의 trace·continuous profile을 API로 재조회 |
+| 소스 업로드 워크플로 | `actionlint`·셸 구문 검사 통과. 실제 GitHub API로 같은 SHA·브랜치의 성공한 push CI 선택과 환경 secret 이름 존재 확인. 보호된 main/develop 업로드 실행은 미수행 |
+
+최종 외부 실행은 2026-11-07 16:37 KST, 환경 `local-performance`, 릴리스 `ziper-performance-20261107-b8ae239a`, `verificationRun=b8ae239a-7696-4962-99a5-f543225ac983`입니다. [실제 trace](https://joonamin-project.sentry.io/explore/traces/trace/bd7c98c68d80486eb240d418c907aa7b)에서 HTTP 약 148ms, 서비스 약 114ms, SQL 약 52ms·51ms, 함수 구간 약 5ms의 7개 span과 오류 0개를 확인했습니다. 쿼리는 인위적인 50ms 지연을 넣은 fixture이므로 실제 업무 병목이나 개선 효과를 뜻하지 않습니다.
+
+[실제 continuous profile](https://joonamin-project.sentry.io/explore/profiling/profile/ziper-server/flamegraph/?profilerId=46cb9399f0124c0fa5c9e530169d4180&start=2026-11-07T07%3A36%3A00Z&end=2026-11-07T07%3A41%3A00Z)의 chunk `a3393e25c4b94bcabd353b9b6d0f6aa8`에서 31개 스레드의 표본 관측 466개와 애플리케이션 `process`·`lookup`의 파일·줄을 확인했습니다. 이 수는 요청 수가 아니며 프로파일은 함수별 정확한 실행 시간 대신 샘플링된 호출 스택을 제공합니다. 테스트 소스는 운영 소스 번들에 포함되지 않으므로 주변 소스 표시까지 검증했다고 간주하지 않습니다.
+
+첫 전체 검사에서는 로컬 HTTP 응답 파싱·연결 오류로 4개 테스트가 실패했습니다. 코드 변경 없이 관련 두 테스트 클래스를 함께 실행한 검사와 전체 재실행은 통과했습니다. 최초 오류의 원인은 확정하지 않았습니다. 별도 `--no-daemon` 빌드는 다른 세션이 보유한 Gradle journal lock 때문에 중단되어, 공유 프로세스를 종료하지 않고 기존 daemon 및 CI와 같은 prebuilt smoke 경로로 검증했습니다.
+
+운영 배포와 새 CI 아티팩트의 보호된 소스 업로드는 실행하지 않았습니다. SQL 원문은 전송하지 않으며 fingerprint별 호출 횟수·시간과 부모 서비스로 분석합니다. 프로파일링 기본값은 0.0으로 유지하고 검증 프로세스에서만 1.0으로 선택했습니다.

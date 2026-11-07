@@ -38,6 +38,18 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 
 ## 공통 계약
 
+### 서비스 성능 계측
+
+기존 Sentry Spring Boot Starter가 HTTP 트랜잭션의 소유자입니다. 별도 `Sentry.init`이나 OpenTelemetry agent를 중복 설치하지 않습니다. Spring AOP와 JDBC 계측은 SDK 8.62.0 BOM에 맞춥니다.
+
+주요 Spring Bean 메서드에 `io.sentry.spring.jakarta.tracing.SentrySpan`을 붙여 기존 HTTP 트랜잭션의 하위 구간으로 측정합니다. `operation`은 service·repository·function 같은 고정 구분, `description`은 클래스·메서드 등 고정 이름을 사용합니다. 사용자 ID·요청 인수·토큰을 이름이나 속성에 넣지 않습니다. AOP 프록시를 거치지 않는 같은 객체 내부 호출은 자동 측정되지 않습니다. 요청 밖의 배치 작업만 별도 `@SentryTransaction`의 대상입니다. 비동기 executor 도입 시에는 Sentry context 전파를 함께 검증합니다.
+
+`TracingDataSourceConfiguration`은 Sentry 활성화 시 Hikari 내부 드라이버만 P6Spy로 구성합니다. 풀과 Flyway의 역할·연결 설정을 유지합니다. DB span은 전송 전에 SQL 원문을 SHA-256 앞 16자리 fingerprint로 교체하고 시간·부모·상태만 보존합니다. 같은 prepared SQL의 바인딩 값을 바꿔도 동일 식별자로 묶입니다. SQL에 값을 직접 결합하면 식별자가 늘어나므로 prepared statement를 사용합니다.
+
+`TracingIntegrationTest`는 실제 HTTP·PostgreSQL에서 서비스→저장소→쿼리의 관계, 반복 쿼리 시간, 실패 상태, 개인정보 제거, CORS와 probe 제외를 검사합니다. `TracingFixtures`는 테스트 소스에만 있으며 운영 JAR에는 포함되지 않습니다. `scripts/verify-sentry-performance.sh`는 같은 경로를 실제 Sentry에 전송하는 opt-in 명령입니다. [관측 경계 결정](adr/0008-service-and-query-tracing.md)을 따릅니다.
+
+### 오류 계약
+
 [ADR 0001](adr/0001-runtime-contract.md)의 오류 계약을 따릅니다. `BusinessException`은 예상한 업무 4xx 전용입니다. 업무 계층에서 기술 예외를 잡아 무시하거나 이 예외로 감싸지 않습니다. 공개 `detail`은 정적인 한국어 오류 카탈로그에서 선택합니다. `code`와 서버가 생성한 `requestId`를 포함하고 JWT 401·403에도 같은 팩토리를 적용합니다. 예상 4xx는 Sentry에서 제외하고 예상하지 못한 5xx는 요청당 한 번 수집합니다.
 
 ### ADR 작성 기준

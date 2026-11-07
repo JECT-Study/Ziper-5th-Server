@@ -39,9 +39,38 @@ SDK 8.62.0과 Gradle 플러그인 6.25.0을 사용합니다. HTTP 오류와 트�
 
 `bootJar`는 업로드 여부와 관계없이 소스 번들을 생성합니다. 업로드에는 `SENTRY_UPLOAD=true`와 `SENTRY_AUTH_TOKEN`이 모두 필요합니다. 토큰은 GitHub Actions secret에 저장하고 로컬 파일이나 로그에 남기지 않습니다.
 
-수동 워크플로 `Upload Sentry source context`는 `develop`과 `main`에서만 실행됩니다. GitHub 환경 이름은 `sentry-source-upload`입니다. 결과 아티팩트 `ziper-server-<SHA>`에는 JAR, 소스 번들, `SENTRY_RELEASE`와 검증한 `image.tar.gz`가 함께 들어갑니다.
+수동 워크플로 `Upload Sentry source context`는 `develop`과 `main`에서만 실행됩니다. GitHub 환경 이름은 `sentry-source-upload`입니다. 같은 브랜치·SHA의 성공한 push CI를 확인하고 `tested-release`의 JAR·소스 번들을 내려받습니다. 재컴파일하지 않고 이미지 JAR 해시·bundle ID를 검증한 뒤 고정 Sentry CLI 3.8.2로 업로드합니다. 토큰은 업로드 단계에만 전달합니다. 결과 아티팩트 `ziper-server-<SHA>`에는 해당 JAR, 소스 번들, `SENTRY_RELEASE`와 검증한 `image.tar.gz`가 함께 들어갑니다.
 
-배포할 때 이 아티팩트의 `ziper-server.jar`를 그대로 사용합니다. 소스를 다시 컴파일하면 번들 ID가 달라져 업로드한 소스와 스택 트레이스 연결이 깨질 수 있습니다. 이 워크플로는 소스 업로드만 수행하며 배포하지 않습니다.
+배포와 소스 업로드 모두 같은 CI의 `tested-release` JAR를 재사용합니다. 소스를 다시 컴파일하면 bundle ID가 달라져 소스 문맥 연결이 깨질 수 있습니다. 이 수동 워크플로는 소스 업로드만 수행하며 배포하지 않습니다.
+
+## 쿼리와 서비스 성능 추적
+
+HTTP 트랜잭션 아래에 `@SentrySpan` 서비스·저장소와 JDBC 쿼리를 연결합니다. P6Spy가 실제 쿼리를 측정하고 `spy.properties`는 SQL 파일 로그를 비활성화합니다. 환경 변수의 PostgreSQL URL과 Flyway migrator 연결은 유지합니다.
+
+| 설정 | 기본값 | 역할 |
+| --- | --- | --- |
+| `SENTRY_ENABLED` + `SENTRY_DSN` | false / 없음 | Sentry·JDBC 계측 활성화 |
+| `SENTRY_TRACES_SAMPLE_RATE` | 0.1 | 일반 요청 sampling; 검증은 1.0 |
+| `SENTRY_PROFILE_SESSION_SAMPLE_RATE` | 0.0 | JVM profiling opt-in; 단일 검증 프로세스는 1.0 |
+| `profile-lifecycle` | TRACE | 선택된 trace의 span 활성 구간에서 profiler 실행 |
+| `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` | 환경별 / local | 환경·검증한 소스 SHA 구분 |
+| `APP_MONITORING_ORIGIN` | local | trace origin 태그 |
+
+Profile session sampling은 요청마다가 아니라 SDK 초기화 때 한 번 결정합니다. async-profiler를 포함하며 macOS·Linux에서 사용합니다. 기본 배포와 일반 테스트의 profiling은 비활성이며 검증 환경에서 명시적으로 세션 비율을 올립니다. 헬스체크 trace 제외는 유지합니다.
+
+DB span은 전송 전에 `JDBC <fingerprint>`로 바꾸고 SQL 원문·바인딩 값·DB 이름·추가 태그를 제거합니다. 시간·상태·부모는 유지하므로 같은 prepared SQL의 반복 횟수와 누적 시간을 비교할 수 있습니다. SQL 원문 기반의 자동 N+1 판정과 실행 계획 수집은 제공하지 않습니다. 부모 repository/service와 코드의 SQL을 대조해 원인을 찾습니다.
+
+실제 Sentry 전송은 DSN을 비공개 환경 변수로 공급한 뒤 실행합니다. Docker와 PostgreSQL Testcontainers가 필요하며 검증용 API·서비스·SQL만 실행합니다.
+
+```sh
+./scripts/verify-sentry-performance.sh
+```
+
+명령은 trace·profile session 비율을 기본 1.0으로 선택하고 `verificationRun` 태그를 붙입니다. `SENTRY_PROFILE_SESSION_SAMPLE_RATE=0.0`이면 profiling을 생략합니다. 동일 테스트가 캐시되어 전송이 생략되지 않도록 `--rerun-tasks`를 사용합니다. 출력과 테스트 보고서의 trace/profiler ID로 Sentry 수신을 확인합니다. 일반 CI는 외부 전송 없이 기록용 transport로 검증합니다.
+
+Sentry Traces에서 `span.op:db.query`를 description으로 묶어 호출 수·누적 시간·P95를 보고, 부모 서비스와 profile 호출 스택으로 원인을 좁힙니다. `span.op:service`로 서비스 구간도 비교합니다. 개선 전후는 같은 데이터·요청 조건·sampling으로 비교하며 fixture의 인위적 지연을 실제 업무 병목으로 해석하지 않습니다.
+
+허용된 CORS 출처에서 `sentry-trace`, `baggage`를 받습니다. 프론트의 `tracePropagationTargets`도 실제 API origin으로 제한해야 합니다. 외부 HTTP 클라이언트는 Spring의 RestClient/RestTemplate/WebClient builder로 생성해 SDK customizer가 적용되게 합니다. 배포한 JAR과 같은 source bundle을 업로드하는 기존 계약도 유지합니다.
 
 ## 공개 오류와 로컬 API 문서
 
