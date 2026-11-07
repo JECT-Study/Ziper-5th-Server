@@ -38,6 +38,8 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 
 ## 공통 계약
 
+공개 health 검사기의 POSIX 요청 deadline은 `ETIMEDOUT` 코드가 있는 예외를 사용합니다. Python 3.9의 socket 읽기가 예외 인수를 검사하므로 인수 없는 `TimeoutError`로 시간 제한을 구현하지 않습니다. 본문 읽기 deadline 회귀 검사로 재시도 가능한 공개 오류 분류를 확인합니다.
+
 [ADR 0001](adr/0001-runtime-contract.md)의 오류 계약을 따릅니다. `BusinessException`은 예상한 업무 4xx 전용입니다. 업무 계층에서 기술 예외를 잡아 무시하거나 이 예외로 감싸지 않습니다. 공개 `detail`은 정적인 한국어 오류 카탈로그에서 선택합니다. `code`와 서버가 생성한 `requestId`를 포함하고 JWT 401·403에도 같은 팩토리를 적용합니다. 예상 4xx는 Sentry에서 제외하고 예상하지 못한 5xx는 요청당 한 번 수집합니다.
 
 ### ADR 작성 기준

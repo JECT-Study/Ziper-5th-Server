@@ -36,7 +36,7 @@ def request_deadline(seconds):
         raise HealthCheckError('Health verification requires a POSIX runner')
 
     def expired(signum, frame):
-        raise TimeoutError()
+        raise TimeoutError(errno.ETIMEDOUT, 'Health request deadline exceeded')
 
     previous_handler = signal.signal(signal.SIGALRM, expired)
     started = time.monotonic()
