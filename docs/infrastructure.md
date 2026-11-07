@@ -21,6 +21,8 @@ gh workflow run deploy-production.yml --repo JECT-Study/Ziper-5th-Server --ref m
 
 ## 앱이 보장하는 계약
 
+로컬 Compose는 `SENTRY_PROFILE_SESSION_SAMPLE_RATE`를 앱으로 전달하며 기본 0.0입니다. 운영에서 profiling을 선택하면 해당 런타임 환경에도 명시해야 합니다. 기존 PostgreSQL URL·Flyway 자격은 바꾸지 않습니다. 성능 계측과 실제 수신 검증은 [운영](operations.md#쿼리와-서비스-성능-추적)을 따릅니다.
+
 앱은 무상태이며 두 origin에서 같은 검증 이미지와 JWT 발급자·대상·키를 사용합니다. `/livez`는 DB를 제외한 생존 상태를, `/readyz`는 DB를 포함한 요청 준비 상태를 반환합니다. 공개 상태 계약과 180초 제한 준비 검사는 [운영](operations.md#상태-점검)을 따릅니다. 사용자 요청 실패를 회로 표본으로 합산하거나 결과가 불명확한 쓰기를 다른 origin에 재전송하지 않는 정책은 Infra에서 구현합니다.
 
 민감 설정은 이미지와 artifact에 포함하지 않습니다. 홈은 저장소 밖의 private runtime 파일을, Cloud Run은 전용 runtime SA가 읽는 고정 Secret Manager 파일 마운트를 사용합니다. 사용자 정의 Secret Manager `ConfigDataLoader`는 구현하지 않았습니다. CI는 WIF를 사용하며 Worker의 전용 Cloud Run invoker 키와 구분합니다. 운영 DB와 스키마의 책임은 [DB 문서](database.md)를 따릅니다. 공통 DB 장애는 origin 전환으로 해결되지 않습니다.

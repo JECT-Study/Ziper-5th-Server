@@ -30,6 +30,8 @@ curl -i http://localhost:8080/readyz
 
 ## 개발 안내
 
+쿼리·서비스 성능 계측은 [Sentry 성능 검증](docs/operations.md#쿼리와-서비스-성능-추적)을 따릅니다. `scripts/verify-sentry-performance.sh`는 비공개 환경 변수로 공급한 Sentry DSN을 사용해 테스트 전용 HTTP·서비스·PostgreSQL 경로를 실행하고 trace와 profiler ID를 출력합니다.
+
 - [문서 지도 — 작업 전 먼저 읽기](docs/context-map.md)
 - [구조와 개발 규칙](docs/development.md)
 - [데이터베이스와 Supabase 준비](docs/database.md)
