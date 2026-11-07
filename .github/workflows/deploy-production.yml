@@ -12,7 +12,7 @@ concurrency:
 jobs:
   home:
     if: github.ref == 'refs/heads/main'
-    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@bcc852e5884bbb0d22f8fd651984441faafcd734
+    uses: JECT-Study/Ziper-5th-Infra/.github/workflows/deploy-home.yml@a5841b607365402349eebdea70c30543e73e7bb6
     with:
-      infra_sha: bcc852e5884bbb0d22f8fd651984441faafcd734
+      infra_sha: a5841b607365402349eebdea70c30543e73e7bb6
     secrets: inherit
