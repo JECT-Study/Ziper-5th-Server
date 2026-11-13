@@ -68,7 +68,7 @@ class SupabaseBootstrapIntegrationTest {
 				statement.execute("SELECT * FROM ziper.flyway_schema_history WHERE false");
 			}
 			Flyway latest = flyway(postgres, "latest");
-			assertThat(latest.migrate().migrationsExecuted).isOne();
+			assertThat(latest.migrate().migrationsExecuted).isEqualTo(2);
 			assertThat(latest.migrate().migrationsExecuted).isZero();
 			try (Connection migration = DriverManager.getConnection(postgres.getJdbcUrl(), "ziper_migrator",
 					"test-migration-password"); Statement statement = migration.createStatement()) {
