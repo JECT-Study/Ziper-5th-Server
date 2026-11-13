@@ -10,7 +10,7 @@ CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향
 
 자체 토큰은 `type` 클레임으로 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 구분하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. 만료 시간은 `JWT_ACCESS_EXPIRATION_SECONDS`(기본 3600초)와 `JWT_REFRESH_EXPIRATION_SECONDS`(기본 1209600초)로 설정합니다.
 
-소셜 토큰 검증은 프로바이더별 전략(`OAuthProviderStrategy`)으로 추상화합니다. Apple ID Token은 `APPLE_JWKS_URI` 공개키로 RS256 서명을 검증하고 `APPLE_ISSUER` 발급자와 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID를 확인합니다. `APPLE_CLIENT_IDS`가 비어 있으면 모든 Apple 토큰을 거부합니다. `/api/v1/auth/oauth/*`, `/api/v1/auth/reissue`, `/api/v1/auth/logout` POST 요청은 인증 없이 허용하지만 이 엔드포인트와 Refresh Token 저장소는 아직 구현하지 않았습니다. Refresh Token 저장소는 실제 기능 구현 시 DB로 설계하며 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다.
+소셜 토큰 검증은 프로바이더별 전략(`OAuthProviderStrategy`)으로 추상화합니다. Apple ID Token은 `APPLE_JWKS_URI` 공개키로 RS256 서명을 검증하고 `APPLE_ISSUER` 발급자와 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID를 확인합니다. `APPLE_CLIENT_IDS`가 비어 있으면 모든 Apple 토큰을 거부합니다. Kakao는 클라이언트가 전달한 Access Token으로 `KAKAO_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v2/user/me`)를 호출해 사용자 식별자(`id`)를 검증합니다. `/api/v1/auth/oauth/*`, `/api/v1/auth/reissue`, `/api/v1/auth/logout` POST 요청은 인증 없이 허용하지만 이 엔드포인트와 Refresh Token 저장소는 아직 구현하지 않았습니다. Refresh Token 저장소는 실제 기능 구현 시 DB로 설계하며 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다.
 
 ## 상태 점검
 
