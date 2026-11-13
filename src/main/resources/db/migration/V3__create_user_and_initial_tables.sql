@@ -18,6 +18,7 @@ CREATE TABLE ziper.users (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_logged_at TIMESTAMP WITH TIME ZONE,
     oauth_connect BIGINT,
+    CONSTRAINT uq_users_oauth_connect UNIQUE (oauth_connect),
     CONSTRAINT fk_users_oauth_connect FOREIGN KEY (oauth_connect)
         REFERENCES ziper.oauth_users (id) ON DELETE SET NULL
 );
