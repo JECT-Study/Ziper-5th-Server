@@ -12,6 +12,7 @@ app:
   security:
     jwt-secret-base64: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
     allowed-origins: http://localhost:3000
+    apple-client-ids: com.ject.ziper,com.ject.ziper.web
 sentry:
   enabled: false
   environment: test

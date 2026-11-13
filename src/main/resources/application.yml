@@ -69,6 +69,11 @@ app:
     jwt-issuer: ${JWT_ISSUER:ziper-server}
     jwt-audience: ${JWT_AUDIENCE:ziper-api}
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+    access-token-expiration-seconds: ${JWT_ACCESS_EXPIRATION_SECONDS:3600}
+    refresh-token-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:1209600}
+    apple-issuer: ${APPLE_ISSUER:https://appleid.apple.com}
+    apple-jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
+    apple-client-ids: ${APPLE_CLIENT_IDS:}
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}
