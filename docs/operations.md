@@ -8,9 +8,7 @@
 
 CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향후 인증을 쿠키로 옮기면 CSRF 설정도 다시 설계해야 합니다. CORS 허용 출처는 `CORS_ALLOWED_ORIGINS`에 명시하며 웹·모바일 배포 환경에 맞춰 관리합니다.
 
-자체 토큰은 `type` 클레임으로 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 구분하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. 만료 시간은 `JWT_ACCESS_EXPIRATION_SECONDS`(기본 3600초)와 `JWT_REFRESH_EXPIRATION_SECONDS`(기본 1209600초)로 설정합니다.
-
-소셜 토큰 검증은 프로바이더별 전략(`OAuthProviderStrategy`)으로 추상화합니다. Apple ID Token은 `APPLE_JWKS_URI` 공개키로 RS256 서명을 검증하고 `APPLE_ISSUER` 발급자와 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID를 확인합니다. `APPLE_CLIENT_IDS`가 비어 있으면 모든 Apple 토큰을 거부합니다. `/api/v1/auth/oauth/*`, `/api/v1/auth/reissue`, `/api/v1/auth/logout` POST 요청은 인증 없이 허용하지만 이 엔드포인트와 Refresh Token 저장소는 아직 구현하지 않았습니다. Refresh Token 저장소는 실제 기능 구현 시 DB로 설계하며 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다.
+소셜 로그인(`POST /api/v1/auth/oauth/{provider}`)은 프로바이더별 전략(`OAuthProviderStrategy`)으로 토큰을 검증합니다. Apple 로그인은 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID와 `APPLE_ISSUER`, `APPLE_JWKS_URI`를 기준으로 ID Token을 검증하며, 미가입 사용자는 `Ziper`+5자리 난수 닉네임과 기본 보드를 생성해 자동 가입시킵니다. 자체 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 발급하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. Refresh Token은 SHA-256 해시만 `ziper.sessions` 테이블에 저장하고 재발급(`POST /api/v1/auth/reissue`) 시 회전하며 로그아웃(`POST /api/v1/auth/logout`) 시 삭제합니다. 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다.
 
 ## 상태 점검
 
