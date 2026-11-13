@@ -5,16 +5,28 @@ import java.util.Base64;
 import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 @ConfigurationProperties("app.security")
 public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
-		List<String> allowedOrigins) {
+		List<String> allowedOrigins, Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds,
+		String appleIssuer, String appleJwksUri, List<String> appleClientIds) {
+
+	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
+			List<String> allowedOrigins) {
+		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, null, null, null, null, null);
+	}
+
 	@Override
 	public String toString() {
 		return "SecurityProperties[jwtSecretBase64=[REDACTED], jwtIssuer=" + jwtIssuer + ", jwtAudience=" + jwtAudience
-				+ ", allowedOrigins=" + allowedOrigins + "]";
+				+ ", allowedOrigins=" + allowedOrigins + ", accessTokenExpirationSeconds="
+				+ accessTokenExpirationSeconds + ", refreshTokenExpirationSeconds=" + refreshTokenExpirationSeconds
+				+ ", appleIssuer=" + appleIssuer + ", appleJwksUri=" + appleJwksUri + ", appleClientIds="
+				+ appleClientIds + "]";
 	}
 
+	@ConstructorBinding
 	public SecurityProperties {
 		if (jwtSecretBase64 == null || jwtSecretBase64.isBlank()) {
 			throw new IllegalArgumentException("app.security.jwt-secret-base64 is required");
@@ -44,5 +56,19 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 				throw new IllegalArgumentException("CORS origins must be explicit HTTP(S) origins");
 			}
 		}
+		accessTokenExpirationSeconds = accessTokenExpirationSeconds == null ? 3600L : accessTokenExpirationSeconds;
+		refreshTokenExpirationSeconds = refreshTokenExpirationSeconds == null
+				? 1209600L
+				: refreshTokenExpirationSeconds;
+		if (accessTokenExpirationSeconds <= 0 || refreshTokenExpirationSeconds <= 0) {
+			throw new IllegalArgumentException("Token expiration seconds must be positive");
+		}
+		appleIssuer = appleIssuer == null || appleIssuer.isBlank() ? "https://appleid.apple.com" : appleIssuer.trim();
+		appleJwksUri = appleJwksUri == null || appleJwksUri.isBlank()
+				? "https://appleid.apple.com/auth/keys"
+				: appleJwksUri.trim();
+		appleClientIds = appleClientIds == null
+				? List.of()
+				: appleClientIds.stream().map(String::trim).filter(id -> !id.isEmpty()).toList();
 	}
 }

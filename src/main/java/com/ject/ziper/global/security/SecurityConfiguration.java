@@ -44,6 +44,8 @@ import com.ject.ziper.global.error.ProblemFactory;
 public class SecurityConfiguration {
 	private static final String[] PROBES = {"/livez", "/readyz", "/actuator/health/liveness",
 			"/actuator/health/readiness"};
+	private static final String[] AUTH_PUBLIC_PATHS = {"/api/v1/auth/oauth/*", "/api/v1/auth/reissue",
+			"/api/v1/auth/logout"};
 
 	@Bean
 	JwtDecoder jwtDecoder(SecurityProperties properties) {
@@ -53,9 +55,11 @@ public class SecurityConfiguration {
 				JwtValidators.createDefaultWithIssuer(properties.jwtIssuer()),
 				jwt -> jwt.getExpiresAt() != null && jwt.getSubject() != null && !jwt.getSubject().isBlank()
 						&& jwt.getAudience() != null && jwt.getAudience().contains(properties.jwtAudience())
-								? OAuth2TokenValidatorResult.success()
-								: OAuth2TokenValidatorResult
-										.failure(new OAuth2Error("invalid_token", "Invalid required claims", null))));
+						&& !JwtTokenProvider.TOKEN_TYPE_REFRESH
+								.equals(jwt.getClaimAsString(JwtTokenProvider.CLAIM_TOKEN_TYPE))
+										? OAuth2TokenValidatorResult.success()
+										: OAuth2TokenValidatorResult.failure(
+												new OAuth2Error("invalid_token", "Invalid required claims", null))));
 		return decoder;
 	}
 
@@ -85,7 +89,8 @@ public class SecurityConfiguration {
 				.requestCache(AbstractHttpConfigurer::disable).logout(AbstractHttpConfigurer::disable)
 				.authorizeHttpRequests(authorize -> authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 						.requestMatchers(HttpMethod.GET, PROBES).permitAll().requestMatchers(HttpMethod.HEAD, PROBES)
-						.permitAll().requestMatchers("/actuator/**").denyAll()
+						.permitAll().requestMatchers(HttpMethod.POST, AUTH_PUBLIC_PATHS).permitAll()
+						.requestMatchers("/actuator/**").denyAll()
 						.requestMatchers(HttpMethod.GET, OpenApiConfiguration.PATHS)
 						.access((authentication, context) -> new AuthorizationDecision(docs.enabled()))
 						.requestMatchers(HttpMethod.HEAD, OpenApiConfiguration.PATHS)
