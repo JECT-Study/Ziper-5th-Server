@@ -26,6 +26,12 @@
 
 이 스크립트는 인수를 받지 않고 고정된 로컬 Compose DB에만 접속합니다. `db/seed/local.sql`은 실제 도메인이 생기기 전까지 비어 있습니다. 도메인 구현 후에는 수동 실행을 위한 멱등 upsert만 추가합니다. 운영 데이터나 개인정보를 복제하지 않습니다. 시드를 부팅, Docker 이미지 빌드, Flyway에 연결하지 않습니다.
 
+## 쿼리 시간 계측
+
+쿼리 시간 계측은 Sentry 활성화 시 런타임 Hikari 내부의 P6Spy driver·URL prefix로 수행합니다. 환경 변수의 PostgreSQL URL·자격과 `spring.datasource.hikari`의 풀 설정을 유지합니다. Flyway는 기존 migrator 연결을 사용하며 Sentry 비활성 시에는 Boot 기본 DataSource 구성을 사용합니다. 실제 역할 분리와 풀 설정은 `TracingIntegrationTest`로 확인합니다.
+
+`spy.properties`는 SQL 파일 로그를 비활성화합니다. Sentry에는 SQL 원문·바인딩 값·DB 이름 대신 fingerprint와 소요 시간·상태·부모 span을 남깁니다. 부모 repository/service와 코드의 prepared SQL을 대조해 원인을 찾습니다. SQL 원문 기반의 Sentry 자동 N+1 탐지나 PostgreSQL 실행 계획을 제공하지 않으며 반복 fingerprint의 개수로 직접 확인합니다. 로컬 Compose는 `SENTRY_PROFILE_SESSION_SAMPLE_RATE`도 앱에 전달하며 기본 0.0에서는 profiler를 시작하지 않습니다.
+
 ## Supabase 연결 준비
 
 Supabase 프로젝트는 아직 없으며 `db/supabase/bootstrap.sql`도 실행하지 않았습니다. 파일은 DBA가 새 프로젝트 권한을 검토한 뒤 실행할 템플릿입니다. 실제 비밀번호는 파일에 넣지 말고 안전하게 `psql` 변수 `runtime_password`, `migration_password`로 전달합니다. 재실행 전에 기존 역할과 스키마를 확인합니다. 관리형 DB의 비슈퍼유저는 `CREATEROLE`만으로 새 migrator 역할에 `SET ROLE`할 수 있다고 가정하지 않습니다. 템플릿은 트랜잭션 안에서 migrator에 대한 임시 `SET` 멤버십을 부여하고 DBA가 전용 스키마를 생성한 뒤 `SET LOCAL ROLE`로 ACL을 설정합니다. 이후 현재 관리자가 부여한 임시 멤버십만 회수하고 커밋합니다. migrator에 DB 전체 스키마 생성 권한을 주지 않습니다. Supabase 관리 역할을 수정하지 않습니다.

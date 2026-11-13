@@ -75,6 +75,10 @@ sentry:
   environment: ${SENTRY_ENVIRONMENT:${spring.profiles.active:server}}
   release: ${SENTRY_RELEASE:local}
   traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.1}
+  profile-session-sample-rate: ${SENTRY_PROFILE_SESSION_SAMPLE_RATE:0.0}
+  profile-lifecycle: TRACE
+  tags:
+    origin: ${APP_MONITORING_ORIGIN:local}
   send-default-pii: false
   max-request-body-size: none
   logs:
