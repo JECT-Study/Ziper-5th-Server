@@ -10,6 +10,12 @@ PR은 feature·bug·chore 의도를 구분하고 변경 목적, 동작 변화와
 
 Spring Boot 3.5를 사용하는 동안 springdoc-openapi는 호환되는 2.x를 유지합니다. Dependabot은 Spring Boot와 springdoc의 메이저 업데이트를 제외하며, 프레임워크 메이저 이전은 두 라이브러리의 호환성을 함께 확인하는 변경으로 진행합니다. [springdoc 호환성 안내](https://springdoc.org/faq.html)
 
+## 성능 계측 검증
+
+`sentry-source-upload.yml`은 동일 브랜치·SHA의 성공한 push CI에서 `tested-release`를 받아 이미지 JAR 해시와 bundle ID를 검증한 후 소스 번들만 업로드합니다. 별도 Gradle 빌드로 Debug ID를 다시 만들지 않습니다. Actions 읽기 권한은 그 아티팩트를 내려받는 데만 사용합니다. `sentry-source-upload` 환경과 main/develop 실행 제한은 유지합니다.
+
+성능 계측의 CI는 실제 PostgreSQL과 기록용 Sentry transport로 HTTP·서비스·SQL 연결 및 개인정보 제거를 확인합니다. `SentryTracingLiveVerificationTest`는 기본 skip이며 `scripts/verify-sentry-performance.sh`로 명시적으로 실행합니다. 외부 Sentry 수신 링크·프로파일·환경·릴리스는 PR 증거로 기록하고 운영 검증과 구분합니다.
+
 ## CodeRabbit 연결
 
 `.coderabbit.yaml`은 한국어 리뷰, `develop`·`main` 대상 PR과 초안 PR 제외를 설정합니다. 저장소의 `AGENTS.md`도 리뷰 기준으로 제공합니다. 유료 전용 기능은 요구하지 않습니다.
