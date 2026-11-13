@@ -38,6 +38,8 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 
 ## 공통 계약
 
+공개 health 검사기의 POSIX 요청 deadline은 `ETIMEDOUT` 코드가 있는 예외를 사용합니다. Python 3.9의 socket 읽기가 예외 인수를 검사하므로 인수 없는 `TimeoutError`로 시간 제한을 구현하지 않습니다. 본문 읽기 deadline 회귀 검사로 재시도 가능한 공개 오류 분류를 확인합니다.
+
 ### 서비스 성능 계측
 
 기존 Sentry Spring Boot Starter가 HTTP 트랜잭션의 소유자입니다. 별도 `Sentry.init`이나 OpenTelemetry agent를 중복 설치하지 않습니다. Spring AOP와 JDBC 계측은 SDK 8.62.0 BOM에 맞춥니다.
