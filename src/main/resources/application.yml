@@ -33,6 +33,19 @@ spring:
     password: ${MIGRATION_PASSWORD:${DB_PASSWORD}}
     default-schema: ziper
     schemas: ziper
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
+      "[mail.smtp.ssl.checkserveridentity]": true
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
 server:
   port: ${PORT:8080}
   shutdown: graceful
@@ -40,6 +53,9 @@ server:
     session:
       tracking-modes: []
 management:
+  health:
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -60,6 +76,10 @@ management:
         readiness:
           include: readinessState,db
 app:
+  mail:
+    enabled: ${EMAIL_MAIL_ENABLED:false}
+    from: ${EMAIL_FROM:}
+    code-secret-base64: ${EMAIL_CODE_SECRET_BASE64:}
   monitoring:
     metrics-enabled: ${APP_MONITORING_METRICS_ENABLED:false}
     origin: ${APP_MONITORING_ORIGIN:local}
