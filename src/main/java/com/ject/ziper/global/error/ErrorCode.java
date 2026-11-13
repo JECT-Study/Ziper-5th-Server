@@ -9,7 +9,9 @@ public enum ErrorCode {
 							"지원하지 않는 요청 방식입니다."), CONFLICT(HttpStatus.CONFLICT,
 									"현재 상태에서는 요청을 처리할 수 없습니다."), CLIENT_ERROR(HttpStatus.BAD_REQUEST,
 											"요청을 처리할 수 없습니다."), INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
-													"서버 오류가 발생했습니다.");
+													"서버 오류가 발생했습니다."), INVALID_NICKNAME(HttpStatus.BAD_REQUEST,
+															"닉네임은 한글, 영문, 숫자만 사용해 2~10자로 입력해 주세요."), DUPLICATE_NICKNAME(
+																	HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다.");
 
 	private final HttpStatus status;
 	private final String detail;
