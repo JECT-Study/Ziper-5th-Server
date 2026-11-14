@@ -11,7 +11,18 @@ public enum ErrorCode {
 											"요청을 처리할 수 없습니다."), INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
 													"서버 오류가 발생했습니다."), INVALID_NICKNAME(HttpStatus.BAD_REQUEST,
 															"닉네임은 한글, 영문, 숫자만 사용해 2~10자로 입력해 주세요."), DUPLICATE_NICKNAME(
-																	HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다.");
+																	HttpStatus.CONFLICT,
+																	"이미 사용 중인 닉네임입니다."), EMAIL_REQUEST_LIMITED(
+																			HttpStatus.TOO_MANY_REQUESTS,
+																			"잠시 후 다시 요청해 주세요."), EMAIL_FLOW_INVALID(
+																					HttpStatus.BAD_REQUEST,
+																					"인증을 다시 시작해 주세요."), EMAIL_CODE_INVALID(
+																							HttpStatus.BAD_REQUEST,
+																							"인증번호가 일치하지 않습니다."), EMAIL_CODE_EXPIRED(
+																									HttpStatus.GONE,
+																									"인증번호가 만료되었습니다."), EMAIL_CODE_ATTEMPTS_EXCEEDED(
+																											HttpStatus.TOO_MANY_REQUESTS,
+																											"인증을 완료하지 못했어요.");
 
 	private final HttpStatus status;
 	private final String detail;
