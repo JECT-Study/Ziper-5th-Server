@@ -1059,6 +1059,8 @@ def ensure_local_postgres(repo_root: Path):
 
 
 def start_backend(repo_root: Path, backend_port: int, ui_port: int, apple_client_id: str, mode: str) -> subprocess.Popen:
+    if tcp_open("127.0.0.1", backend_port):
+        raise RuntimeError(f"Port {backend_port} is already in use; free it or pass --no-backend")
     ensure_local_postgres(repo_root)
     env = dict(os.environ)
     env.update(parse_env_file(repo_root / ".env"))
@@ -1077,7 +1079,7 @@ def start_backend(repo_root: Path, backend_port: int, ui_port: int, apple_client
         env["NAVER_USER_INFO_URI"] = f"{base}/mock/naver/v1/nid/me"
         env["KAKAO_USER_INFO_URI"] = f"{base}/mock/kakao/v2/user/me"
     proc = subprocess.Popen(
-        [str(repo_root / "gradlew"), "bootRun"],
+        [str(repo_root / "gradlew"), "--no-daemon", "bootRun"],
         cwd=repo_root,
         env=env,
         start_new_session=True,
@@ -1148,6 +1150,11 @@ def main(argv: list[str] | None = None) -> int:
     server_thread.start()
 
     backend_proc = None
+
+    def handle_sigterm(_signum, _frame):
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
     try:
         if not args.no_backend:
             print(f"[oauth-demo] Starting local backend on port {args.backend_port} (mode={args.mode})...", flush=True)
