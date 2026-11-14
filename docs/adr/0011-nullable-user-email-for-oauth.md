@@ -1,4 +1,4 @@
-# 0010 OAuth 무이메일 회원을 위한 users.email Nullable 완화
+# 0011 OAuth 무이메일 회원을 위한 users.email Nullable 완화
 
 - 상태: 채택 — Flyway V4 마이그레이션 및 Kakao/Apple OAuth 통합 테스트 검증
 - 날짜: 2026-11-14
