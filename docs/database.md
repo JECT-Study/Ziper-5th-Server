@@ -14,6 +14,8 @@
 
 `V3`의 `users.password_hash`는 이메일·비밀번호 로그인을 사용하는 회원에게만 값을 저장하며 OAuth 전용 회원은 `NULL`을 허용합니다. `users.nickname`은 최대 10자이며 필수·고유 값입니다. `users.oauth_connect`는 한 OAuth 연결을 여러 회원이 공유하지 못하도록 고유 제약을 두고, OAuth를 사용하지 않는 회원은 `NULL`을 허용합니다. `users.marketing_agreed`는 선택 동의 플래그로, 명시적인 동의가 없으면 `false`입니다. `users.marketing_agreed_at`은 요청한 대로 필수이며 행 생성 시각을 기본값으로 기록합니다. 따라서 동의하지 않은 회원에게도 시각이 저장되고, 이 값만으로 실제 동의 시점을 판단할 수 없습니다. 이 마이그레이션은 로그인·회원가입 API를 구현하지 않습니다.
 
+이미 적용한 `V3`는 checksum 보존을 위해 수정하지 않으며, `V4__allow_nullable_user_email.sql`에서 개인·비비즈 Kakao OAuth 앱처럼 이메일(`account_email`)을 제공하지 않는 소셜 로그인 가입을 수용하기 위해 `ziper.users.email`의 `NOT NULL` 제약을 해제합니다. PostgreSQL 17.6의 `UNIQUE` 제약은 기본 `NULLS DISTINCT`로 동작하므로 이메일이 `NULL`인 OAuth 회원이 여럿 존재해도 충돌하지 않으며, 비어 있지 않은 실제 이메일 간 중복만 차단합니다. 빈 문자열 저장과 식별 수단 누락을 방지하기 위해 `ck_users_email_not_blank`(`email IS NULL OR btrim(email) <> ''`)와 `ck_users_login_identity`(`email IS NOT NULL OR oauth_connect IS NOT NULL`) `CHECK` 제약을 함께 적용합니다. 이메일 가입 경로와 `auth_codes` 흐름은 기존과 동일하게 이메일 값을 전달합니다.
+
 가입 전에는 회원 행을 만들지 않고 이메일 인증번호를 `auth_codes`에 보관합니다. `user_id`는 두지 않습니다. 서버가 생성한 `flow_id`는 첫 발급과 재전송을 한 인증 흐름으로 묶습니다. `failed_attempts`는 각 번호의 잘못된 입력 횟수이며, 같은 흐름의 합계가 5회에 도달하면 행을 남긴 채 추가 검증을 거부합니다. 재전송 시 새 행을 추가하고 기존 오류 횟수도 합계에 포함합니다. 검증에는 해당 흐름의 최신 번호만 허용합니다. 이메일 입력 화면에서 새로 시작하면 새 `flow_id`를 발급합니다.
 
 `requested_at`과 이메일·요청자 키 인덱스는 별도 발급 빈도 제한을 위한 기록입니다. 요청자 키는 신뢰한 클라이언트 출처로부터 애플리케이션이 생성하며 원본 IP는 저장하지 않습니다. 가입 시 검증된 인증 행을 잠그고 회원·기본 보드 생성과 코드 소비를 한 트랜잭션에서 처리해야 합니다. 실패하면 함께 롤백되므로 회원을 따로 삭제하지 않습니다. 발급·검증·횟수 제한과 화면용 응답은 아직 구현되지 않았습니다.

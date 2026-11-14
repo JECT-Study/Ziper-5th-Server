@@ -78,15 +78,13 @@ public class AuthService {
 			user.recordLogin(now);
 			isNewUser = false;
 		} else {
-			if (principal.email() == null) {
-				throw new BusinessException(ErrorCode.UNAUTHORIZED);
-			}
-			if (userRepository.existsByEmail(principal.email())) {
+			String email = principal.email() == null || principal.email().isBlank() ? null : principal.email();
+			if (email != null && userRepository.existsByEmail(email)) {
 				throw new BusinessException(ErrorCode.CONFLICT);
 			}
 			String nickname = nicknameGenerator.generateUniqueNickname();
 			OAuthUser savedOAuth = oauthUserRepository.save(OAuthUser.create(provider, principal.providerId()));
-			user = userRepository.save(User.createOAuthUser(principal.email(), nickname, savedOAuth.getId(), now));
+			user = userRepository.save(User.createOAuthUser(email, nickname, savedOAuth.getId(), now));
 			productBoardRepository.save(ProductBoard.createDefault(user.getId()));
 			isNewUser = true;
 		}
