@@ -12,6 +12,16 @@ CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향
 
 소셜 토큰 검증은 프로바이더별 전략(`OAuthProviderStrategy`)으로 추상화합니다. Apple ID Token은 `APPLE_JWKS_URI` 공개키로 RS256 서명을 검증하고 `APPLE_ISSUER` 발급자와 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID를 확인합니다. `APPLE_CLIENT_IDS`가 비어 있으면 모든 Apple 토큰을 거부합니다. Naver는 클라이언트가 전달한 Access Token으로 `NAVER_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v1/nid/me`)를 호출해 `resultcode=00`과 사용자 식별자(`response.id`)를 검증합니다. `/api/v1/auth/oauth/*`, `/api/v1/auth/reissue`, `/api/v1/auth/logout` POST 요청은 인증 없이 허용하지만 이 엔드포인트와 Refresh Token 저장소는 아직 구현하지 않았습니다. 가입 전 화면에서 사용하는 닉네임 중복 검사 `GET /api/v1/users/nickname/availability`도 인증 없이 허용합니다. 이 경로는 닉네임 사용 여부만 응답하며 요청 횟수 제한은 아직 없습니다. Refresh Token 저장소는 실제 기능 구현 시 DB로 설계하며 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다.
 
+## 이메일 인증번호
+
+`EMAIL_MAIL_ENABLED`의 기본값은 `false`입니다. 활성화할 때 `EMAIL_FROM`, 별도 Base64 인코딩 32바이트 이상 키 `EMAIL_CODE_SECRET_BASE64`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`를 런타임 환경에서 공급합니다. Gmail을 쓰면 호스트 `smtp.gmail.com`, 포트 `587`, 발신 주소와 사용자 이름은 같은 계정으로 설정하고 `MAIL_PASSWORD`에는 해당 계정의 앱 비밀번호를 사용합니다. SMTP 인증·STARTTLS와 서버 인증서 호스트 검증을 켜며 연결·읽기·쓰기 시간 제한은 각각 5초입니다. SMTP는 readiness 검사에 포함하지 않습니다.
+
+공개 API는 `POST /api/v1/auth/email/verifications`(본문 `{"email":"member@example.com"}`, 성공 `201`과 `flowId`), `POST /api/v1/auth/email/verifications/{flowId}/resend`(성공 `204`), `POST /api/v1/auth/email/verifications/{flowId}/verify`(본문 `{"code":"123456"}`, 성공 `204`)입니다. `GET /api/v1/auth/email/verifications/{flowId}`는 `failedAttempts`, `remainingAttempts`, `expiresAt`, `remainingSeconds`, `verified`를 `Cache-Control: no-store`로 반환합니다. 클라이언트는 이 상태로 오입력 횟수와 타이머를 표시하고, 서버의 만료·횟수 판정을 최종 결과로 사용합니다. 번호는 6자리이고 3분 동안 유효합니다. 재전송은 같은 흐름에 새 번호를 추가하며 마지막 발송 뒤 3분이 지나야 합니다. 같은 이메일은 시간당 5회, 같은 연결 출처는 시간당 20회까지 발송할 수 있고 초과 시 `EMAIL_REQUEST_LIMITED`(`429`)를 반환합니다.
+
+잘못된 번호는 `EMAIL_CODE_INVALID`(`400`), 만료는 `EMAIL_CODE_EXPIRED`(`410`)입니다. 같은 흐름에서 다섯 번째 오입력부터 `EMAIL_CODE_ATTEMPTS_EXCEEDED`(`429`, `인증을 완료하지 못했어요.`)를 반환하며 재전송해도 실패 횟수는 초기화되지 않습니다. 클라이언트는 이 오류 코드로 모달을 표시하고 다른 방법 또는 새 이메일 인증 흐름으로 이동합니다. 검증 성공은 DB의 `verified_at`만 기록하며 회원 가입이나 로그인 토큰을 발급하지 않습니다.
+
+발급 기록은 DB에 먼저 커밋한 뒤 메일을 보냅니다. SMTP 실패는 전역 `5xx` 오류로 전달하고 자동 재발송하지 않으며, 남은 기록에도 발송 제한을 적용합니다. 로컬 Gmail 발송·수신의 검증 범위와 남은 번호 확인·운영 검증은 [검증 이력](verification.md#2026-11-14-jec-43-이메일-인증번호-발송확인)에 기록합니다. [ADR 0009](adr/0009-email-verification-delivery.md)에 이 일관성 경계를 기록했습니다.
+
 ## 상태 점검
 
 | 경로 | 확인 대상 | 정상 | 비정상 |

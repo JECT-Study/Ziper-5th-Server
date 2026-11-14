@@ -39,3 +39,4 @@
 - 0007이 호출하는 종료 후 재기동 정책은 Infra ADR 0009에서 관리합니다. 운영 컨테이너 정책과 전체 다음 BIOS 부팅의 검증 범위를 구분합니다.
 
 - [0008 서비스·쿼리 추적과 성능 데이터 경계](adr/0008-service-and-query-tracing.md)
+- [0009 이메일 인증번호 발송과 검증 경계](adr/0009-email-verification-delivery.md)
