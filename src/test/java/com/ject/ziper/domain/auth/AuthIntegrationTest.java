@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
@@ -13,6 +16,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +32,8 @@ import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -48,6 +54,7 @@ import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.sun.net.httpserver.HttpServer;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -55,6 +62,7 @@ import com.nimbusds.jwt.SignedJWT;
 class AuthIntegrationTest extends PostgresTestSupport {
 	private static RSAPublicKey applePublicKey;
 	private static RSAPrivateKey applePrivateKey;
+	private static HttpServer kakaoUserInfoServer;
 
 	@Autowired
 	private MockMvc mvc;
@@ -80,6 +88,13 @@ class AuthIntegrationTest extends PostgresTestSupport {
 	@Autowired
 	private JwtDecoder accessJwtDecoder;
 
+	@DynamicPropertySource
+	static void kakaoProperties(DynamicPropertyRegistry registry) throws IOException {
+		startKakaoServer();
+		int port = kakaoUserInfoServer.getAddress().getPort();
+		registry.add("app.security.kakao-user-info-uri", () -> "http://127.0.0.1:" + port + "/v2/user/me");
+	}
+
 	@BeforeAll
 	static void initAppleKeys() throws Exception {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
@@ -87,6 +102,14 @@ class AuthIntegrationTest extends PostgresTestSupport {
 		KeyPair pair = generator.generateKeyPair();
 		applePublicKey = (RSAPublicKey) pair.getPublic();
 		applePrivateKey = (RSAPrivateKey) pair.getPrivate();
+	}
+
+	@AfterAll
+	static void stopKakaoServer() {
+		if (kakaoUserInfoServer != null) {
+			kakaoUserInfoServer.stop(0);
+			kakaoUserInfoServer = null;
+		}
 	}
 
 	@BeforeEach
@@ -176,6 +199,86 @@ class AuthIntegrationTest extends PostgresTestSupport {
 		mvc.perform(post("/api/v1/auth/oauth/unknown").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"token\":\"" + firstToken + "\"}")).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("code").value("INVALID_REQUEST"));
+	}
+
+	@Test
+	void 이메일없는Kakao액세스토큰_복수사용자가소셜로그인과재로그인을수행하면_NULL이메일로모두가입되고고유제약없이토큰을발급한다() throws Exception {
+		String firstResponse = mvc
+				.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+						.content("{\"token\":\"kakao-token-no-email-1\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
+				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty())
+				.andReturn().getResponse().getContentAsString();
+
+		mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0").content("{\"token\":\"kakao-token-no-email-2\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
+				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty());
+
+		List<User> users = userRepository.findAll();
+		assertThat(users).hasSize(2);
+		assertThat(users).allSatisfy(user -> {
+			assertThat(user.getEmail()).isNull();
+			assertThat(user.getNickname()).matches("^Ziper\\d{5}$");
+			assertThat(productBoardRepository.findAllByUserId(user.getId())).hasSize(1);
+		});
+
+		String firstAccessToken = objectMapper.readTree(firstResponse).get("accessToken").asText();
+		Long firstUserId = Long.valueOf(accessJwtDecoder.decode(firstAccessToken).getSubject());
+
+		String reloginResponse = mvc
+				.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.USER_AGENT, "Expo/iOS-18.0")
+						.content("{\"token\":\"kakao-token-no-email-1\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(false)).andReturn().getResponse()
+				.getContentAsString();
+
+		String reloginAccessToken = objectMapper.readTree(reloginResponse).get("accessToken").asText();
+		assertThat(Long.valueOf(accessJwtDecoder.decode(reloginAccessToken).getSubject())).isEqualTo(firstUserId);
+		assertThat(userRepository.count()).isEqualTo(2);
+		assertThat(sessionRepository.count()).isEqualTo(3);
+
+		mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"kakao-token-with-email\"}")).andExpect(status().isOk())
+				.andExpect(jsonPath("isNewUser").value(true));
+
+		String conflictAppleToken = createAppleIdToken("apple-sub-dup", "shared@example.com", "com.ject.ziper");
+		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"" + conflictAppleToken + "\"}")).andExpect(status().isConflict())
+				.andExpect(jsonPath("code").value("CONFLICT"));
+
+		mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"invalid-kakao-token\"}")).andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("code").value("UNAUTHORIZED"));
+	}
+
+	private static synchronized void startKakaoServer() throws IOException {
+		if (kakaoUserInfoServer != null) {
+			return;
+		}
+		kakaoUserInfoServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		kakaoUserInfoServer.createContext("/v2/user/me", exchange -> {
+			String authorization = exchange.getRequestHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+			int statusCode = 200;
+			String body;
+			if ("Bearer kakao-token-no-email-1".equals(authorization)) {
+				body = "{\"id\":500001,\"kakao_account\":{}}";
+			} else if ("Bearer kakao-token-no-email-2".equals(authorization)) {
+				body = "{\"id\":500002}";
+			} else if ("Bearer kakao-token-with-email".equals(authorization)) {
+				body = "{\"id\":500003,\"kakao_account\":{\"email\":\"shared@example.com\"}}";
+			} else {
+				statusCode = 401;
+				body = "{\"code\":-401,\"msg\":\"invalid token\"}";
+			}
+			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+			exchange.sendResponseHeaders(statusCode, bytes.length);
+			exchange.getResponseBody().write(bytes);
+			exchange.close();
+		});
+		kakaoUserInfoServer.start();
 	}
 
 	private String createAppleIdToken(String subject, String email, String audience) throws Exception {

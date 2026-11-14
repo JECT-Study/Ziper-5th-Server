@@ -94,6 +94,7 @@ app:
     apple-issuer: ${APPLE_ISSUER:https://appleid.apple.com}
     apple-jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
     apple-client-ids: ${APPLE_CLIENT_IDS:}
+    kakao-user-info-uri: ${KAKAO_USER_INFO_URI:https://kapi.kakao.com/v2/user/me}
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}

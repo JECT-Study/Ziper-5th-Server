@@ -10,11 +10,18 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
 @ConfigurationProperties("app.security")
 public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
 		List<String> allowedOrigins, Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds,
-		String appleIssuer, String appleJwksUri, List<String> appleClientIds) {
+		String appleIssuer, String appleJwksUri, List<String> appleClientIds, String kakaoUserInfoUri) {
 
 	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
 			List<String> allowedOrigins) {
-		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, null, null, null, null, null);
+		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, null, null, null, null, null, null);
+	}
+
+	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience, List<String> allowedOrigins,
+			Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds, String appleIssuer,
+			String appleJwksUri, List<String> appleClientIds) {
+		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, accessTokenExpirationSeconds,
+				refreshTokenExpirationSeconds, appleIssuer, appleJwksUri, appleClientIds, null);
 	}
 
 	@Override
@@ -23,7 +30,7 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 				+ ", allowedOrigins=" + allowedOrigins + ", accessTokenExpirationSeconds="
 				+ accessTokenExpirationSeconds + ", refreshTokenExpirationSeconds=" + refreshTokenExpirationSeconds
 				+ ", appleIssuer=" + appleIssuer + ", appleJwksUri=" + appleJwksUri + ", appleClientIds="
-				+ appleClientIds + "]";
+				+ appleClientIds + ", kakaoUserInfoUri=" + kakaoUserInfoUri + "]";
 	}
 
 	@ConstructorBinding
@@ -70,5 +77,8 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 		appleClientIds = appleClientIds == null
 				? List.of()
 				: appleClientIds.stream().map(String::trim).filter(id -> !id.isEmpty()).toList();
+		kakaoUserInfoUri = kakaoUserInfoUri == null || kakaoUserInfoUri.isBlank()
+				? "https://kapi.kakao.com/v2/user/me"
+				: kakaoUserInfoUri.trim();
 	}
 }
