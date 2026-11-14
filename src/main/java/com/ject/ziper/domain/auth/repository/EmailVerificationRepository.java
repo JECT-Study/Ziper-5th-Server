@@ -22,11 +22,6 @@ public class EmailVerificationRepository {
 		}, key);
 	}
 
-	public int countByEmail(String email, Instant since) {
-		return jdbc.queryForObject("SELECT COUNT(*) FROM ziper.auth_codes WHERE email = ? AND requested_at >= ?",
-				Integer.class, email, Timestamp.from(since));
-	}
-
 	public int countByRequester(String requesterKey, Instant since) {
 		return jdbc.queryForObject(
 				"SELECT COUNT(*) FROM ziper.auth_codes WHERE requester_key = ? AND requested_at >= ?", Integer.class,
@@ -53,11 +48,6 @@ public class EmailVerificationRepository {
 		return values.isEmpty() ? null : values.getFirst();
 	}
 
-	public int failuresByFlow(UUID flowId) {
-		return jdbc.queryForObject("SELECT COALESCE(SUM(failed_attempts), 0) FROM ziper.auth_codes WHERE flow_id = ?",
-				Integer.class, flowId);
-	}
-
 	public void insert(UUID flowId, String email, String codeHash, String requesterKey, Instant requestedAt,
 			Instant expiredAt) {
 		jdbc.update(
@@ -72,6 +62,34 @@ public class EmailVerificationRepository {
 
 	public void markVerified(long id, Instant at) {
 		jdbc.update("UPDATE ziper.auth_codes SET verified_at = ? WHERE id = ?", Timestamp.from(at), id);
+	}
+
+	public EmailFailures failuresByEmail(String email) {
+		List<EmailFailures> values = jdbc
+				.query("SELECT failed_attempts, last_failed_at, locked_until FROM ziper.email_verification_failures "
+						+ "WHERE email = ?", (result, row) -> {
+							OffsetDateTime lockedUntil = result.getObject("locked_until", OffsetDateTime.class);
+							return new EmailFailures(result.getInt("failed_attempts"),
+									result.getObject("last_failed_at", OffsetDateTime.class).toInstant(),
+									lockedUntil == null ? null : lockedUntil.toInstant());
+						}, email);
+		return values.isEmpty() ? null : values.getFirst();
+	}
+
+	public void saveFailures(String email, int failedAttempts, Instant lastFailedAt, Instant lockedUntil) {
+		jdbc.update(
+				"INSERT INTO ziper.email_verification_failures (email, failed_attempts, last_failed_at, locked_until) "
+						+ "VALUES (?, ?, ?, ?) ON CONFLICT (email) DO UPDATE SET failed_attempts = EXCLUDED.failed_attempts, "
+						+ "last_failed_at = EXCLUDED.last_failed_at, locked_until = EXCLUDED.locked_until",
+				email, failedAttempts, Timestamp.from(lastFailedAt),
+				lockedUntil == null ? null : Timestamp.from(lockedUntil));
+	}
+
+	public void clearFailures(String email) {
+		jdbc.update("DELETE FROM ziper.email_verification_failures WHERE email = ?", email);
+	}
+
+	public record EmailFailures(int failedAttempts, Instant lastFailedAt, Instant lockedUntil) {
 	}
 
 	public record AuthCode(long id, String email, String codeHash, Instant expiredAt, boolean verified,
