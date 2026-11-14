@@ -6,7 +6,7 @@ import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
 
 public enum OAuthProvider {
-	APPLE, NAVER;
+	APPLE, NAVER, KAKAO;
 
 	public static OAuthProvider from(String value) {
 		if (value == null || value.isBlank()) {

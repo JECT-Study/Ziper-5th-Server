@@ -4,7 +4,7 @@
 
 Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키지는 `com.ject.ziper`입니다.
 
-업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안(JWT·OAuth 검증 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정입니다.
+업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안(JWT·OAuth 검증 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정이며, 업무 도메인으로 인증(`auth`), 회원(`user`), 보드(`board`)가 있습니다.
 
 이메일 인증의 HTTP 계약·DB 발급 기록·요청 제한·번호 확인은 `domain/auth`가 맡습니다. `global/security`의 `EmailCodeHmac`은 별도 키로 번호와 요청자 식별자를 해시하며 비밀이나 번호 원문을 로그에 남기지 않습니다.
 
@@ -80,3 +80,5 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 외부 Sentry 지표와 opt-in 전송 검증은 [운영 문서](operations.md#애플리케이션-지표)를 따릅니다. 공개 HTTPS 상태 검증 도구 `scripts/verify-public-health.py`는 `/livez`·`/readyz`의 직접 200 응답, 상태 전용 JSON, 캐시 금지와 세션 미생성을 확인합니다. `scripts/test-public-health.py`가 실제 로컬 HTTP fixture에서 정상 응답과 리다이렉트·오류·캐시·정보 노출 응답의 거부를 검사하며 `check.sh`에 포함됩니다. 이 테스트는 운영 TLS와 Sentry의 외부 점검을 대신하지 않습니다.
 
 공개 배포 검증기의 `--expected-release`와 `--expected-origin`은 함께 지정한다. 각각 40자리 소문자 SHA와 home 또는 cloudrun을 받으며 두 probe의 검증된 응답 헤더가 모두 일치해야 한다. 이전 릴리스·누락·불일치는 재시도하지 않는다. `scripts/test-public-health.py`는 실제 HTTP fixture로 헤더·content negotiation·응답 계약을 검사하고 가상 시계로 준비 한도와 연속 성공 초기화를 확인한다.
+
+로컬 OAuth 리뷰 데모 도구 `scripts/oauth-e2e-demo.py`는 기본 `--mode mock`에서 외부 개발자 계정이나 비밀 키 없이 로컬 임시 RSA JWKS 및 Mock IdP(Apple·Naver·Kakao)와 원클릭 테스트 UI(`127.0.0.1:5173`)를 제공해 실제 `POST /api/v1/auth/oauth/{provider}`, `/reissue`, `/logout` 흐름을 검증할 수 있게 합니다. `--mode env`는 서버 프로세스의 환경 변수 또는 Git 제외 파일(`.env.oauth-demo`)에만 `client_id`·`client_secret`·`.p8`를 보관해 브라우저에 비밀을 노출하지 않고 실 OAuth E2E 데모를 실행합니다. `scripts/test-oauth-e2e-demo.py`가 키 생성·Mock IdP 왕복·비밀 미노출·프록시 경로 제한을 검사하며 `check.sh`에 포함됩니다.

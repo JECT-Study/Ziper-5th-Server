@@ -95,6 +95,7 @@ app:
     apple-jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
     apple-client-ids: ${APPLE_CLIENT_IDS:}
     naver-user-info-uri: ${NAVER_USER_INFO_URI:https://openapi.naver.com/v1/nid/me}
+    kakao-user-info-uri: ${KAKAO_USER_INFO_URI:https://kapi.kakao.com/v2/user/me}
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}

@@ -10,18 +10,19 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
 @ConfigurationProperties("app.security")
 public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
 		List<String> allowedOrigins, Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds,
-		String appleIssuer, String appleJwksUri, List<String> appleClientIds, String naverUserInfoUri) {
+		String appleIssuer, String appleJwksUri, List<String> appleClientIds, String naverUserInfoUri,
+		String kakaoUserInfoUri) {
 
 	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
 			List<String> allowedOrigins) {
-		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, null, null, null, null, null, null);
+		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, null, null, null, null, null, null, null);
 	}
 
 	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience, List<String> allowedOrigins,
 			Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds, String appleIssuer,
 			String appleJwksUri, List<String> appleClientIds) {
 		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, accessTokenExpirationSeconds,
-				refreshTokenExpirationSeconds, appleIssuer, appleJwksUri, appleClientIds, null);
+				refreshTokenExpirationSeconds, appleIssuer, appleJwksUri, appleClientIds, null, null);
 	}
 
 	@Override
@@ -30,7 +31,8 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 				+ ", allowedOrigins=" + allowedOrigins + ", accessTokenExpirationSeconds="
 				+ accessTokenExpirationSeconds + ", refreshTokenExpirationSeconds=" + refreshTokenExpirationSeconds
 				+ ", appleIssuer=" + appleIssuer + ", appleJwksUri=" + appleJwksUri + ", appleClientIds="
-				+ appleClientIds + ", naverUserInfoUri=" + naverUserInfoUri + "]";
+				+ appleClientIds + ", naverUserInfoUri=" + naverUserInfoUri + ", kakaoUserInfoUri=" + kakaoUserInfoUri
+				+ "]";
 	}
 
 	@ConstructorBinding
@@ -80,5 +82,8 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 		naverUserInfoUri = naverUserInfoUri == null || naverUserInfoUri.isBlank()
 				? "https://openapi.naver.com/v1/nid/me"
 				: naverUserInfoUri.trim();
+		kakaoUserInfoUri = kakaoUserInfoUri == null || kakaoUserInfoUri.isBlank()
+				? "https://kapi.kakao.com/v2/user/me"
+				: kakaoUserInfoUri.trim();
 	}
 }
