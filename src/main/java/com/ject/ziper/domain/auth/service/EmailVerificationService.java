@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ject.ziper.domain.auth.repository.EmailVerificationRepository;
 import com.ject.ziper.domain.auth.repository.EmailVerificationRepository.AuthCode;
+import com.ject.ziper.domain.auth.repository.EmailVerificationRepository.EmailFailures;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
 import com.ject.ziper.global.security.EmailCodeHmac;
@@ -26,9 +27,11 @@ import com.ject.ziper.global.security.EmailCodeHmac;
 public class EmailVerificationService {
 	private static final Duration CODE_LIFETIME = Duration.ofMinutes(3);
 	private static final Duration LIMIT_WINDOW = Duration.ofHours(1);
-	private static final int EMAIL_HOURLY_LIMIT = 5;
 	private static final int REQUESTER_HOURLY_LIMIT = 20;
 	private static final int INPUT_LIMIT = 5;
+	// 이메일별 오입력 5회에 도달하면 이 시간 동안 발송·재발송·확인을 막고, 지나면 횟수를 초기화한다.
+	// 잠기지 않은 실패 기록도 마지막 실패 후 이 시간이 지나면 초기화한다.
+	private static final Duration LOCK_DURATION = Duration.ofMinutes(30);
 
 	private final EmailVerificationRepository repository;
 	private final JavaMailSender mailSender;
@@ -58,6 +61,7 @@ public class EmailVerificationService {
 		transactions.executeWithoutResult(status -> {
 			repository.lock("email:" + email);
 			repository.lock("requester:" + requesterKey);
+			rejectLocked(email, Instant.now());
 			checkLimits(email, requesterKey);
 			insert(flowId, email, requesterKey, code);
 		});
@@ -71,11 +75,9 @@ public class EmailVerificationService {
 		String email = transactions.execute(status -> {
 			repository.lock("flow:" + flowId);
 			AuthCode latest = activeFlow(flowId);
-			if (repository.failuresByFlow(flowId) >= INPUT_LIMIT) {
-				throw new BusinessException(ErrorCode.EMAIL_CODE_ATTEMPTS_EXCEEDED);
-			}
 			repository.lock("email:" + latest.email());
 			repository.lock("requester:" + requesterKey);
+			rejectLocked(latest.email(), Instant.now());
 			checkLimits(latest.email(), requesterKey);
 			insert(flowId, latest.email(), requesterKey, code);
 			return latest.email();
@@ -87,22 +89,26 @@ public class EmailVerificationService {
 		ErrorCode failure = transactions.execute(status -> {
 			repository.lock("flow:" + flowId);
 			AuthCode latest = activeFlow(flowId);
-			int failures = repository.failuresByFlow(flowId);
-			if (failures >= INPUT_LIMIT) {
+			repository.lock("email:" + latest.email());
+			Instant now = Instant.now();
+			FailureState state = failureState(latest.email(), now);
+			if (state.locked()) {
 				return ErrorCode.EMAIL_CODE_ATTEMPTS_EXCEEDED;
 			}
-			if (!latest.expiredAt().isAfter(Instant.now())) {
+			if (!latest.expiredAt().isAfter(now)) {
 				return ErrorCode.EMAIL_CODE_EXPIRED;
 			}
 			byte[] expected = HexFormat.of().parseHex(latest.codeHash());
 			byte[] actual = HexFormat.of().parseHex(hmac.hash("code:" + flowId + ":" + code));
 			if (!MessageDigest.isEqual(expected, actual)) {
 				repository.incrementFailure(latest.id());
-				return failures + 1 >= INPUT_LIMIT
-						? ErrorCode.EMAIL_CODE_ATTEMPTS_EXCEEDED
-						: ErrorCode.EMAIL_CODE_INVALID;
+				int failures = state.failedAttempts() + 1;
+				Instant lockedUntil = failures >= INPUT_LIMIT ? now.plus(LOCK_DURATION) : null;
+				repository.saveFailures(latest.email(), failures, now, lockedUntil);
+				return lockedUntil != null ? ErrorCode.EMAIL_CODE_ATTEMPTS_EXCEEDED : ErrorCode.EMAIL_CODE_INVALID;
 			}
-			repository.markVerified(latest.id(), Instant.now());
+			repository.markVerified(latest.id(), now);
+			repository.clearFailures(latest.email());
 			return null;
 		});
 		if (failure != null) {
@@ -117,12 +123,13 @@ public class EmailVerificationService {
 			if (latest == null) {
 				throw new BusinessException(ErrorCode.EMAIL_FLOW_INVALID);
 			}
-			int failedAttempts = repository.failuresByFlow(flowId);
+			FailureState failures = failureState(latest.email(), Instant.now());
+			int failedAttempts = failures.failedAttempts();
 			long remainingSeconds = latest.verified() || latest.consumed()
 					? 0
 					: Math.max(0, (Duration.between(Instant.now(), latest.expiredAt()).toMillis() + 999) / 1000);
 			return new VerificationStatus(failedAttempts, Math.max(0, INPUT_LIMIT - failedAttempts), latest.expiredAt(),
-					remainingSeconds, latest.verified());
+					remainingSeconds, latest.verified(), failures.lockedUntil());
 		});
 	}
 
@@ -134,11 +141,31 @@ public class EmailVerificationService {
 		return latest;
 	}
 
+	private void rejectLocked(String email, Instant now) {
+		if (failureState(email, now).locked()) {
+			throw new BusinessException(ErrorCode.EMAIL_CODE_ATTEMPTS_EXCEEDED);
+		}
+	}
+
+	private FailureState failureState(String email, Instant now) {
+		EmailFailures failures = repository.failuresByEmail(email);
+		if (failures == null) {
+			return FailureState.NONE;
+		}
+		if (failures.lockedUntil() != null) {
+			return failures.lockedUntil().isAfter(now)
+					? new FailureState(failures.failedAttempts(), failures.lockedUntil())
+					: FailureState.NONE;
+		}
+		return failures.lastFailedAt().plus(LOCK_DURATION).isAfter(now)
+				? new FailureState(failures.failedAttempts(), null)
+				: FailureState.NONE;
+	}
+
 	private void checkLimits(String email, String requesterKey) {
 		Instant now = Instant.now();
 		Instant previous = repository.lastRequestedAt(email);
 		if ((previous != null && previous.isAfter(now.minus(CODE_LIFETIME)))
-				|| repository.countByEmail(email, now.minus(LIMIT_WINDOW)) >= EMAIL_HOURLY_LIMIT
 				|| repository.countByRequester(requesterKey, now.minus(LIMIT_WINDOW)) >= REQUESTER_HOURLY_LIMIT) {
 			throw new BusinessException(ErrorCode.EMAIL_REQUEST_LIMITED);
 		}
@@ -172,6 +199,14 @@ public class EmailVerificationService {
 	}
 
 	public record VerificationStatus(int failedAttempts, int remainingAttempts, Instant expiresAt,
-			long remainingSeconds, boolean verified) {
+			long remainingSeconds, boolean verified, Instant lockedUntil) {
+	}
+
+	private record FailureState(int failedAttempts, Instant lockedUntil) {
+		static final FailureState NONE = new FailureState(0, null);
+
+		boolean locked() {
+			return lockedUntil != null;
+		}
 	}
 }

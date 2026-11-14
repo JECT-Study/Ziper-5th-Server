@@ -54,6 +54,7 @@ class EmailVerificationIntegrationTest extends PostgresTestSupport {
 	@BeforeEach
 	void clearCodes() {
 		jdbc.update("DELETE FROM ziper.auth_codes");
+		jdbc.update("DELETE FROM ziper.email_verification_failures");
 	}
 
 	@Test
@@ -105,12 +106,71 @@ class EmailVerificationIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
-	void 같은이메일로다섯번요청했을때_추가발급을요청하면_시간당한도로거부한다() throws Exception {
-		for (int request = 0; request < 5; request++) {
+	void 같은이메일로다섯번요청했을때_삼분간격을지켜추가발급하면_이메일시간당한도없이발송한다() throws Exception {
+		for (int request = 0; request < 6; request++) {
 			ageLatest(issue(EMAIL));
 		}
-		mvc.perform(post(PATH).contentType("application/json").content("{\"email\":\"" + EMAIL + "\"}"))
-				.andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("EMAIL_REQUEST_LIMITED"));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.auth_codes WHERE email = ?", Integer.class, EMAIL))
+				.isEqualTo(6);
+	}
+
+	@Test
+	void 한흐름에서네번틀리고새흐름에서한번더틀렸을때_발급재전송확인을요청하면_이메일단위로잠겨모두거부한다() throws Exception {
+		UUID first = issue(EMAIL);
+		failVerify(first, 4);
+		ageLatest(first);
+		UUID second = issue(EMAIL);
+		String code = sentCode();
+		mvc.perform(post(PATH + "/" + second + "/verify").contentType("application/json")
+				.content("{\"code\":\"" + wrongCodeFor(code) + "\"}")).andExpect(status().isTooManyRequests())
+				.andExpect(jsonPath("$.code").value("EMAIL_CODE_ATTEMPTS_EXCEEDED"));
+		mvc.perform(post(PATH + "/" + second + "/verify").contentType("application/json")
+				.content("{\"code\":\"" + code + "\"}")).andExpect(status().isTooManyRequests())
+				.andExpect(jsonPath("$.code").value("EMAIL_CODE_ATTEMPTS_EXCEEDED"));
+		ageLatest(second);
+		mvc.perform(post(PATH + "/" + second + "/resend")).andExpect(status().isTooManyRequests())
+				.andExpect(jsonPath("$.code").value("EMAIL_CODE_ATTEMPTS_EXCEEDED"));
+		mvc.perform(post(PATH).contentType("application/json").content("{\"email\":\"Member@Example.com\"}"))
+				.andExpect(status().isTooManyRequests())
+				.andExpect(jsonPath("$.code").value("EMAIL_CODE_ATTEMPTS_EXCEEDED"));
+		MvcResult response = mvc.perform(get(PATH + "/" + second)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.failedAttempts").value(5)).andExpect(jsonPath("$.remainingAttempts").value(0))
+				.andReturn();
+		Instant lockedUntil = Instant
+				.parse(mapper.readTree(response.getResponse().getContentAsString()).get("lockedUntil").asText());
+		assertThat(lockedUntil).isAfter(Instant.now().plusSeconds(29 * 60))
+				.isBefore(Instant.now().plusSeconds(31 * 60));
+		issue("other@example.com");
+	}
+
+	@Test
+	void 잠기고삼십분이지났을때_같은이메일로다시인증하면_횟수를초기화하고성공한다() throws Exception {
+		UUID locked = issue(EMAIL);
+		failVerify(locked, 5);
+		ageLatest(locked);
+		ageFailures(31);
+		UUID retry = issue(EMAIL);
+		mvc.perform(get(PATH + "/" + retry)).andExpect(status().isOk()).andExpect(jsonPath("$.failedAttempts").value(0))
+				.andExpect(jsonPath("$.remainingAttempts").value(5)).andExpect(jsonPath("$.lockedUntil").isEmpty());
+		String code = sentCode();
+		mvc.perform(post(PATH + "/" + retry + "/verify").contentType("application/json")
+				.content("{\"code\":\"" + wrongCodeFor(code) + "\"}")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("EMAIL_CODE_INVALID"));
+		mvc.perform(get(PATH + "/" + retry)).andExpect(jsonPath("$.failedAttempts").value(1));
+		mvc.perform(post(PATH + "/" + retry + "/verify").contentType("application/json")
+				.content("{\"code\":\"" + code + "\"}")).andExpect(status().isNoContent());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.email_verification_failures", Integer.class))
+				.isZero();
+	}
+
+	@Test
+	void 잠기지않은실패후삼십분이지났을때_다시틀리면_첫번째실패로센다() throws Exception {
+		UUID flowId = issue(EMAIL);
+		failVerify(flowId, 4);
+		ageFailures(31);
+		failVerify(flowId, 1);
+		mvc.perform(get(PATH + "/" + flowId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.failedAttempts").value(1)).andExpect(jsonPath("$.remainingAttempts").value(4));
 	}
 
 	@Test
@@ -166,6 +226,25 @@ class EmailVerificationIntegrationTest extends PostgresTestSupport {
 		mvc.perform(post(PATH).contentType("application/json").content("{\"email\":\"" + EMAIL + "\"}"))
 				.andExpect(status().isInternalServerError());
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.auth_codes", Integer.class)).isOne();
+	}
+
+	private void failVerify(UUID flowId, int times) throws Exception {
+		String wrongCode = wrongCodeFor(sentCode());
+		for (int attempt = 0; attempt < times; attempt++) {
+			mvc.perform(post(PATH + "/" + flowId + "/verify").contentType("application/json")
+					.content("{\"code\":\"" + wrongCode + "\"}"));
+		}
+	}
+
+	private String wrongCodeFor(String code) {
+		return code.equals("000000") ? "111111" : "000000";
+	}
+
+	private void ageFailures(int minutes) {
+		jdbc.update(
+				"UPDATE ziper.email_verification_failures SET last_failed_at = last_failed_at - ? * INTERVAL '1 minute', "
+						+ "locked_until = locked_until - ? * INTERVAL '1 minute'",
+				minutes, minutes);
 	}
 
 	private UUID issue(String email) throws Exception {
