@@ -46,6 +46,7 @@ public class SecurityConfiguration {
 			"/actuator/health/readiness"};
 	private static final String[] AUTH_PUBLIC_PATHS = {"/api/v1/auth/oauth/*", "/api/v1/auth/reissue",
 			"/api/v1/auth/logout"};
+	private static final String[] PUBLIC_GET_PATHS = {"/api/v1/users/nickname/availability"};
 
 	@Bean
 	JwtDecoder jwtDecoder(SecurityProperties properties) {
@@ -90,8 +91,8 @@ public class SecurityConfiguration {
 				.authorizeHttpRequests(authorize -> authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 						.requestMatchers(HttpMethod.GET, PROBES).permitAll().requestMatchers(HttpMethod.HEAD, PROBES)
 						.permitAll().requestMatchers(HttpMethod.POST, AUTH_PUBLIC_PATHS).permitAll()
-						.requestMatchers("/actuator/**").denyAll()
-						.requestMatchers(HttpMethod.GET, OpenApiConfiguration.PATHS)
+						.requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS).permitAll().requestMatchers("/actuator/**")
+						.denyAll().requestMatchers(HttpMethod.GET, OpenApiConfiguration.PATHS)
 						.access((authentication, context) -> new AuthorizationDecision(docs.enabled()))
 						.requestMatchers(HttpMethod.HEAD, OpenApiConfiguration.PATHS)
 						.access((authentication, context) -> new AuthorizationDecision(docs.enabled()))
