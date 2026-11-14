@@ -30,7 +30,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-aop'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
-    implementation platform('io.sentry:sentry-bom:8.62.0')
+    implementation platform('io.sentry:sentry-bom:8.63.0')
     implementation 'io.sentry:sentry-spring-boot-starter-jakarta'
     implementation 'io.sentry:sentry-jdbc'
     implementation 'io.sentry:sentry-async-profiler'
