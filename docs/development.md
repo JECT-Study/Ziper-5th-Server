@@ -4,7 +4,7 @@
 
 Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키지는 `com.ject.ziper`입니다.
 
-업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안(JWT·OAuth 검증 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정입니다.
+업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안(JWT·OAuth 검증 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정이며, 업무 도메인으로 인증(`auth`), 회원(`user`), 보드(`board`)가 있습니다.
 
 컨트롤러는 HTTP 입출력을 처리하고 서비스는 업무 규칙과 트랜잭션을 담당합니다. 엔티티를 API 응답으로 직접 노출하지 않습니다. 웹과 모바일 클라이언트가 같은 API를 사용할 예정입니다.
 
@@ -28,7 +28,7 @@ Checkstyle의 `MatchXpath` 규칙 `BusinessCatch`는 `com.ject.ziper.domain` 아
 
 Checkstyle의 `MatchXpath` 규칙 `FullyQualifiedName`은 운영·테스트 코드에서 `import`, `package` 선언 밖의 패키지 한정 이름(`java.util.Locale.ROOT`, `@org.springframework.stereotype.Service` 등)을 금지합니다. 타입과 정적 멤버는 항상 `import` 또는 `import static`으로 가져옵니다. 소문자로 시작하는 이름 뒤에 대문자로 시작하는 이름이 이어지는 점 표기를 위반으로 판단하므로 인스턴스로 정적 상수에 접근하는 코드도 함께 거부됩니다. 문자열·주석은 대상이 아니며 허용 목록에 등록할 수 없습니다.
 
-ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업무 서비스의 Servlet·Spring Web 의존, 세션 의존·요청 세션 API 호출, 업무 패키지의 사용자 정의 `RuntimeException`을 검사합니다. 예상한 업무 4xx에는 공통 `BusinessException`을 사용합니다. 현재 업무 클래스가 없으므로 별도 정상·위반 fixture 계약 테스트로 규칙의 탐지 동작도 확인합니다. 이 검사는 모든 메모리 상태나 모든 동적 호출의 안전성을 보장하지 않습니다.
+ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업무 서비스의 Servlet·Spring Web 의존, 세션 의존·요청 세션 API 호출, 업무 패키지의 사용자 정의 `RuntimeException`을 검사합니다. 예상한 업무 4xx에는 공통 `BusinessException`을 사용합니다. 실제 업무 클래스(`domain/user`)와 함께 별도 정상·위반 fixture 계약 테스트로 규칙의 탐지 동작도 확인합니다. 이 검사는 모든 메모리 상태나 모든 동적 호출의 안전성을 보장하지 않습니다.
 
 ## 변경 검증
 

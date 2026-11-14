@@ -37,5 +37,5 @@
 - 0007의 고정 Infra workflow는 불변 OIDC subject와 복구 lease 중 배포 차단도 포함합니다. 실제 인증·독립 timer·장애 실험 증거는 Infra PR #1에서 구분합니다.
 
 - 0007이 호출하는 종료 후 재기동 정책은 Infra ADR 0009에서 관리합니다. 운영 컨테이너 정책과 전체 다음 BIOS 부팅의 검증 범위를 구분합니다.
-
 - [0008 서비스·쿼리 추적과 성능 데이터 경계](adr/0008-service-and-query-tracing.md)
+- [0009 소셜 OAuth 로그인과 자체 JWT·세션 수명 주기](adr/0009-oauth-login-and-token-lifecycle.md)
