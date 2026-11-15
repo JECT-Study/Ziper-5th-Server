@@ -67,13 +67,13 @@ public class EmailVerificationController {
 		VerificationStatus current = service.status(flowId);
 		return ResponseEntity.ok().cacheControl(CacheControl.noStore())
 				.body(new StatusResponse(current.failedAttempts(), current.remainingAttempts(), current.expiresAt(),
-						current.remainingSeconds(), current.verified()));
+						current.remainingSeconds(), current.verified(), current.lockedUntil()));
 	}
 
 	public record IssueResponse(UUID flowId) {
 	}
 
 	public record StatusResponse(int failedAttempts, int remainingAttempts, Instant expiresAt, long remainingSeconds,
-			boolean verified) {
+			boolean verified, Instant lockedUntil) {
 	}
 }
