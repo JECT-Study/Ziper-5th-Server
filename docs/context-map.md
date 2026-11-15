@@ -36,3 +36,4 @@
 - 0007의 고정 Infra workflow는 불변 OIDC subject와 복구 lease 중 배포 차단도 포함합니다. 실제 인증·독립 timer·장애 실험 증거는 Infra PR #1에서 구분합니다.
 
 - 0007이 호출하는 종료 후 재기동 정책은 Infra ADR 0009에서 관리합니다. 운영 컨테이너 정책과 전체 다음 BIOS 부팅의 검증 범위를 구분합니다.
+- [0012 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0012-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체

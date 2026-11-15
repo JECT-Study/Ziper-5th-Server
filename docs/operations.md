@@ -110,7 +110,7 @@ SENTRY_LIVE_VERIFICATION=true ./gradlew test --tests '*SentryLiveVerificationTes
 
 ## 첫 홈서버 운영 배포
 
-[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 둡니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
+[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. 당시에는 `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 두었습니다. 이 절은 첫 배포 이력이며, 런타임 비밀 공급은 [ADR 0012](adr/0012-secret-manager-single-source.md)의 Secret Manager 고정 버전 방식으로 대체되었습니다. `deployment/home/`은 첫 배포 당시의 사본이고 현재 운영 계약은 Infra 저장소가 소유합니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
 
 작업자가 검증한 release 이미지를 전달하고 `ziper-server:<전체 SHA>`로 로드합니다. `/opt/ziper/releases/<전체 SHA>/`에는 `compose.yml`, `deploy.sh`와 검사한 이미지 ID 파일 `image-id`를 둡니다. 스크립트가 이미지 ID를 다시 대조하며 JAR를 다시 빌드하지 않습니다.
 
