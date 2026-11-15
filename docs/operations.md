@@ -149,9 +149,26 @@ SENTRY_LIVE_VERIFICATION=true ./gradlew test --tests '*SentryLiveVerificationTes
 
 이 설정은 프로젝트 데이터 접근을 분리하며 이슈 조작까지 금지하는 읽기 전용 설정은 아닙니다. 현재 추가 초대 명단은 전달되지 않았습니다. 실제 초대 구성원이 로그인했을 때 담당 프로젝트만 접근할 수 있는지도 별도로 확인합니다.
 
+## 설정·비밀 키 추가와 제거
+
+앱 설정은 `application.yml`의 `${KEY}` placeholder로 읽습니다. 로컬은 환경 변수로, 운영의 홈과 Cloud Run은 Secret Manager 고정 버전에서 만든 properties 파일로 같은 키를 공급합니다([ADR 0013](adr/0013-secret-manager-single-source.md)). 새 키를 추가할 때 수정할 위치는 다음과 같습니다.
+
+| 위치 | 수정 내용 |
+| --- | --- |
+| `src/main/resources/application.yml` | `${KEY}` 또는 `${KEY:기본값}` 참조. 운영에서 반드시 필요한 비밀은 기본값을 두지 않거나 시작 검증을 추가 |
+| `.env.example` | 로컬 예시 값 또는 빈 값. 비밀은 `REPLACE_WITH_...` 형태로 두고 실제 값을 넣지 않음 |
+| `scripts/local-setup.sh` | 로컬에서 무작위로 만들 수 있는 비밀이면 생성 규칙 추가 |
+| `compose.yml`의 `app.environment` | 로컬 Compose는 나열한 변수만 앱에 전달하므로 `KEY: ${KEY:-}` 추가 |
+| `src/test/resources/application-test.yml` | 테스트에 필요한 값이면 고정 테스트 값 추가 |
+| Secret Manager(Infra 절차) | `MIGRATION_*`는 `ziper-home-migration-properties`, 나머지는 `ziper-runtime-properties`에 새 버전 추가 |
+| Infra `config/production.json` | `secretVersions`를 새 버전으로 갱신 |
+| `.github/workflows/deploy-production.yml` | `uses`와 `infra_sha`를 그 Infra main SHA로 함께 갱신한 뒤 main에서 배포 |
+
+운영 값 반영 명령·순서와 이전 버전 비활성화는 [Infra 운영 문서](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/operations.md#운영-비밀-교체와-최초-이관)를 따릅니다. 기본값 없는 키는 운영 값을 먼저 반영한 뒤 그 키를 쓰는 앱을 배포합니다. 키를 제거할 때는 참조를 없앤 앱을 먼저 배포한 뒤 값을 뺍니다. GitHub Secrets, Cloudflare Worker Secrets와 홈 Tunnel 토큰은 Secret Manager 범위 밖입니다.
+
 ## 첫 홈서버 운영 배포
 
-[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 둡니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
+[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. 당시에는 `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 두었습니다. 이 절은 첫 배포 이력이며, 런타임 비밀 공급은 [ADR 0013](adr/0013-secret-manager-single-source.md)의 Secret Manager 고정 버전 방식으로 대체되었습니다. `deployment/home/`은 첫 배포 당시의 사본이고 현재 운영 계약은 Infra 저장소가 소유합니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
 
 작업자가 검증한 release 이미지를 전달하고 `ziper-server:<전체 SHA>`로 로드합니다. `/opt/ziper/releases/<전체 SHA>/`에는 `compose.yml`, `deploy.sh`와 검사한 이미지 ID 파일 `image-id`를 둡니다. 스크립트가 이미지 ID를 다시 대조하며 JAR를 다시 빌드하지 않습니다.
 
