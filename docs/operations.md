@@ -16,11 +16,11 @@ CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향
 
 `EMAIL_MAIL_ENABLED`의 기본값은 `false`입니다. 활성화할 때 `EMAIL_FROM`, 별도 Base64 인코딩 32바이트 이상 키 `EMAIL_CODE_SECRET_BASE64`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`를 런타임 환경에서 공급합니다. Gmail을 쓰면 호스트 `smtp.gmail.com`, 포트 `587`, 발신 주소와 사용자 이름은 같은 계정으로 설정하고 `MAIL_PASSWORD`에는 해당 계정의 앱 비밀번호를 사용합니다. SMTP 인증·STARTTLS와 서버 인증서 호스트 검증을 켜며 연결·읽기·쓰기 시간 제한은 각각 5초입니다. SMTP는 readiness 검사에 포함하지 않습니다.
 
-공개 API는 `POST /api/v1/auth/email/verifications`(본문 `{"email":"member@example.com"}`, 성공 `201`과 `flowId`), `POST /api/v1/auth/email/verifications/{flowId}/resend`(성공 `204`), `POST /api/v1/auth/email/verifications/{flowId}/verify`(본문 `{"code":"123456"}`, 성공 `204`)입니다. `GET /api/v1/auth/email/verifications/{flowId}`는 `failedAttempts`, `remainingAttempts`, `expiresAt`, `remainingSeconds`, `verified`를 `Cache-Control: no-store`로 반환합니다. 클라이언트는 이 상태로 오입력 횟수와 타이머를 표시하고, 서버의 만료·횟수 판정을 최종 결과로 사용합니다. 번호는 6자리이고 3분 동안 유효합니다. 재전송은 같은 흐름에 새 번호를 추가하며 마지막 발송 뒤 3분이 지나야 합니다. 같은 이메일은 시간당 5회, 같은 연결 출처는 시간당 20회까지 발송할 수 있고 초과 시 `EMAIL_REQUEST_LIMITED`(`429`)를 반환합니다.
+공개 API는 `POST /api/v1/auth/email/verifications`(본문 `{"email":"member@example.com"}`, 성공 `201`과 `flowId`), `POST /api/v1/auth/email/verifications/{flowId}/resend`(성공 `204`), `POST /api/v1/auth/email/verifications/{flowId}/verify`(본문 `{"code":"123456"}`, 성공 `204`)입니다. `GET /api/v1/auth/email/verifications/{flowId}`는 이메일 단위 `failedAttempts`, `remainingAttempts`와 `expiresAt`, `remainingSeconds`, `verified`, 잠금 해제 시각 `lockedUntil`(잠기지 않았으면 `null`)을 `Cache-Control: no-store`로 반환합니다. 클라이언트는 이 상태로 오입력 횟수와 타이머를 표시하고, 서버의 만료·횟수 판정을 최종 결과로 사용합니다. 번호는 6자리이고 3분 동안 유효합니다. 재전송은 같은 흐름에 새 번호를 추가하며 마지막 발송 뒤 3분이 지나야 합니다. 같은 연결 출처는 시간당 20회까지 발송할 수 있고, 3분 간격이나 출처 한도를 넘으면 `EMAIL_REQUEST_LIMITED`(`429`)를 반환합니다. 이메일당 시간당 발송 한도는 없습니다.
 
-잘못된 번호는 `EMAIL_CODE_INVALID`(`400`), 만료는 `EMAIL_CODE_EXPIRED`(`410`)입니다. 같은 흐름에서 다섯 번째 오입력부터 `EMAIL_CODE_ATTEMPTS_EXCEEDED`(`429`, `인증을 완료하지 못했어요.`)를 반환하며 재전송해도 실패 횟수는 초기화되지 않습니다. 클라이언트는 이 오류 코드로 모달을 표시하고 다른 방법 또는 새 이메일 인증 흐름으로 이동합니다. 검증 성공은 DB의 `verified_at`만 기록하며 회원 가입이나 로그인 토큰을 발급하지 않습니다.
+잘못된 번호는 `EMAIL_CODE_INVALID`(`400`), 만료는 `EMAIL_CODE_EXPIRED`(`410`)입니다. 오입력은 흐름과 관계없이 이메일 단위로 합산합니다. 다섯 번째 오입력에서 해당 이메일을 30분 동안 잠그고 `EMAIL_CODE_ATTEMPTS_EXCEEDED`(`429`, `인증을 완료하지 못했어요.`)를 반환합니다. 잠금 동안 같은 이메일의 발급·재전송·확인도 같은 오류로 거부합니다. 30분이 지나면 횟수가 초기화되며, 잠기지 않은 실패도 마지막 실패 후 30분이 지나면 초기화됩니다. 인증에 성공하면 실패 기록을 지웁니다. 클라이언트는 이 오류 코드로 모달을 표시하고 다른 방법 또는 다른 이메일 인증으로 이동합니다. 검증 성공은 DB의 `verified_at`만 기록하며 회원 가입이나 로그인 토큰을 발급하지 않습니다.
 
-발급 기록은 DB에 먼저 커밋한 뒤 메일을 보냅니다. SMTP 실패는 전역 `5xx` 오류로 전달하고 자동 재발송하지 않으며, 남은 기록에도 발송 제한을 적용합니다. 로컬 Gmail 발송·수신의 검증 범위와 남은 번호 확인·운영 검증은 [검증 이력](verification.md#2026-11-14-jec-43-이메일-인증번호-발송확인)에 기록합니다. [ADR 0009](adr/0009-email-verification-delivery.md)에 이 일관성 경계를 기록했습니다.
+발급 기록은 DB에 먼저 커밋한 뒤 메일을 보냅니다. SMTP 실패는 전역 `5xx` 오류로 전달하고 자동 재발송하지 않으며, 남은 기록에도 발송 제한을 적용합니다. 로컬 Gmail 발송·수신의 검증 범위와 남은 번호 확인·운영 검증은 [검증 이력](verification.md#2026-11-14-jec-43-이메일-인증번호-발송확인)에 기록합니다. [ADR 0009](adr/0009-email-verification-delivery.md)에 이 일관성 경계를, [ADR 0012](adr/0012-email-verification-lockout.md)에 이메일 단위 잠금과 한도 변경을 기록했습니다.
 
 ## 상태 점검
 
@@ -149,9 +149,26 @@ SENTRY_LIVE_VERIFICATION=true ./gradlew test --tests '*SentryLiveVerificationTes
 
 이 설정은 프로젝트 데이터 접근을 분리하며 이슈 조작까지 금지하는 읽기 전용 설정은 아닙니다. 현재 추가 초대 명단은 전달되지 않았습니다. 실제 초대 구성원이 로그인했을 때 담당 프로젝트만 접근할 수 있는지도 별도로 확인합니다.
 
+## 설정·비밀 키 추가와 제거
+
+앱 설정은 `application.yml`의 `${KEY}` placeholder로 읽습니다. 로컬은 환경 변수로, 운영의 홈과 Cloud Run은 Secret Manager 고정 버전에서 만든 properties 파일로 같은 키를 공급합니다([ADR 0013](adr/0013-secret-manager-single-source.md)). 새 키를 추가할 때 수정할 위치는 다음과 같습니다.
+
+| 위치 | 수정 내용 |
+| --- | --- |
+| `src/main/resources/application.yml` | `${KEY}` 또는 `${KEY:기본값}` 참조. 운영에서 반드시 필요한 비밀은 기본값을 두지 않거나 시작 검증을 추가 |
+| `.env.example` | 로컬 예시 값 또는 빈 값. 비밀은 `REPLACE_WITH_...` 형태로 두고 실제 값을 넣지 않음 |
+| `scripts/local-setup.sh` | 로컬에서 무작위로 만들 수 있는 비밀이면 생성 규칙 추가 |
+| `compose.yml`의 `app.environment` | 로컬 Compose는 나열한 변수만 앱에 전달하므로 `KEY: ${KEY:-}` 추가 |
+| `src/test/resources/application-test.yml` | 테스트에 필요한 값이면 고정 테스트 값 추가 |
+| Secret Manager(Infra 절차) | `MIGRATION_*`는 `ziper-home-migration-properties`, 나머지는 `ziper-runtime-properties`에 새 버전 추가 |
+| Infra `config/production.json` | `secretVersions`를 새 버전으로 갱신 |
+| `.github/workflows/deploy-production.yml` | `uses`와 `infra_sha`를 그 Infra main SHA로 함께 갱신한 뒤 main에서 배포 |
+
+운영 값 반영 명령·순서와 이전 버전 비활성화는 [Infra 운영 문서](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/operations.md#운영-비밀-교체와-최초-이관)를 따릅니다. 기본값 없는 키는 운영 값을 먼저 반영한 뒤 그 키를 쓰는 앱을 배포합니다. 키를 제거할 때는 참조를 없앤 앱을 먼저 배포한 뒤 값을 뺍니다. GitHub Secrets, Cloudflare Worker Secrets와 홈 Tunnel 토큰은 Secret Manager 범위 밖입니다.
+
 ## 첫 홈서버 운영 배포
 
-[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. 당시에는 `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 두었습니다. 이 절은 첫 배포 이력이며, 런타임 비밀 공급은 [ADR 0012](adr/0012-secret-manager-single-source.md)의 Secret Manager 고정 버전 방식으로 대체되었습니다. `deployment/home/`은 첫 배포 당시의 사본이고 현재 운영 계약은 Infra 저장소가 소유합니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
+[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. 당시에는 `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 두었습니다. 이 절은 첫 배포 이력이며, 런타임 비밀 공급은 [ADR 0013](adr/0013-secret-manager-single-source.md)의 Secret Manager 고정 버전 방식으로 대체되었습니다. `deployment/home/`은 첫 배포 당시의 사본이고 현재 운영 계약은 Infra 저장소가 소유합니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
 
 작업자가 검증한 release 이미지를 전달하고 `ziper-server:<전체 SHA>`로 로드합니다. `/opt/ziper/releases/<전체 SHA>/`에는 `compose.yml`, `deploy.sh`와 검사한 이미지 ID 파일 `image-id`를 둡니다. 스크립트가 이미지 ID를 다시 대조하며 JAR를 다시 빌드하지 않습니다.
 
