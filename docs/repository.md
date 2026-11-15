@@ -55,7 +55,7 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 
 `Deploy production manually`는 workflow_dispatch로만 시작하고 main만 허용합니다. 실제 배포 코드는 공개 Infra 저장소의 고정 SHA workflow를 재사용합니다. 홈·후속 검증은 같은 production concurrency를 사용하고 실행 중인 배포를 취소하지 않습니다. PR은 운영 Secret이나 배포 권한을 사용하지 않습니다.
 
-현재 이미지는 [Infra ADR 0007](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0007-ghcr-home-delivery.md)에 따라 GHCR에 발행하고 홈서버가 정확한 registry digest를 pull합니다. JAR 해시·OCI config digest를 검증한 뒤 로컬 release tag로 실행하며 SSH에는 8KiB 이하 제어 정보만 전달합니다. 과거 archive·1MiB 진단 이력은 Infra ADR 0004·0005에 남아 있습니다. workflow의 uses와 infra_sha는 같은 실제 Infra main SHA로 함께 갱신하고, 두 저장소의 해당 main CI 성공 후 main에서 수동 실행합니다. develop에도 진입 workflow가 있어 GitHub UI에서 수동 실행을 발견할 수 있습니다.
+현재 이미지는 [Infra ADR 0007](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0007-ghcr-home-delivery.md)에 따라 GHCR에 발행하고 홈서버가 정확한 registry digest를 pull합니다. JAR 해시·OCI config digest를 검증한 뒤 로컬 release tag로 실행하며 SSH에는 64KiB 이하의 제어 정보와 Secret Manager 고정 버전 설정 묶음만 전달합니다([ADR 0012](adr/0012-secret-manager-single-source.md)). 과거 archive·1MiB 진단 이력은 Infra ADR 0004·0005에 남아 있습니다. workflow의 uses와 infra_sha는 같은 실제 Infra main SHA로 함께 갱신하고, 두 저장소의 해당 main CI 성공 후 main에서 수동 실행합니다. develop에도 진입 workflow가 있어 GitHub UI에서 수동 실행을 발견할 수 있습니다.
 
 CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으며, private SSH key·host key pin·Discord webhook은 production 환경에 둡니다. production 환경은 main만 허용합니다. Secret 등록 여부와 인증·채널 수신의 실제 성공은 별개로 검증합니다. 정책·배포 구현·운영 E2E 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 모읍니다.
 

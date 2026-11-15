@@ -41,3 +41,4 @@
 - [0009 이메일 인증번호 발송과 검증 경계](adr/0009-email-verification-delivery.md)
 - [0010 소셜 OAuth 로그인과 자체 JWT·세션 수명 주기](adr/0010-oauth-login-and-token-lifecycle.md)
 - [0011 OAuth 무이메일 회원을 위한 users.email Nullable 완화](adr/0011-nullable-user-email-for-oauth.md)
+- [0012 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0012-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체
