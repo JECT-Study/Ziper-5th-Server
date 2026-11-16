@@ -282,23 +282,33 @@ class DemoConfig:
 
     @classmethod
     def from_env(cls, mode: str, backend_url: str, env: dict[str, str]) -> "DemoConfig":
-        apple_pem = env.get("DEMO_APPLE_PRIVATE_KEY", "").strip()
+        apple_pem = (env.get("DEMO_APPLE_PRIVATE_KEY") or env.get("APPLE_PRIVATE_KEY") or "").strip()
         apple_pem_path = env.get("DEMO_APPLE_PRIVATE_KEY_PATH", "").strip()
         if not apple_pem and apple_pem_path:
             path = Path(apple_pem_path).expanduser()
             if path.is_file():
                 apple_pem = path.read_text(encoding="utf-8")
+        first_apple_id = next(
+            (item.strip() for item in env.get("APPLE_CLIENT_IDS", "").split(",") if item.strip()),
+            "",
+        )
         return cls(
             mode=mode,
             backend_url=backend_url.rstrip("/"),
-            apple_client_id=env.get("DEMO_APPLE_CLIENT_ID") or env.get("APPLE_WEB_CLIENT_ID") or "com.ject.ziper.web",
-            apple_team_id=env.get("DEMO_APPLE_TEAM_ID", "").strip(),
-            apple_key_id=env.get("DEMO_APPLE_KEY_ID", "").strip(),
+            apple_client_id=(
+                env.get("DEMO_APPLE_CLIENT_ID")
+                or env.get("APPLE_AUTH_CLIENT_ID")
+                or env.get("APPLE_WEB_CLIENT_ID")
+                or first_apple_id
+                or "com.ject.ziper.web"
+            ).strip(),
+            apple_team_id=(env.get("DEMO_APPLE_TEAM_ID") or env.get("APPLE_TEAM_ID") or "").strip(),
+            apple_key_id=(env.get("DEMO_APPLE_KEY_ID") or env.get("APPLE_KEY_ID") or "").strip(),
             apple_private_key_pem=apple_pem,
-            naver_client_id=env.get("DEMO_NAVER_CLIENT_ID", "").strip(),
-            naver_client_secret=env.get("DEMO_NAVER_CLIENT_SECRET", "").strip(),
-            kakao_client_id=env.get("DEMO_KAKAO_CLIENT_ID", "").strip(),
-            kakao_client_secret=env.get("DEMO_KAKAO_CLIENT_SECRET", "").strip(),
+            naver_client_id=(env.get("DEMO_NAVER_CLIENT_ID") or env.get("NAVER_CLIENT_ID") or "").strip(),
+            naver_client_secret=(env.get("DEMO_NAVER_CLIENT_SECRET") or env.get("NAVER_CLIENT_SECRET") or "").strip(),
+            kakao_client_id=(env.get("DEMO_KAKAO_CLIENT_ID") or env.get("KAKAO_CLIENT_ID") or "").strip(),
+            kakao_client_secret=(env.get("DEMO_KAKAO_CLIENT_SECRET") or env.get("KAKAO_CLIENT_SECRET") or "").strip(),
         )
 
     def public_config(self) -> dict:
@@ -396,7 +406,49 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div>
       <button onclick="checkHealth('/livez')">GET /livez</button>
       <button onclick="checkHealth('/readyz')">GET /readyz</button>
+      <button onclick="window.open('http://localhost:8080/swagger-ui/index.html', '_blank')">Swagger UI (:8080)</button>
     </div>
+  </div>
+
+  <div id="hostNotice" class="box hidden" style="background:#fffbeb;border-color:#fde68a;">
+    <strong>안내: <code>127.0.0.1</code> 대신 <code>http://localhost:5173</code> 접속 권장</strong>
+    <p class="muted" style="margin:4px 0 8px;">
+      OAuth 콘솔(Kakao·Naver)에 <code>http://localhost:5173</code>을 Trusted Host / Redirect URI로 등록한 경우, 브라우저 주소창도 <code>localhost</code>여야 Redirect URI 불일치(<code>KOE006</code> 등)가 발생하지 않습니다.
+    </p>
+    <button onclick="switchToLocalhost()">http://localhost:5173 으로 전환</button>
+  </div>
+
+  <div class="box">
+    <details>
+      <summary>OAuth 콘솔 Trusted Host (<code>localhost:5173</code>) 및 Redirect URI 등록 가이드</summary>
+      <p class="muted" style="margin:8px 0;">
+        실제 OAuth 콘솔 연동 모드(<code>--mode env</code>)에서 테스트할 때 각 프로바이더 콘솔에 아래 주소를 등록하세요. 무비밀 로컬 모드(<code>--mode mock</code>)는 외부 콘솔 등록 없이 즉시 동작합니다.
+      </p>
+      <div class="grid">
+        <div class="card">
+          <strong>Kakao Developers</strong>
+          <p class="muted" style="margin:4px 0;">내 애플리케이션 &gt; 플랫폼(Web) &amp; 카카오 로그인</p>
+          <label>Web 사이트 도메인</label>
+          <code id="guideKakaoOrigin">http://localhost:5173</code>
+          <label>Redirect URI</label>
+          <code id="guideKakaoRedirect">http://localhost:5173/callback/kakao</code>
+        </div>
+        <div class="card">
+          <strong>Naver Developers</strong>
+          <p class="muted" style="margin:4px 0;">내 애플리케이션 &gt; API 설정 (PC 웹)</p>
+          <label>서비스 URL</label>
+          <code id="guideNaverOrigin">http://localhost:5173</code>
+          <label>Callback URL</label>
+          <code id="guideNaverRedirect">http://localhost:5173/callback/naver</code>
+        </div>
+        <div class="card">
+          <strong>Apple Developer</strong>
+          <p class="muted" style="margin:4px 0;">Identifiers &gt; Services IDs &gt; Sign in with Apple</p>
+          <label>로컬 검증 안내</label>
+          <span class="muted">Apple 콘솔은 <code>https://</code> 실도메인만 허용하므로 로컬호스트에서는 <code>--mode mock</code> 또는 하단 수동 토큰/코드 입력을 사용하세요.</span>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div class="box">
@@ -495,6 +547,19 @@ HTML_TEMPLATE = r"""<!doctype html>
   <script>
     const originUrl = window.location.origin;
     document.getElementById("origin").textContent = originUrl;
+    if (window.location.hostname === "127.0.0.1") {
+      document.getElementById("hostNotice").classList.remove("hidden");
+    }
+    document.getElementById("guideKakaoOrigin").textContent = originUrl;
+    document.getElementById("guideKakaoRedirect").textContent = originUrl + "/callback/kakao";
+    document.getElementById("guideNaverOrigin").textContent = originUrl;
+    document.getElementById("guideNaverRedirect").textContent = originUrl + "/callback/naver";
+
+    function switchToLocalhost() {
+      const url = new URL(window.location.href);
+      url.hostname = "localhost";
+      window.location.href = url.toString();
+    }
 
     let demoConfig = null;
     let latestAccessToken = null;
@@ -1105,12 +1170,21 @@ def ensure_local_postgres(repo_root: Path):
         raise RuntimeError("PostgreSQL did not become ready on 127.0.0.1:5432")
 
 
-def start_backend(repo_root: Path, backend_port: int, ui_port: int, apple_client_id: str, mode: str) -> subprocess.Popen:
+def start_backend(
+    repo_root: Path,
+    backend_port: int,
+    ui_port: int,
+    apple_client_id: str,
+    mode: str,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.Popen:
     if tcp_open("127.0.0.1", backend_port):
         raise RuntimeError(f"Port {backend_port} is already in use; free it or pass --no-backend")
     ensure_local_postgres(repo_root)
     env = dict(os.environ)
     env.update(parse_env_file(repo_root / ".env"))
+    if extra_env:
+        env.update(extra_env)
     env["PORT"] = str(backend_port)
     env["SPRING_PROFILES_ACTIVE"] = "local"
     env["APP_RUNTIME_MODE"] = "local"
@@ -1189,11 +1263,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     repo_root = Path(__file__).resolve().parent.parent
-    merged_env = dict(os.environ)
+    merged_env: dict[str, str] = {}
+    merged_env.update(parse_env_file(repo_root / ".env"))
     env_file = Path(args.env_file)
     if not env_file.is_absolute():
         env_file = repo_root / env_file
     merged_env.update(parse_env_file(env_file))
+    merged_env.update(os.environ)
 
     backend_url = args.backend_url or f"http://127.0.0.1:{args.backend_port}"
     config = DemoConfig.from_env(args.mode, backend_url, merged_env)
@@ -1220,9 +1296,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if not args.no_backend:
             print(f"[oauth-demo] Starting local backend on port {args.backend_port} (mode={args.mode})...", flush=True)
-            backend_proc = start_backend(repo_root, args.backend_port, args.ui_port, config.apple_client_id, args.mode)
-        ui_url = f"http://127.0.0.1:{args.ui_port}/"
-        print(f"[oauth-demo] Ready at {ui_url} (backend={config.backend_url}, mode={args.mode})", flush=True)
+            backend_proc = start_backend(
+                repo_root,
+                args.backend_port,
+                args.ui_port,
+                config.apple_client_id,
+                args.mode,
+                merged_env,
+            )
+        ui_url = f"http://localhost:{args.ui_port}/"
+        print(f"[oauth-demo] Ready at {ui_url} (also http://127.0.0.1:{args.ui_port}/, backend={config.backend_url}, mode={args.mode})", flush=True)
         print("[oauth-demo] Press Ctrl+C to stop.", flush=True)
         if args.open:
             webbrowser.open(ui_url)

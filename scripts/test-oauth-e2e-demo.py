@@ -131,6 +131,33 @@ class OAuthDemoTests(unittest.TestCase):
         self.assertTrue(secret_cfg.public_config()["naver"]["configured"])
         self.assertTrue(secret_cfg.public_config()["kakao"]["configured"])
 
+    def test_from_env_falls_back_to_standard_backend_env_keys_without_leaking_secrets(self):
+        cfg = oauth_demo.DemoConfig.from_env(
+            "env",
+            "http://127.0.0.1:8080",
+            {
+                "APPLE_CLIENT_IDS": "com.ject.ziper.ios,com.ject.ziper.web",
+                "APPLE_AUTH_CLIENT_ID": "com.ject.ziper.web",
+                "APPLE_TEAM_ID": "BACKEND_TEAM_SECRET",
+                "APPLE_KEY_ID": "BACKEND_KEY_SECRET",
+                "APPLE_PRIVATE_KEY": "-----BEGIN PRIVATE KEY-----\\nBACKEND_P8_SECRET\\n-----END PRIVATE KEY-----",
+                "NAVER_CLIENT_ID": "backend-naver-id",
+                "NAVER_CLIENT_SECRET": "BACKEND_NAVER_SECRET",
+                "KAKAO_CLIENT_ID": "backend-kakao-id",
+                "KAKAO_CLIENT_SECRET": "BACKEND_KAKAO_SECRET",
+            },
+        )
+        pub = cfg.public_config()
+        self.assertEqual(pub["apple"]["clientId"], "com.ject.ziper.web")
+        self.assertTrue(pub["apple"]["codeExchangeConfigured"])
+        self.assertEqual(pub["naver"]["clientId"], "backend-naver-id")
+        self.assertTrue(pub["naver"]["configured"])
+        self.assertEqual(pub["kakao"]["clientId"], "backend-kakao-id")
+        self.assertTrue(pub["kakao"]["configured"])
+        serialized = json.dumps(pub)
+        for secret in ("BACKEND_TEAM_SECRET", "BACKEND_KEY_SECRET", "BACKEND_P8_SECRET", "BACKEND_NAVER_SECRET", "BACKEND_KAKAO_SECRET"):
+            self.assertNotIn(secret, serialized)
+
     def test_mock_oauth_flows_apple_naver_kakao_including_email_less(self):
         # 1. Open-redirect protection on mock authorize
         status, _, _ = self._get("/mock/apple/authorize?redirect_uri=http://localhost.evil.com/cb&state=s1&persona=apple-email")
