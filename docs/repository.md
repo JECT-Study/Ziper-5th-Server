@@ -10,6 +10,12 @@ PR은 feature·bug·chore 의도를 구분하고 변경 목적, 동작 변화와
 
 Spring Boot 3.5를 사용하는 동안 springdoc-openapi는 호환되는 2.x를 유지합니다. Dependabot은 Spring Boot와 springdoc의 메이저 업데이트를 제외하며, 프레임워크 메이저 이전은 두 라이브러리의 호환성을 함께 확인하는 변경으로 진행합니다. [springdoc 호환성 안내](https://springdoc.org/faq.html)
 
+## 성능 계측 검증
+
+`sentry-source-upload.yml`은 동일 브랜치·SHA의 성공한 push CI에서 `tested-release`를 받아 이미지 JAR 해시와 bundle ID를 검증한 후 소스 번들만 업로드합니다. 별도 Gradle 빌드로 Debug ID를 다시 만들지 않습니다. Actions 읽기 권한은 그 아티팩트를 내려받는 데만 사용합니다. `sentry-source-upload` 환경과 main/develop 실행 제한은 유지합니다.
+
+성능 계측의 CI는 실제 PostgreSQL과 기록용 Sentry transport로 HTTP·서비스·SQL 연결 및 개인정보 제거를 확인합니다. `SentryTracingLiveVerificationTest`는 기본 skip이며 `scripts/verify-sentry-performance.sh`로 명시적으로 실행합니다. 외부 Sentry 수신 링크·프로파일·환경·릴리스는 PR 증거로 기록하고 운영 검증과 구분합니다.
+
 ## CodeRabbit 연결
 
 `.coderabbit.yaml`은 한국어 리뷰, `develop`·`main` 대상 PR과 초안 PR 제외를 설정합니다. 저장소의 `AGENTS.md`도 리뷰 기준으로 제공합니다. 유료 전용 기능은 요구하지 않습니다.
@@ -49,7 +55,7 @@ Documentation에는 `config/harness/doc-policy.json`에서 변경 경로에 연�
 
 `Deploy production manually`는 workflow_dispatch로만 시작하고 main만 허용합니다. 실제 배포 코드는 공개 Infra 저장소의 고정 SHA workflow를 재사용합니다. 홈·후속 검증은 같은 production concurrency를 사용하고 실행 중인 배포를 취소하지 않습니다. PR은 운영 Secret이나 배포 권한을 사용하지 않습니다.
 
-현재 이미지는 [Infra ADR 0007](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0007-ghcr-home-delivery.md)에 따라 GHCR에 발행하고 홈서버가 정확한 registry digest를 pull합니다. JAR 해시·OCI config digest를 검증한 뒤 로컬 release tag로 실행하며 SSH에는 64KiB 이하의 제어 정보와 Secret Manager 고정 버전 설정 묶음만 전달합니다([ADR 0012](adr/0012-secret-manager-single-source.md)). 과거 archive·1MiB 진단 이력은 Infra ADR 0004·0005에 남아 있습니다. workflow의 uses와 infra_sha는 같은 실제 Infra main SHA로 함께 갱신하고, 두 저장소의 해당 main CI 성공 후 main에서 수동 실행합니다. develop에도 진입 workflow가 있어 GitHub UI에서 수동 실행을 발견할 수 있습니다.
+현재 이미지는 [Infra ADR 0007](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0007-ghcr-home-delivery.md)에 따라 GHCR에 발행하고 홈서버가 정확한 registry digest를 pull합니다. JAR 해시·OCI config digest를 검증한 뒤 로컬 release tag로 실행하며 SSH에는 64KiB 이하의 제어 정보와 Secret Manager 고정 버전 설정 묶음만 전달합니다([ADR 0013](adr/0013-secret-manager-single-source.md)). 과거 archive·1MiB 진단 이력은 Infra ADR 0004·0005에 남아 있습니다. workflow의 uses와 infra_sha는 같은 실제 Infra main SHA로 함께 갱신하고, 두 저장소의 해당 main CI 성공 후 main에서 수동 실행합니다. develop에도 진입 workflow가 있어 GitHub UI에서 수동 실행을 발견할 수 있습니다.
 
 CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으며, private SSH key·host key pin·Discord webhook은 production 환경에 둡니다. production 환경은 main만 허용합니다. Secret 등록 여부와 인증·채널 수신의 실제 성공은 별개로 검증합니다. 정책·배포 구현·운영 E2E 결과는 [Infra PR #1](https://github.com/JECT-Study/Ziper-5th-Infra/pull/1)에 모읍니다.
 
@@ -59,7 +65,7 @@ CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으�
 
 쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
 
-현재 쌍 배포 caller의 두 pin은 `4a0e5b1d71c7107a6b8200d1fe6ab02547041135`이다. [Infra #22](https://github.com/JECT-Study/Ziper-5th-Infra/pull/22)의 Secret 볼륨 교체 수정이 포함된 실제 병합 SHA다. [해당 Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/42372626175)와 Server main CI 성공 후 수동 실행한다. 홈 Docker export 결함에 대한 Registry Raw manifest 식별은 Infra ADR0014를 유지하며 홈 제어 파일의 내용 변경은 없다. 실제 배포·반복 결과는 Infra PR #1에 기록한다.
+현재 쌍 배포 caller의 두 pin은 `7f2a94286a83c3079303957b4f330cd80897b201`이다. [Infra #32](https://github.com/JECT-Study/Ziper-5th-Infra/pull/32)의 `ziper-runtime-properties` 고정 버전 `4`(Mailgun SMTP 및 OAuth 2.0 인가 코드/토큰 검증 설정) 갱신이 포함된 실제 병합 SHA다. [해당 Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/43899303579)와 Server main CI 성공 후 수동 실행한다. 홈 Docker export 결함에 대한 Registry Raw manifest 식별은 Infra ADR0014를 유지하며 홈 제어 파일의 내용 변경은 없다. 실제 배포·반복 결과는 Infra PR #1에 기록한다.
 
 예약 종료 뒤 Docker가 기존 정지 상태를 유지한 사례에 대한 재기동 정책은 Infra ADR 0009가 소유합니다. 새 컨테이너의 실제 정책과 다음 전체 BIOS 부팅은 구분해 검증합니다.
 

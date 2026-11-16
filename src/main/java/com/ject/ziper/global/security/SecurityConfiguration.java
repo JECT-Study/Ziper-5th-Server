@@ -44,6 +44,11 @@ import com.ject.ziper.global.error.ProblemFactory;
 public class SecurityConfiguration {
 	private static final String[] PROBES = {"/livez", "/readyz", "/actuator/health/liveness",
 			"/actuator/health/readiness"};
+	private static final String[] AUTH_PUBLIC_PATHS = {"/api/v1/auth/oauth/*", "/api/v1/auth/oauth/*/code",
+			"/api/v1/auth/reissue", "/api/v1/auth/logout", "/api/v1/auth/email/verifications",
+			"/api/v1/auth/email/verifications/*/resend", "/api/v1/auth/email/verifications/*/verify"};
+	private static final String[] PUBLIC_GET_PATHS = {"/api/v1/users/nickname/availability",
+			"/api/v1/auth/email/verifications/*"};
 
 	@Bean
 	JwtDecoder jwtDecoder(SecurityProperties properties) {
@@ -53,9 +58,11 @@ public class SecurityConfiguration {
 				JwtValidators.createDefaultWithIssuer(properties.jwtIssuer()),
 				jwt -> jwt.getExpiresAt() != null && jwt.getSubject() != null && !jwt.getSubject().isBlank()
 						&& jwt.getAudience() != null && jwt.getAudience().contains(properties.jwtAudience())
-								? OAuth2TokenValidatorResult.success()
-								: OAuth2TokenValidatorResult
-										.failure(new OAuth2Error("invalid_token", "Invalid required claims", null))));
+						&& !JwtTokenProvider.TOKEN_TYPE_REFRESH
+								.equals(jwt.getClaimAsString(JwtTokenProvider.CLAIM_TOKEN_TYPE))
+										? OAuth2TokenValidatorResult.success()
+										: OAuth2TokenValidatorResult.failure(
+												new OAuth2Error("invalid_token", "Invalid required claims", null))));
 		return decoder;
 	}
 
@@ -85,8 +92,9 @@ public class SecurityConfiguration {
 				.requestCache(AbstractHttpConfigurer::disable).logout(AbstractHttpConfigurer::disable)
 				.authorizeHttpRequests(authorize -> authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 						.requestMatchers(HttpMethod.GET, PROBES).permitAll().requestMatchers(HttpMethod.HEAD, PROBES)
-						.permitAll().requestMatchers("/actuator/**").denyAll()
-						.requestMatchers(HttpMethod.GET, OpenApiConfiguration.PATHS)
+						.permitAll().requestMatchers(HttpMethod.POST, AUTH_PUBLIC_PATHS).permitAll()
+						.requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS).permitAll().requestMatchers("/actuator/**")
+						.denyAll().requestMatchers(HttpMethod.GET, OpenApiConfiguration.PATHS)
 						.access((authentication, context) -> new AuthorizationDecision(docs.enabled()))
 						.requestMatchers(HttpMethod.HEAD, OpenApiConfiguration.PATHS)
 						.access((authentication, context) -> new AuthorizationDecision(docs.enabled()))
@@ -112,7 +120,7 @@ public class SecurityConfiguration {
 		cors.setAllowCredentials(false);
 		cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
 		cors.setExposedHeaders(List.of("X-Request-Id"));
-		cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+		cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "sentry-trace", "baggage"));
 		var source = new UrlBasedCorsConfigurationSource();
 		source.registerCorsConfiguration("/**", cors);
 		return source;

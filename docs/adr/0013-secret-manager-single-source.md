@@ -1,4 +1,4 @@
-# 0012 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환
+# 0013 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환
 
 - 상태: 채택 — 실제 운영 활성화는 Infra 실행별 증거로 확인
 - 날짜: 2026-11-15
@@ -23,6 +23,7 @@
 
 ## 영향과 한계
 
-- 같은 이미지를 `env_file` 없이 properties 파일 두 개만으로 prod 프로필에서 실행해 Flyway 검증과 `/readyz` 200을 확인했다. 두 번째 파일을 빼면 마이그레이션 계정 placeholder가 풀리지 않아 기동에 실패한다. 이는 로컬 DB 검증이며 운영 활성화 증거가 아니다.
+- 같은 이미지를 `env_file` 없이 properties 파일 두 개만으로 prod 프로필에서 실행해 Flyway 검증과 `/readyz` 200을 확인했다. 두 번째 파일을 빼면 `MIGRATION_*` placeholder는 기본값인 `DB_*`(런타임 계정)로 풀린다. 런타임 계정은 `V2__protect_flyway_history.sql`로 `flyway_schema_history` 권한이 회수되어 있으므로 Flyway가 기동 중 실패한다([DB 문서](../database.md)). 따라서 홈은 마이그레이션 파일이 반드시 필요하고 Cloud Run은 Flyway를 끄고 실행한다. 이는 로컬 DB 검증이며 운영 활성화 증거가 아니다.
 - 운영 활성화에는 Infra 병합, GCP 부트스트랩 이관, 홈 제어 파일 설치와 이 저장소 `deploy-production.yml`의 Infra pin 갱신이 같은 배포 창에서 필요하다.
+- 홈은 전달받은 묶음을 호스트에 불변 저장한 뒤 Docker named volume으로 복사해 마운트한다. WSL 경로 bind가 예약 부팅 후 자동 재시작에 실패했기 때문이며 결정은 [Infra ADR 0016](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0016-home-runtime-named-volumes.md)이 소유한다. 앱은 실행 중 Secret Manager를 호출하지 않으며 기동 시 마운트된 파일을 한 번 읽는다.
 - GitHub Secrets, Cloudflare Worker Secrets와 홈 Tunnel 토큰은 이번 단일 원본 범위 밖이다.

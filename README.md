@@ -1,6 +1,6 @@
 # Ziper 서버
 
-JECT 5기 6팀의 Java 21 · Spring Boot 3.5.16 API 서버입니다. 현재는 인증 검증, 오류 처리, 데이터베이스 연결과 운영 점검을 위한 초기 기반만 구현했습니다. 소셜 로그인, 회원 기능과 업무 API는 아직 없습니다.
+JECT 5기 6팀의 Java 21 · Spring Boot 3.5.16 API 서버입니다. 현재는 이메일 인증번호 발송·재전송·확인, 닉네임 중복 검사, 인증 검증, 오류 처리와 운영 점검을 구현했습니다. 소셜 로그인과 회원 가입은 아직 없습니다.
 
 소스와 테스트는 JDK 21을 사용하고 Docker 실행 이미지는 JRE 25를 사용합니다. 소스 이미지의 컴파일 단계도 JDK 21을 사용합니다.
 
@@ -19,6 +19,8 @@ curl -i http://localhost:8080/readyz
 
 `local-setup.sh`는 임의 비밀번호와 JWT 서명 키가 들어 있는 `.env`를 권한 `0600`으로 생성합니다. 기존 파일은 덮어쓰지 않습니다. Git 훅도 설치하며(첫 Gradle 빌드나 IDE 가져오기에서도 자동 설치됩니다), 커밋 전에 스타일을 검사하고 푸시 전에 전체 검사를 실행합니다. `.env`는 커밋하지 않습니다.
 
+로컬 이메일 인증은 기본적으로 꺼져 있습니다. [운영 문서](docs/operations.md#이메일-인증번호)의 변수 목록을 로컬 `.env`에 설정한 뒤 `EMAIL_MAIL_ENABLED=true`로 켭니다. 기존 `.env`는 자동 갱신되지 않으므로 별도 `EMAIL_CODE_SECRET_BASE64` 값과 메일 자격을 추가해야 합니다. 공개된 앱 비밀번호를 재사용하지 않습니다.
+
 ```sh
 ./scripts/check.sh
 ./scripts/smoke-test.sh
@@ -29,6 +31,8 @@ curl -i http://localhost:8080/readyz
 로컬 앱을 중지하려면 `docker compose down`을 실행합니다. `docker compose down -v`는 로컬 DB 데이터도 삭제하므로 초기화할 때만 사용합니다.
 
 ## 개발 안내
+
+쿼리·서비스 성능 계측은 [Sentry 성능 검증](docs/operations.md#쿼리와-서비스-성능-추적)을 따릅니다. `scripts/verify-sentry-performance.sh`는 비공개 환경 변수로 공급한 Sentry DSN을 사용해 테스트 전용 HTTP·서비스·PostgreSQL 경로를 실행하고 trace와 profiler ID를 출력합니다.
 
 - [문서 지도 — 작업 전 먼저 읽기](docs/context-map.md)
 - [구조와 개발 규칙](docs/development.md)

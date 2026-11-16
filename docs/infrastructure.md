@@ -21,9 +21,13 @@ gh workflow run deploy-production.yml --repo JECT-Study/Ziper-5th-Server --ref m
 
 ## 앱이 보장하는 계약
 
+로컬 Compose는 `SENTRY_PROFILE_SESSION_SAMPLE_RATE`를 앱으로 전달하며 기본 0.0입니다. 운영에서 profiling을 선택하면 해당 런타임 환경에도 명시해야 합니다. 기존 PostgreSQL URL·Flyway 자격은 바꾸지 않습니다. 성능 계측과 실제 수신 검증은 [운영](operations.md#쿼리와-서비스-성능-추적)을 따릅니다.
+
+로컬 Compose는 이메일 인증 기능 스위치·발신 주소·별도 HMAC 키·SMTP 접속 변수를 앱으로 전달하며 기본값은 비활성입니다. 운영 환경의 SMTP 계정과 비밀 공급은 배포 전에 Infra 정책에 맞춰 별도로 설정하고 검증해야 합니다. 이미지나 저장소에 앱 비밀번호를 포함하지 않습니다.
+
 앱은 무상태이며 두 origin에서 같은 검증 이미지와 JWT 발급자·대상·키를 사용합니다. `/livez`는 DB를 제외한 생존 상태를, `/readyz`는 DB를 포함한 요청 준비 상태를 반환합니다. 공개 상태 계약과 180초 제한 준비 검사는 [운영](operations.md#상태-점검)을 따릅니다. 사용자 요청 실패를 회로 표본으로 합산하거나 결과가 불명확한 쓰기를 다른 origin에 재전송하지 않는 정책은 Infra에서 구현합니다.
 
-민감 설정은 이미지와 artifact에 포함하지 않습니다. 운영 비밀의 단일 원본은 Secret Manager의 고정 버전입니다([ADR 0012](adr/0012-secret-manager-single-source.md)). Cloud Run은 전용 runtime SA로 파일을 마운트하고, 홈은 Infra deploy job이 WIF로 읽어 전달한 같은 버전의 파일을 마운트합니다. 두 origin 모두 `SPRING_CONFIG_IMPORT`로 properties 파일을 읽으며 홈만 마이그레이션 계정 파일을 추가로 읽습니다. 사용자 정의 Secret Manager `ConfigDataLoader`는 구현하지 않았습니다. CI는 WIF를 사용하며 Worker의 전용 Cloud Run invoker 키와 구분합니다. 운영 DB와 스키마의 책임은 [DB 문서](database.md)를 따릅니다. 공통 DB 장애는 origin 전환으로 해결되지 않습니다.
+민감 설정은 이미지와 artifact에 포함하지 않습니다. 운영 비밀의 단일 원본은 Secret Manager의 고정 버전입니다([ADR 0013](adr/0013-secret-manager-single-source.md)). Cloud Run은 전용 runtime SA로 파일을 마운트하고, 홈은 Infra deploy job이 WIF로 읽어 전달한 같은 버전의 파일을 마운트합니다. 두 origin 모두 `SPRING_CONFIG_IMPORT`로 properties 파일을 읽으며 홈만 마이그레이션 계정 파일을 추가로 읽습니다. 사용자 정의 Secret Manager `ConfigDataLoader`는 구현하지 않았습니다. CI는 WIF를 사용하며 Worker의 전용 Cloud Run invoker 키와 구분합니다. 운영 DB와 스키마의 책임은 [DB 문서](database.md)를 따릅니다. 공통 DB 장애는 origin 전환으로 해결되지 않습니다.
 
 ## 모니터링과 검증 범위
 

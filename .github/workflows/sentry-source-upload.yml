@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   upload:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
@@ -10,28 +11,41 @@ jobs:
     environment: sentry-source-upload
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
         with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/wrapper-validation@v6
-      - uses: gradle/actions/setup-gradle@v6
-      - name: Build release and upload matching source context
+          persist-credentials: false
+      - name: Require successful push CI for this exact commit
+        id: tested
         env:
-          SENTRY_UPLOAD: 'true'
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_RELEASE: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          test -n "$SENTRY_AUTH_TOKEN"
-          ./gradlew bootJar
+          run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=$GITHUB_REF_NAME&event=push&status=success&per_page=100" --jq '.workflow_runs[0].id // empty')"
+          test -n "$run_id"
+          printf 'run-id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v8
+        with:
+          name: tested-release
+          path: build
+          run-id: ${{ steps.tested.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: Record the tested source release
+        run: |
           mkdir -p build/release
-          printf '%s\n' "$SENTRY_RELEASE" > build/release/SENTRY_RELEASE
+          printf '%s\n' "$GITHUB_SHA" > build/release/SENTRY_RELEASE
       - name: Package and verify the same release JAR (no deployment)
         run: |
           docker build --target release --tag ziper-release:${{ github.sha }} .
           python3 scripts/test-release-artifact.py
           python3 scripts/verify-release-artifact.py --image ziper-release:${{ github.sha }}
           docker save ziper-release:${{ github.sha }} | gzip > build/release/image.tar.gz
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Upload the source bundle belonging to the tested release
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          test -n "$SENTRY_AUTH_TOKEN"
+          npx --yes @sentry/cli@3.8.2 debug-files upload --org joonamin-project --project ziper-server --type jvm build/intermediates/sentry/java/source-bundle/*.zip
       - uses: actions/upload-artifact@v7
         with:
           name: ziper-server-${{ github.sha }}

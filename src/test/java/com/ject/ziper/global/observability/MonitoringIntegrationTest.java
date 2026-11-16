@@ -37,6 +37,7 @@ import io.sentry.Sentry;
 import io.sentry.SentryEnvelope;
 import io.sentry.SentryEvent;
 import io.sentry.SentryMetricsEvent;
+import io.sentry.protocol.SentryTransaction;
 import io.sentry.transport.ITransport;
 import io.sentry.transport.RateLimiter;
 
@@ -115,6 +116,7 @@ class MonitoringIntegrationTest extends PostgresTestSupport {
 	static class RecordingTransport implements ITransport {
 		final List<SentryMetricsEvent> metrics = new CopyOnWriteArrayList<>();
 		final List<SentryEvent> events = new CopyOnWriteArrayList<>();
+		final List<SentryTransaction> transactions = new CopyOnWriteArrayList<>();
 		@Override
 		public void send(SentryEnvelope envelope, Hint hint) {
 			for (var item : envelope.getItems()) {
@@ -127,6 +129,10 @@ class MonitoringIntegrationTest extends PostgresTestSupport {
 					var event = item.getEvent(serializer);
 					if (event != null) {
 						events.add(event);
+					}
+					var transaction = item.getTransaction(serializer);
+					if (transaction != null) {
+						transactions.add(transaction);
 					}
 				} catch (Exception exception) {
 					throw new IllegalStateException(exception);

@@ -8,7 +8,19 @@
 
 CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향후 인증을 쿠키로 옮기면 CSRF 설정도 다시 설계해야 합니다. CORS 허용 출처는 `CORS_ALLOWED_ORIGINS`에 명시하며 웹·모바일 배포 환경에 맞춰 관리합니다.
 
-소셜 로그인과 자체 JWT 발급 API는 아직 없습니다. Refresh token 저장소는 실제 기능 구현 시 DB로 설계하며 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다.
+자체 토큰은 `type` 클레임으로 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 구분하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. 만료 시간은 `JWT_ACCESS_EXPIRATION_SECONDS`(기본 3600초)와 `JWT_REFRESH_EXPIRATION_SECONDS`(기본 1209600초)로 설정합니다.
+
+소셜 로그인(`POST /api/v1/auth/oauth/{provider}`)은 프로바이더별 전략(`OAuthProviderStrategy`)으로 토큰을 검증합니다. 인가 코드 교환(`POST /api/v1/auth/oauth/{provider}/code`)은 본문 `{"code":"...","redirectUri":"...","state":"..."}`(`redirectUri`·`state` 선택)을 받아 `RestClientAuthorizationCodeTokenResponseClient` 기반 `OAuthAuthorizationCodeExchanger`로 프로바이더 토큰 엔드포인트와 통신한 뒤 동일한 검증 전략으로 연결합니다. Apple 코드 교환은 `APPLE_AUTH_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`(PKCS#8 EC P-256 개인키)로 단기 ES256 `client_secret` JWT를 서명해 `APPLE_TOKEN_URI`에서 `id_token`을 획득하고, Naver는 `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`·`state`로 `NAVER_TOKEN_URI`에서 `access_token`을, Kakao는 `KAKAO_CLIENT_ID`·선택 `KAKAO_CLIENT_SECRET`·`redirectUri`로 `KAKAO_TOKEN_URI`에서 `access_token`을 획득합니다. Apple 로그인은 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID와 `APPLE_ISSUER`, `APPLE_JWKS_URI`를 기준으로 ID Token을 검증하고, Naver 로그인은 클라이언트가 전달한 Access Token으로 `NAVER_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v1/nid/me`)를 호출해 `resultcode=00`, 사용자 식별자(`response.id`)와 선택 이메일(`response.email`)을 검증·추출하며, Kakao 로그인은 클라이언트가 전달한 Access Token으로 `KAKAO_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v2/user/me`)를 호출해 사용자 식별자(`id`)와 선택 이메일(`kakao_account.email`)을 검증·추출합니다. 미가입 사용자는 이메일이 없더라도 소셜 식별자(`oauth_connect`)만으로 `Ziper`+5자리 난수 닉네임과 기본 보드를 생성해 자동 가입시킵니다. 자체 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 발급하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. Refresh Token은 SHA-256 해시만 `ziper.sessions` 테이블에 저장하고 재발급(`POST /api/v1/auth/reissue`) 시 회전하며 로그아웃(`POST /api/v1/auth/logout`) 시 삭제합니다. 가입 전 화면에서 사용하는 닉네임 중복 검사 `GET /api/v1/users/nickname/availability`도 인증 없이 허용합니다. 이 경로는 닉네임 사용 여부만 응답하며 요청 횟수 제한은 아직 없습니다. 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다. 로컬 리뷰어가 `http://localhost:5173`(`scripts/oauth-e2e-demo.py --mode env`)에서 실제 OAuth 콘솔과 연동해 테스트할 때는 Kakao·Naver 개발자 콘솔에 `http://localhost:5173` Web 도메인과 `http://localhost:5173/callback/{kakao|naver}` Redirect URI를 등록하며, HTTPS 실도메인만 허용하는 Apple 콘솔은 등록된 HTTPS Return URL 또는 `--mode mock` 로컬 IdP로 검증합니다.
+
+## 이메일 인증번호
+
+`EMAIL_MAIL_ENABLED`의 기본값은 `false`입니다. 활성화할 때 `EMAIL_FROM`, 별도 Base64 인코딩 32바이트 이상 키 `EMAIL_CODE_SECRET_BASE64`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`를 런타임 환경에서 공급합니다. 운영 기본 발신인 Mailgun을 쓰면 `joonamin.dev` 도메인의 SPF·DKIM DNS 검증을 완료한 뒤 호스트 `smtp.mailgun.org`, 포트 `587`, 발신 주소(`EMAIL_FROM`)와 SMTP 사용자 이름(`MAIL_USERNAME`)을 `noreply@joonamin.dev`로 설정하고 `MAIL_PASSWORD`에는 Mailgun SMTP 비밀번호를 사용합니다(로컬 테스트에서 Gmail을 쓰면 `smtp.gmail.com`, 포트 `587`, 앱 비밀번호 사용). SMTP 인증·STARTTLS와 서버 인증서 호스트 검증을 켜며 연결·읽기·쓰기 시간 제한은 각각 5초입니다. SMTP는 readiness 검사에 포함하지 않습니다.
+
+공개 API는 `POST /api/v1/auth/email/verifications`(본문 `{"email":"member@example.com"}`, 성공 `201`과 `flowId`), `POST /api/v1/auth/email/verifications/{flowId}/resend`(성공 `204`), `POST /api/v1/auth/email/verifications/{flowId}/verify`(본문 `{"code":"123456"}`, 성공 `204`)입니다. `GET /api/v1/auth/email/verifications/{flowId}`는 이메일 단위 `failedAttempts`, `remainingAttempts`와 `expiresAt`, `remainingSeconds`, `verified`, 잠금 해제 시각 `lockedUntil`(잠기지 않았으면 `null`)을 `Cache-Control: no-store`로 반환합니다. 클라이언트는 이 상태로 오입력 횟수와 타이머를 표시하고, 서버의 만료·횟수 판정을 최종 결과로 사용합니다. 번호는 6자리이고 3분 동안 유효합니다. 재전송은 같은 흐름에 새 번호를 추가하며 마지막 발송 뒤 3분이 지나야 합니다. 같은 연결 출처는 시간당 20회까지 발송할 수 있고, 3분 간격이나 출처 한도를 넘으면 `EMAIL_REQUEST_LIMITED`(`429`)를 반환합니다. 이메일당 시간당 발송 한도는 없습니다.
+
+잘못된 번호는 `EMAIL_CODE_INVALID`(`400`), 만료는 `EMAIL_CODE_EXPIRED`(`410`)입니다. 오입력은 흐름과 관계없이 이메일 단위로 합산합니다. 다섯 번째 오입력에서 해당 이메일을 30분 동안 잠그고 `EMAIL_CODE_ATTEMPTS_EXCEEDED`(`429`, `인증을 완료하지 못했어요.`)를 반환합니다. 잠금 동안 같은 이메일의 발급·재전송·확인도 같은 오류로 거부합니다. 30분이 지나면 횟수가 초기화되며, 잠기지 않은 실패도 마지막 실패 후 30분이 지나면 초기화됩니다. 인증에 성공하면 실패 기록을 지웁니다. 클라이언트는 이 오류 코드로 모달을 표시하고 다른 방법 또는 다른 이메일 인증으로 이동합니다. 검증 성공은 DB의 `verified_at`만 기록하며 회원 가입이나 로그인 토큰을 발급하지 않습니다.
+
+발급 기록은 DB에 먼저 커밋한 뒤 메일을 보냅니다. SMTP 실패는 전역 `5xx` 오류로 전달하고 자동 재발송하지 않으며, 남은 기록에도 발송 제한을 적용합니다. 로컬 Gmail 발송·수신의 검증 범위는 [2026-11-14 검증 이력](verification.md#2026-11-14-jec-43-이메일-인증번호-발송확인)에, Mailgun(`smtp.mailgun.org`, `noreply@joonamin.dev`) 로컬 발송·수신 및 Secret Manager 등록 기록은 [2026-11-16 Mailgun 검증 이력](verification.md#2026-11-16-mailgun-smtp-이메일-인증-발송수신)에 기록합니다. [ADR 0009](adr/0009-email-verification-delivery.md)에 이 일관성 경계를, [ADR 0012](adr/0012-email-verification-lockout.md)에 이메일 단위 잠금과 한도 변경을 기록했습니다.
 
 ## 상태 점검
 
@@ -39,9 +51,38 @@ SDK 8.62.0과 Gradle 플러그인 6.25.0을 사용합니다. HTTP 오류와 트�
 
 `bootJar`는 업로드 여부와 관계없이 소스 번들을 생성합니다. 업로드에는 `SENTRY_UPLOAD=true`와 `SENTRY_AUTH_TOKEN`이 모두 필요합니다. 토큰은 GitHub Actions secret에 저장하고 로컬 파일이나 로그에 남기지 않습니다.
 
-수동 워크플로 `Upload Sentry source context`는 `develop`과 `main`에서만 실행됩니다. GitHub 환경 이름은 `sentry-source-upload`입니다. 결과 아티팩트 `ziper-server-<SHA>`에는 JAR, 소스 번들, `SENTRY_RELEASE`와 검증한 `image.tar.gz`가 함께 들어갑니다.
+수동 워크플로 `Upload Sentry source context`는 `develop`과 `main`에서만 실행됩니다. GitHub 환경 이름은 `sentry-source-upload`입니다. 같은 브랜치·SHA의 성공한 push CI를 확인하고 `tested-release`의 JAR·소스 번들을 내려받습니다. 재컴파일하지 않고 이미지 JAR 해시·bundle ID를 검증한 뒤 고정 Sentry CLI 3.8.2로 업로드합니다. 토큰은 업로드 단계에만 전달합니다. 결과 아티팩트 `ziper-server-<SHA>`에는 해당 JAR, 소스 번들, `SENTRY_RELEASE`와 검증한 `image.tar.gz`가 함께 들어갑니다.
 
-배포할 때 이 아티팩트의 `ziper-server.jar`를 그대로 사용합니다. 소스를 다시 컴파일하면 번들 ID가 달라져 업로드한 소스와 스택 트레이스 연결이 깨질 수 있습니다. 이 워크플로는 소스 업로드만 수행하며 배포하지 않습니다.
+배포와 소스 업로드 모두 같은 CI의 `tested-release` JAR를 재사용합니다. 소스를 다시 컴파일하면 bundle ID가 달라져 소스 문맥 연결이 깨질 수 있습니다. 이 수동 워크플로는 소스 업로드만 수행하며 배포하지 않습니다.
+
+## 쿼리와 서비스 성능 추적
+
+HTTP 트랜잭션 아래에 `@SentrySpan` 서비스·저장소와 JDBC 쿼리를 연결합니다. P6Spy가 실제 쿼리를 측정하고 `spy.properties`는 SQL 파일 로그를 비활성화합니다. 환경 변수의 PostgreSQL URL과 Flyway migrator 연결은 유지합니다.
+
+| 설정 | 기본값 | 역할 |
+| --- | --- | --- |
+| `SENTRY_ENABLED` + `SENTRY_DSN` | false / 없음 | Sentry·JDBC 계측 활성화 |
+| `SENTRY_TRACES_SAMPLE_RATE` | 0.1 | 일반 요청 sampling; 검증은 1.0 |
+| `SENTRY_PROFILE_SESSION_SAMPLE_RATE` | 0.0 | JVM profiling opt-in; 단일 검증 프로세스는 1.0 |
+| `profile-lifecycle` | TRACE | 선택된 trace의 span 활성 구간에서 profiler 실행 |
+| `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` | 환경별 / local | 환경·검증한 소스 SHA 구분 |
+| `APP_MONITORING_ORIGIN` | local | trace origin 태그 |
+
+Profile session sampling은 요청마다가 아니라 SDK 초기화 때 한 번 결정합니다. async-profiler를 포함하며 macOS·Linux에서 사용합니다. 기본 배포와 일반 테스트의 profiling은 비활성이며 검증 환경에서 명시적으로 세션 비율을 올립니다. 헬스체크 trace 제외는 유지합니다.
+
+DB span은 전송 전에 `JDBC <fingerprint>`로 바꾸고 SQL 원문·바인딩 값·DB 이름·추가 태그를 제거합니다. 시간·상태·부모는 유지하므로 같은 prepared SQL의 반복 횟수와 누적 시간을 비교할 수 있습니다. SQL 원문 기반의 자동 N+1 판정과 실행 계획 수집은 제공하지 않습니다. 부모 repository/service와 코드의 SQL을 대조해 원인을 찾습니다.
+
+실제 Sentry 전송은 DSN을 비공개 환경 변수로 공급한 뒤 실행합니다. Docker와 PostgreSQL Testcontainers가 필요하며 검증용 API·서비스·SQL만 실행합니다.
+
+```sh
+./scripts/verify-sentry-performance.sh
+```
+
+명령은 trace·profile session 비율을 기본 1.0으로 선택하고 `verificationRun` 태그를 붙입니다. `SENTRY_PROFILE_SESSION_SAMPLE_RATE=0.0`이면 profiling을 생략합니다. 동일 테스트가 캐시되어 전송이 생략되지 않도록 `--rerun-tasks`를 사용합니다. 출력과 테스트 보고서의 trace/profiler ID로 Sentry 수신을 확인합니다. 일반 CI는 외부 전송 없이 기록용 transport로 검증합니다.
+
+Sentry Traces에서 `span.op:db.query`를 description으로 묶어 호출 수·누적 시간·P95를 보고, 부모 서비스와 profile 호출 스택으로 원인을 좁힙니다. `span.op:service`로 서비스 구간도 비교합니다. 개선 전후는 같은 데이터·요청 조건·sampling으로 비교하며 fixture의 인위적 지연을 실제 업무 병목으로 해석하지 않습니다.
+
+허용된 CORS 출처에서 `sentry-trace`, `baggage`를 받습니다. 프론트의 `tracePropagationTargets`도 실제 API origin으로 제한해야 합니다. 외부 HTTP 클라이언트는 Spring의 RestClient/RestTemplate/WebClient builder로 생성해 SDK customizer가 적용되게 합니다. 배포한 JAR과 같은 source bundle을 업로드하는 기존 계약도 유지합니다.
 
 ## 공개 오류와 로컬 API 문서
 
@@ -108,9 +149,26 @@ SENTRY_LIVE_VERIFICATION=true ./gradlew test --tests '*SentryLiveVerificationTes
 
 이 설정은 프로젝트 데이터 접근을 분리하며 이슈 조작까지 금지하는 읽기 전용 설정은 아닙니다. 현재 추가 초대 명단은 전달되지 않았습니다. 실제 초대 구성원이 로그인했을 때 담당 프로젝트만 접근할 수 있는지도 별도로 확인합니다.
 
+## 설정·비밀 키 추가와 제거
+
+앱 설정은 `application.yml`의 `${KEY}` placeholder로 읽습니다. 로컬은 환경 변수로, 운영의 홈과 Cloud Run은 Secret Manager 고정 버전에서 만든 properties 파일로 같은 키를 공급합니다([ADR 0013](adr/0013-secret-manager-single-source.md)). 새 키를 추가할 때 수정할 위치는 다음과 같습니다.
+
+| 위치 | 수정 내용 |
+| --- | --- |
+| `src/main/resources/application.yml` | `${KEY}` 또는 `${KEY:기본값}` 참조. 운영에서 반드시 필요한 비밀은 기본값을 두지 않거나 시작 검증을 추가 |
+| `.env.example` | 로컬 예시 값 또는 빈 값. 비밀은 `REPLACE_WITH_...` 형태로 두고 실제 값을 넣지 않음 |
+| `scripts/local-setup.sh` | 로컬에서 무작위로 만들 수 있는 비밀이면 생성 규칙 추가 |
+| `compose.yml`의 `app.environment` | 로컬 Compose는 나열한 변수만 앱에 전달하므로 `KEY: ${KEY:-}` 추가 |
+| `src/test/resources/application-test.yml` | 테스트에 필요한 값이면 고정 테스트 값 추가 |
+| Secret Manager(Infra 절차) | `MIGRATION_*`는 `ziper-home-migration-properties`, 나머지는 `ziper-runtime-properties`에 새 버전 추가 |
+| Infra `config/production.json` | `secretVersions`를 새 버전으로 갱신 |
+| `.github/workflows/deploy-production.yml` | `uses`와 `infra_sha`를 그 Infra main SHA로 함께 갱신한 뒤 main에서 배포 |
+
+운영 값 반영 명령·순서와 이전 버전 비활성화는 [Infra 운영 문서](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/operations.md#운영-비밀-교체와-최초-이관)를 따릅니다. 기본값 없는 키는 운영 값을 먼저 반영한 뒤 그 키를 쓰는 앱을 배포합니다. 키를 제거할 때는 참조를 없앤 앱을 먼저 배포한 뒤 값을 뺍니다. GitHub Secrets, Cloudflare Worker Secrets와 홈 Tunnel 토큰은 Secret Manager 범위 밖입니다.
+
 ## 첫 홈서버 운영 배포
 
-[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. 당시에는 `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 두었습니다. 이 절은 첫 배포 이력이며, 런타임 비밀 공급은 [ADR 0012](adr/0012-secret-manager-single-source.md)의 Secret Manager 고정 버전 방식으로 대체되었습니다. `deployment/home/`은 첫 배포 당시의 사본이고 현재 운영 계약은 Infra 저장소가 소유합니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
+[ADR 0006](adr/0006-initial-production-deployment.md)의 첫 배포는 Windows 홈서버의 Ubuntu WSL에서 수행합니다. 당시에는 `/opt/ziper/private`에 런타임 환경 파일, DB 루트 CA와 전용 Tunnel 토큰을 두었습니다. 이 절은 첫 배포 이력이며, 런타임 비밀 공급은 [ADR 0013](adr/0013-secret-manager-single-source.md)의 Secret Manager 고정 버전 방식으로 대체되었습니다. `deployment/home/`은 첫 배포 당시의 사본이고 현재 운영 계약은 Infra 저장소가 소유합니다. 실제 비밀 값은 저장소에 넣지 않습니다. 공개 주소는 `https://api-ziper.joonamin.dev`이며 별도 `ziper-production` Compose 프로젝트만 관리합니다.
 
 작업자가 검증한 release 이미지를 전달하고 `ziper-server:<전체 SHA>`로 로드합니다. `/opt/ziper/releases/<전체 SHA>/`에는 `compose.yml`, `deploy.sh`와 검사한 이미지 ID 파일 `image-id`를 둡니다. 스크립트가 이미지 ID를 다시 대조하며 JAR를 다시 빌드하지 않습니다.
 

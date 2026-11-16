@@ -4,7 +4,9 @@
 
 Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키지는 `com.ject.ziper`입니다.
 
-업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안, 오류 처리, 관측 기능과 로컬 OpenAPI 설정입니다.
+업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안(JWT·OAuth 토큰 검증 및 `RestClientAuthorizationCodeTokenResponseClient` 기반 무상태 인가 코드 교환 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정이며, 업무 도메인으로 인증(`auth`), 회원(`user`), 보드(`board`)가 있습니다.
+
+이메일 인증의 HTTP 계약·DB 발급 기록·요청 제한·번호 확인은 `domain/auth`가 맡습니다. `global/security`의 `EmailCodeHmac`은 별도 키로 번호와 요청자 식별자를 해시하며 비밀이나 번호 원문을 로그에 남기지 않습니다.
 
 컨트롤러는 HTTP 입출력을 처리하고 서비스는 업무 규칙과 트랜잭션을 담당합니다. 엔티티를 API 응답으로 직접 노출하지 않습니다. 웹과 모바일 클라이언트가 같은 API를 사용할 예정입니다.
 
@@ -28,7 +30,7 @@ Checkstyle의 `MatchXpath` 규칙 `BusinessCatch`는 `com.ject.ziper.domain` 아
 
 Checkstyle의 `MatchXpath` 규칙 `FullyQualifiedName`은 운영·테스트 코드에서 `import`, `package` 선언 밖의 패키지 한정 이름(`java.util.Locale.ROOT`, `@org.springframework.stereotype.Service` 등)을 금지합니다. 타입과 정적 멤버는 항상 `import` 또는 `import static`으로 가져옵니다. 소문자로 시작하는 이름 뒤에 대문자로 시작하는 이름이 이어지는 점 표기를 위반으로 판단하므로 인스턴스로 정적 상수에 접근하는 코드도 함께 거부됩니다. 문자열·주석은 대상이 아니며 허용 목록에 등록할 수 없습니다.
 
-ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업무 서비스의 Servlet·Spring Web 의존, 세션 의존·요청 세션 API 호출, 업무 패키지의 사용자 정의 `RuntimeException`을 검사합니다. 예상한 업무 4xx에는 공통 `BusinessException`을 사용합니다. 현재 업무 클래스가 없으므로 별도 정상·위반 fixture 계약 테스트로 규칙의 탐지 동작도 확인합니다. 이 검사는 모든 메모리 상태나 모든 동적 호출의 안전성을 보장하지 않습니다.
+ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업무 서비스의 Servlet·Spring Web 의존, 세션 의존·요청 세션 API 호출, 업무 패키지의 사용자 정의 `RuntimeException`을 검사합니다. 예상한 업무 4xx에는 공통 `BusinessException`을 사용합니다. 실제 업무 클래스(`domain/user`)와 함께 별도 정상·위반 fixture 계약 테스트로 규칙의 탐지 동작도 확인합니다. 이 검사는 모든 메모리 상태나 모든 동적 호출의 안전성을 보장하지 않습니다.
 
 ## 변경 검증
 
@@ -39,6 +41,18 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 ## 공통 계약
 
 공개 health 검사기의 POSIX 요청 deadline은 `ETIMEDOUT` 코드가 있는 예외를 사용합니다. Python 3.9의 socket 읽기가 예외 인수를 검사하므로 인수 없는 `TimeoutError`로 시간 제한을 구현하지 않습니다. 본문 읽기 deadline 회귀 검사로 재시도 가능한 공개 오류 분류를 확인합니다.
+
+### 서비스 성능 계측
+
+기존 Sentry Spring Boot Starter가 HTTP 트랜잭션의 소유자입니다. 별도 `Sentry.init`이나 OpenTelemetry agent를 중복 설치하지 않습니다. Spring AOP와 JDBC 계측은 SDK 8.62.0 BOM에 맞춥니다.
+
+주요 Spring Bean 메서드에 `io.sentry.spring.jakarta.tracing.SentrySpan`을 붙여 기존 HTTP 트랜잭션의 하위 구간으로 측정합니다. `operation`은 service·repository·function 같은 고정 구분, `description`은 클래스·메서드 등 고정 이름을 사용합니다. 사용자 ID·요청 인수·토큰을 이름이나 속성에 넣지 않습니다. AOP 프록시를 거치지 않는 같은 객체 내부 호출은 자동 측정되지 않습니다. 요청 밖의 배치 작업만 별도 `@SentryTransaction`의 대상입니다. 비동기 executor 도입 시에는 Sentry context 전파를 함께 검증합니다.
+
+`TracingDataSourceConfiguration`은 Sentry 활성화 시 Hikari 내부 드라이버만 P6Spy로 구성합니다. 풀과 Flyway의 역할·연결 설정을 유지합니다. DB span은 전송 전에 SQL 원문을 SHA-256 앞 16자리 fingerprint로 교체하고 시간·부모·상태만 보존합니다. 같은 prepared SQL의 바인딩 값을 바꿔도 동일 식별자로 묶입니다. SQL에 값을 직접 결합하면 식별자가 늘어나므로 prepared statement를 사용합니다.
+
+`TracingIntegrationTest`는 실제 HTTP·PostgreSQL에서 서비스→저장소→쿼리의 관계, 반복 쿼리 시간, 실패 상태, 개인정보 제거, CORS와 probe 제외를 검사합니다. `TracingFixtures`는 테스트 소스에만 있으며 운영 JAR에는 포함되지 않습니다. `scripts/verify-sentry-performance.sh`는 같은 경로를 실제 Sentry에 전송하는 opt-in 명령입니다. [관측 경계 결정](adr/0008-service-and-query-tracing.md)을 따릅니다.
+
+### 오류 계약
 
 [ADR 0001](adr/0001-runtime-contract.md)의 오류 계약을 따릅니다. `BusinessException`은 예상한 업무 4xx 전용입니다. 업무 계층에서 기술 예외를 잡아 무시하거나 이 예외로 감싸지 않습니다. 공개 `detail`은 정적인 한국어 오류 카탈로그에서 선택합니다. `code`와 서버가 생성한 `requestId`를 포함하고 JWT 401·403에도 같은 팩토리를 적용합니다. 예상 4xx는 Sentry에서 제외하고 예상하지 못한 5xx는 요청당 한 번 수집합니다.
 
@@ -66,3 +80,5 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 외부 Sentry 지표와 opt-in 전송 검증은 [운영 문서](operations.md#애플리케이션-지표)를 따릅니다. 공개 HTTPS 상태 검증 도구 `scripts/verify-public-health.py`는 `/livez`·`/readyz`의 직접 200 응답, 상태 전용 JSON, 캐시 금지와 세션 미생성을 확인합니다. `scripts/test-public-health.py`가 실제 로컬 HTTP fixture에서 정상 응답과 리다이렉트·오류·캐시·정보 노출 응답의 거부를 검사하며 `check.sh`에 포함됩니다. 이 테스트는 운영 TLS와 Sentry의 외부 점검을 대신하지 않습니다.
 
 공개 배포 검증기의 `--expected-release`와 `--expected-origin`은 함께 지정한다. 각각 40자리 소문자 SHA와 home 또는 cloudrun을 받으며 두 probe의 검증된 응답 헤더가 모두 일치해야 한다. 이전 릴리스·누락·불일치는 재시도하지 않는다. `scripts/test-public-health.py`는 실제 HTTP fixture로 헤더·content negotiation·응답 계약을 검사하고 가상 시계로 준비 한도와 연속 성공 초기화를 확인한다.
+
+로컬 OAuth 리뷰 데모 도구 `scripts/oauth-e2e-demo.py`는 기본 `--mode mock`에서 외부 개발자 계정이나 비밀 키 없이 로컬 임시 RSA JWKS 및 Mock IdP(Apple·Naver·Kakao)와 원클릭 테스트 UI(`http://localhost:5173`)를 제공해 실제 `POST /api/v1/auth/oauth/{provider}`, `/oauth/{provider}/code`, `/reissue`, `/logout` 흐름을 검증할 수 있게 합니다. `--mode env`는 서버 프로세스의 환경 변수나 `.env`·`.env.oauth-demo`(Git 제외 파일)에만 `client_id`·`client_secret`·`.p8`를 보관해 브라우저에 비밀을 노출하지 않고 실 OAuth E2E 데모를 실행합니다. 실 OAuth 콘솔 연동 시 Kakao·Naver 콘솔에는 `http://localhost:5173` 도메인과 `http://localhost:5173/callback/{kakao|naver}` Redirect URI를 등록하며, `127.0.0.1:5173`으로 접속한 경우 UI 상단 배너로 `http://localhost:5173` 전환을 안내합니다. `scripts/test-oauth-e2e-demo.py`가 키 생성·표준 `.env` 폴백·Mock IdP 왕복·비밀 미노출·프록시 경로 제한을 검사하며 `check.sh`에 포함됩니다.

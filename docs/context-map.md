@@ -17,6 +17,7 @@
 
 ## 결정 이력
 
+
 장기적인 구조·인증·데이터·일관성·장애 전환·아티팩트 결정은 `docs/adr/`에 배경·결정·영향·상태를 기록하고 이 목록에서 연결합니다. 결정이 바뀌면 과거 기록을 지우지 않고 대체 ADR을 연결합니다.
 
 - [0001 공통 실행·오류·아티팩트 경계](adr/0001-runtime-contract.md)
@@ -36,4 +37,10 @@
 - 0007의 고정 Infra workflow는 불변 OIDC subject와 복구 lease 중 배포 차단도 포함합니다. 실제 인증·독립 timer·장애 실험 증거는 Infra PR #1에서 구분합니다.
 
 - 0007이 호출하는 종료 후 재기동 정책은 Infra ADR 0009에서 관리합니다. 운영 컨테이너 정책과 전체 다음 BIOS 부팅의 검증 범위를 구분합니다.
-- [0012 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0012-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체
+- [0008 서비스·쿼리 추적과 성능 데이터 경계](adr/0008-service-and-query-tracing.md)
+- [0009 이메일 인증번호 발송과 검증 경계](adr/0009-email-verification-delivery.md) — 요청 한도·오입력 제한은 0012로 대체
+- [0010 소셜 OAuth 로그인과 자체 JWT·세션 수명 주기](adr/0010-oauth-login-and-token-lifecycle.md)
+- [0011 OAuth 무이메일 회원을 위한 users.email Nullable 완화](adr/0011-nullable-user-email-for-oauth.md)
+- [0012 이메일 단위 인증번호 오입력 잠금](adr/0012-email-verification-lockout.md)
+- [0013 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0013-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체
+- [0014 Spring Security RestClient 기반 무상태 OAuth Authorization Code 교환](adr/0014-oauth-authorization-code-grant.md)

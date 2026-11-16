@@ -70,6 +70,7 @@ class SecurityConfigurationTest {
 				claims().expirationTime(Date.from(Instant.now().minusSeconds(300))), claims().expirationTime(null),
 				claims().issuer("wrong"), claims().audience("wrong"), claims().audience((String) null),
 				claims().subject(null), claims().subject(" "),
+				claims().claim(JwtTokenProvider.CLAIM_TOKEN_TYPE, JwtTokenProvider.TOKEN_TYPE_REFRESH),
 				claims().notBeforeTime(Date.from(Instant.now().plusSeconds(300))));
 		for (var claims : invalid) {
 			mvc.perform(get("/private").header("Authorization", "Bearer " + token(claims, KEY)))
