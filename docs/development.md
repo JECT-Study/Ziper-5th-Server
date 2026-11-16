@@ -4,7 +4,7 @@
 
 Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키지는 `com.ject.ziper`입니다.
 
-업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안(JWT·OAuth 검증 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정이며, 업무 도메인으로 인증(`auth`), 회원(`user`), 보드(`board`)가 있습니다.
+업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 보안(JWT·OAuth 토큰 검증 및 `RestClientAuthorizationCodeTokenResponseClient` 기반 무상태 인가 코드 교환 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정이며, 업무 도메인으로 인증(`auth`), 회원(`user`), 보드(`board`)가 있습니다.
 
 이메일 인증의 HTTP 계약·DB 발급 기록·요청 제한·번호 확인은 `domain/auth`가 맡습니다. `global/security`의 `EmailCodeHmac`은 별도 키로 번호와 요청자 식별자를 해시하며 비밀이나 번호 원문을 로그에 남기지 않습니다.
 

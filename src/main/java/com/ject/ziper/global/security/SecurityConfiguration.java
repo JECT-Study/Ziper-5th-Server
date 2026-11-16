@@ -44,9 +44,9 @@ import com.ject.ziper.global.error.ProblemFactory;
 public class SecurityConfiguration {
 	private static final String[] PROBES = {"/livez", "/readyz", "/actuator/health/liveness",
 			"/actuator/health/readiness"};
-	private static final String[] AUTH_PUBLIC_PATHS = {"/api/v1/auth/oauth/*", "/api/v1/auth/reissue",
-			"/api/v1/auth/logout", "/api/v1/auth/email/verifications", "/api/v1/auth/email/verifications/*/resend",
-			"/api/v1/auth/email/verifications/*/verify"};
+	private static final String[] AUTH_PUBLIC_PATHS = {"/api/v1/auth/oauth/*", "/api/v1/auth/oauth/*/code",
+			"/api/v1/auth/reissue", "/api/v1/auth/logout", "/api/v1/auth/email/verifications",
+			"/api/v1/auth/email/verifications/*/resend", "/api/v1/auth/email/verifications/*/verify"};
 	private static final String[] PUBLIC_GET_PATHS = {"/api/v1/users/nickname/availability",
 			"/api/v1/auth/email/verifications/*"};
 

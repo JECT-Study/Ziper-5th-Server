@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ject.ziper.domain.auth.dto.LogoutRequest;
+import com.ject.ziper.domain.auth.dto.OAuthCodeLoginRequest;
 import com.ject.ziper.domain.auth.dto.OAuthLoginRequest;
 import com.ject.ziper.domain.auth.dto.OAuthLoginResponse;
 import com.ject.ziper.domain.auth.dto.TokenReissueRequest;
@@ -32,6 +33,14 @@ public class AuthController {
 			@Valid @RequestBody OAuthLoginRequest request,
 			@RequestHeader(value = HttpHeaders.USER_AGENT, required = false) String userAgent) {
 		return ResponseEntity.ok(authService.loginWithOAuth(provider, request.token(), userAgent));
+	}
+
+	@PostMapping("/oauth/{provider}/code")
+	public ResponseEntity<OAuthLoginResponse> loginWithOAuthCode(@PathVariable String provider,
+			@Valid @RequestBody OAuthCodeLoginRequest request,
+			@RequestHeader(value = HttpHeaders.USER_AGENT, required = false) String userAgent) {
+		return ResponseEntity.ok(authService.loginWithOAuthCode(provider, request.code(), request.redirectUri(),
+				request.state(), userAgent));
 	}
 
 	@PostMapping("/reissue")

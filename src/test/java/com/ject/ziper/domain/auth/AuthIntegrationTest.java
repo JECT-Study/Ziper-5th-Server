@@ -10,9 +10,12 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.ECGenParameterSpec;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 
@@ -62,6 +65,7 @@ import com.sun.net.httpserver.HttpServer;
 class AuthIntegrationTest extends PostgresTestSupport {
 	private static RSAPublicKey applePublicKey;
 	private static RSAPrivateKey applePrivateKey;
+	private static ECPrivateKey appleClientSecretEcPrivateKey;
 	private static HttpServer kakaoUserInfoServer;
 
 	@Autowired
@@ -89,19 +93,41 @@ class AuthIntegrationTest extends PostgresTestSupport {
 	private JwtDecoder accessJwtDecoder;
 
 	@DynamicPropertySource
-	static void kakaoProperties(DynamicPropertyRegistry registry) throws IOException {
+	static void kakaoProperties(DynamicPropertyRegistry registry) throws Exception {
+		initAppleKeys();
 		startKakaoServer();
 		int port = kakaoUserInfoServer.getAddress().getPort();
 		registry.add("app.security.kakao-user-info-uri", () -> "http://127.0.0.1:" + port + "/v2/user/me");
+		registry.add("app.security.kakao-token-uri", () -> "http://127.0.0.1:" + port + "/oauth/token");
+		registry.add("app.security.kakao-client-id", () -> "kakao-client-id");
+		registry.add("app.security.kakao-client-secret", () -> "kakao-client-secret");
+		registry.add("app.security.naver-user-info-uri", () -> "http://127.0.0.1:" + port + "/v1/nid/me");
+		registry.add("app.security.naver-token-uri", () -> "http://127.0.0.1:" + port + "/oauth2.0/token");
+		registry.add("app.security.naver-client-id", () -> "naver-client-id");
+		registry.add("app.security.naver-client-secret", () -> "naver-client-secret");
+		registry.add("app.security.apple-token-uri", () -> "http://127.0.0.1:" + port + "/auth/token");
+		registry.add("app.security.apple-auth-client-id", () -> "com.ject.ziper.web");
+		registry.add("app.security.apple-team-id", () -> "TEAM123456");
+		registry.add("app.security.apple-key-id", () -> "KEY1234567");
+		registry.add("app.security.apple-private-key",
+				() -> "-----BEGIN PRIVATE KEY-----\\n"
+						+ Base64.getEncoder().encodeToString(appleClientSecretEcPrivateKey.getEncoded())
+						+ "\\n-----END PRIVATE KEY-----");
 	}
 
 	@BeforeAll
-	static void initAppleKeys() throws Exception {
+	static synchronized void initAppleKeys() throws Exception {
+		if (applePublicKey != null && applePrivateKey != null && appleClientSecretEcPrivateKey != null) {
+			return;
+		}
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
 		generator.initialize(2048);
 		KeyPair pair = generator.generateKeyPair();
 		applePublicKey = (RSAPublicKey) pair.getPublic();
 		applePrivateKey = (RSAPrivateKey) pair.getPrivate();
+		KeyPairGenerator ecGenerator = KeyPairGenerator.getInstance("EC");
+		ecGenerator.initialize(new ECGenParameterSpec("secp256r1"));
+		appleClientSecretEcPrivateKey = (ECPrivateKey) ecGenerator.generateKeyPair().getPrivate();
 	}
 
 	@AfterAll
@@ -253,6 +279,34 @@ class AuthIntegrationTest extends PostgresTestSupport {
 				.andExpect(jsonPath("code").value("UNAUTHORIZED"));
 	}
 
+	@Test
+	void 유효한KakaoNaverApple인가코드_코드교환로그인을요청하면_자동가입후자체토큰을발급한다() throws Exception {
+		mvc.perform(post("/api/v1/auth/oauth/kakao/code").contentType(MediaType.APPLICATION_JSON)
+				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+				.content("{\"code\":\"kakao-code-1\",\"redirectUri\":\"https://app.ziper.dev/callback/kakao\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
+				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty());
+
+		mvc.perform(post("/api/v1/auth/oauth/naver/code").contentType(MediaType.APPLICATION_JSON)
+				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+				.content("{\"code\":\"naver-code-1\",\"state\":\"naver-state-1\"}")).andExpect(status().isOk())
+				.andExpect(jsonPath("isNewUser").value(true)).andExpect(jsonPath("accessToken").isNotEmpty())
+				.andExpect(jsonPath("refreshToken").isNotEmpty());
+
+		mvc.perform(post("/api/v1/auth/oauth/apple/code").contentType(MediaType.APPLICATION_JSON)
+				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+				.content("{\"code\":\"apple-code-1\",\"redirectUri\":\"https://app.ziper.dev/callback/apple\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
+				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty());
+
+		assertThat(userRepository.count()).isEqualTo(3);
+		assertThat(sessionRepository.count()).isEqualTo(3);
+
+		mvc.perform(post("/api/v1/auth/oauth/kakao/code").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"code\":\"invalid-code\"}")).andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("code").value("UNAUTHORIZED"));
+	}
+
 	private static synchronized void startKakaoServer() throws IOException {
 		if (kakaoUserInfoServer != null) {
 			return;
@@ -268,6 +322,8 @@ class AuthIntegrationTest extends PostgresTestSupport {
 				body = "{\"id\":500002}";
 			} else if ("Bearer kakao-token-with-email".equals(authorization)) {
 				body = "{\"id\":500003,\"kakao_account\":{\"email\":\"shared@example.com\"}}";
+			} else if ("Bearer kakao-exchanged-token-1".equals(authorization)) {
+				body = "{\"id\":500004,\"kakao_account\":{\"email\":\"kakao.code@example.com\"}}";
 			} else {
 				statusCode = 401;
 				body = "{\"code\":-401,\"msg\":\"invalid token\"}";
@@ -278,10 +334,66 @@ class AuthIntegrationTest extends PostgresTestSupport {
 			exchange.getResponseBody().write(bytes);
 			exchange.close();
 		});
+		kakaoUserInfoServer.createContext("/oauth/token", exchange -> {
+			String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+			int statusCode = form.contains("code=kakao-code-1") ? 200 : 400;
+			String body = statusCode == 200
+					? "{\"token_type\":\"bearer\",\"access_token\":\"kakao-exchanged-token-1\",\"expires_in\":21599}"
+					: "{\"error\":\"invalid_grant\"}";
+			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+			exchange.sendResponseHeaders(statusCode, bytes.length);
+			exchange.getResponseBody().write(bytes);
+			exchange.close();
+		});
+		kakaoUserInfoServer.createContext("/oauth2.0/token", exchange -> {
+			String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+			String body = form.contains("code=naver-code-1")
+					? "{\"access_token\":\"naver-exchanged-token-1\",\"token_type\":\"bearer\",\"expires_in\":\"3600\"}"
+					: "{\"error\":\"invalid_request\"}";
+			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+			exchange.sendResponseHeaders(200, bytes.length);
+			exchange.getResponseBody().write(bytes);
+			exchange.close();
+		});
+		kakaoUserInfoServer.createContext("/v1/nid/me", exchange -> {
+			String authorization = exchange.getRequestHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+			int statusCode = "Bearer naver-exchanged-token-1".equals(authorization) ? 200 : 401;
+			String body = statusCode == 200
+					? "{\"resultcode\":\"00\",\"message\":\"success\",\"response\":{\"id\":\"naver-code-user-1\",\"email\":\"naver.code@example.com\"}}"
+					: "{\"resultcode\":\"024\",\"message\":\"Authentication failed\"}";
+			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+			exchange.sendResponseHeaders(statusCode, bytes.length);
+			exchange.getResponseBody().write(bytes);
+			exchange.close();
+		});
+		kakaoUserInfoServer.createContext("/auth/token", exchange -> {
+			String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+			int statusCode = form.contains("code=apple-code-1") && form.contains("client_secret=") ? 200 : 400;
+			String body;
+			try {
+				body = statusCode == 200
+						? "{\"access_token\":\"apple-access\",\"token_type\":\"Bearer\",\"expires_in\":3600,\"id_token\":\""
+								+ createAppleIdToken("apple-code-user-1", "apple.code@privaterelay.appleid.com",
+										"com.ject.ziper.web")
+								+ "\"}"
+						: "{\"error\":\"invalid_grant\"}";
+			} catch (Exception exception) {
+				statusCode = 500;
+				body = "{\"error\":\"server_error\"}";
+			}
+			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+			exchange.sendResponseHeaders(statusCode, bytes.length);
+			exchange.getResponseBody().write(bytes);
+			exchange.close();
+		});
 		kakaoUserInfoServer.start();
 	}
 
-	private String createAppleIdToken(String subject, String email, String audience) throws Exception {
+	private static String createAppleIdToken(String subject, String email, String audience) throws Exception {
 		JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer("https://appleid.apple.com").audience(audience)
 				.subject(subject).claim("email", email).issueTime(Date.from(Instant.now().minusSeconds(5)))
 				.expirationTime(Date.from(Instant.now().plusSeconds(600))).build();
