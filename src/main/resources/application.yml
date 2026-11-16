@@ -94,8 +94,19 @@ app:
     apple-issuer: ${APPLE_ISSUER:https://appleid.apple.com}
     apple-jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
     apple-client-ids: ${APPLE_CLIENT_IDS:}
+    apple-token-uri: ${APPLE_TOKEN_URI:https://appleid.apple.com/auth/token}
+    apple-auth-client-id: ${APPLE_AUTH_CLIENT_ID:}
+    apple-team-id: ${APPLE_TEAM_ID:}
+    apple-key-id: ${APPLE_KEY_ID:}
+    apple-private-key: ${APPLE_PRIVATE_KEY:}
     naver-user-info-uri: ${NAVER_USER_INFO_URI:https://openapi.naver.com/v1/nid/me}
+    naver-token-uri: ${NAVER_TOKEN_URI:https://nid.naver.com/oauth2.0/token}
+    naver-client-id: ${NAVER_CLIENT_ID:}
+    naver-client-secret: ${NAVER_CLIENT_SECRET:}
     kakao-user-info-uri: ${KAKAO_USER_INFO_URI:https://kapi.kakao.com/v2/user/me}
+    kakao-token-uri: ${KAKAO_TOKEN_URI:https://kauth.kakao.com/oauth/token}
+    kakao-client-id: ${KAKAO_CLIENT_ID:}
+    kakao-client-secret: ${KAKAO_CLIENT_SECRET:}
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}

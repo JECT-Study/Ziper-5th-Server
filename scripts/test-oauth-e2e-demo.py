@@ -186,6 +186,29 @@ class OAuthDemoTests(unittest.TestCase):
         status, _ = self._post_json("/api/v1/users/me", {})
         self.assertEqual(status, 404)
 
+    def test_mock_form_token_endpoints_and_code_proxy_pattern(self):
+        for provider in ("apple", "naver", "kakao"):
+            self.assertIsNotNone(oauth_demo.OAUTH_PATH_PATTERN.match(f"/api/v1/auth/oauth/{provider}"))
+            self.assertIsNotNone(oauth_demo.OAUTH_PATH_PATTERN.match(f"/api/v1/auth/oauth/{provider}/code"))
+            persona = f"{provider}-email"
+            status, headers, _ = self._get(
+                f"/mock/{provider}/authorize?redirect_uri={urllib.parse.quote(self.base_url + '/callback/' + provider)}&state=st-form&persona={persona}"
+            )
+            self.assertEqual(status, 302)
+            code = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["Location"]).query)["code"][0]
+            req = urllib.request.Request(
+                f"{self.base_url}/mock/{provider}/token",
+                data=urllib.parse.urlencode({"grant_type": "authorization_code", "code": code}).encode("utf-8"),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                self.assertEqual(resp.status, 200)
+                body = json.loads(resp.read().decode("utf-8"))
+                self.assertIn("access_token", body)
+                if provider == "apple":
+                    self.assertIn("id_token", body)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,19 +10,31 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
 @ConfigurationProperties("app.security")
 public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
 		List<String> allowedOrigins, Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds,
-		String appleIssuer, String appleJwksUri, List<String> appleClientIds, String naverUserInfoUri,
-		String kakaoUserInfoUri) {
+		String appleIssuer, String appleJwksUri, List<String> appleClientIds, String appleTokenUri,
+		String appleAuthClientId, String appleTeamId, String appleKeyId, String applePrivateKey,
+		String naverUserInfoUri, String naverTokenUri, String naverClientId, String naverClientSecret,
+		String kakaoUserInfoUri, String kakaoTokenUri, String kakaoClientId, String kakaoClientSecret) {
 
 	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience,
 			List<String> allowedOrigins) {
-		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, null, null, null, null, null, null, null);
+		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, null, null, null, null, null, null, null, null,
+				null, null, null, null, null, null, null, null, null, null);
 	}
 
 	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience, List<String> allowedOrigins,
 			Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds, String appleIssuer,
 			String appleJwksUri, List<String> appleClientIds) {
 		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, accessTokenExpirationSeconds,
-				refreshTokenExpirationSeconds, appleIssuer, appleJwksUri, appleClientIds, null, null);
+				refreshTokenExpirationSeconds, appleIssuer, appleJwksUri, appleClientIds, null, null, null, null, null,
+				null, null, null, null, null, null, null, null);
+	}
+
+	public SecurityProperties(String jwtSecretBase64, String jwtIssuer, String jwtAudience, List<String> allowedOrigins,
+			Long accessTokenExpirationSeconds, Long refreshTokenExpirationSeconds, String appleIssuer,
+			String appleJwksUri, List<String> appleClientIds, String naverUserInfoUri, String kakaoUserInfoUri) {
+		this(jwtSecretBase64, jwtIssuer, jwtAudience, allowedOrigins, accessTokenExpirationSeconds,
+				refreshTokenExpirationSeconds, appleIssuer, appleJwksUri, appleClientIds, null, null, null, null, null,
+				naverUserInfoUri, null, null, null, kakaoUserInfoUri, null, null, null);
 	}
 
 	@Override
@@ -31,8 +43,12 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 				+ ", allowedOrigins=" + allowedOrigins + ", accessTokenExpirationSeconds="
 				+ accessTokenExpirationSeconds + ", refreshTokenExpirationSeconds=" + refreshTokenExpirationSeconds
 				+ ", appleIssuer=" + appleIssuer + ", appleJwksUri=" + appleJwksUri + ", appleClientIds="
-				+ appleClientIds + ", naverUserInfoUri=" + naverUserInfoUri + ", kakaoUserInfoUri=" + kakaoUserInfoUri
-				+ "]";
+				+ appleClientIds + ", appleTokenUri=" + appleTokenUri + ", appleAuthClientId=" + appleAuthClientId
+				+ ", appleTeamId=" + appleTeamId + ", appleKeyId=" + appleKeyId + ", applePrivateKey=[REDACTED]"
+				+ ", naverUserInfoUri=" + naverUserInfoUri + ", naverTokenUri=" + naverTokenUri + ", naverClientId="
+				+ naverClientId + ", naverClientSecret=[REDACTED], kakaoUserInfoUri=" + kakaoUserInfoUri
+				+ ", kakaoTokenUri=" + kakaoTokenUri + ", kakaoClientId=" + kakaoClientId
+				+ ", kakaoClientSecret=[REDACTED]]";
 	}
 
 	@ConstructorBinding
@@ -79,11 +95,28 @@ public record SecurityProperties(String jwtSecretBase64, String jwtIssuer, Strin
 		appleClientIds = appleClientIds == null
 				? List.of()
 				: appleClientIds.stream().map(String::trim).filter(id -> !id.isEmpty()).toList();
+		appleTokenUri = appleTokenUri == null || appleTokenUri.isBlank()
+				? "https://appleid.apple.com/auth/token"
+				: appleTokenUri.trim();
+		appleAuthClientId = appleAuthClientId == null ? "" : appleAuthClientId.trim();
+		appleTeamId = appleTeamId == null ? "" : appleTeamId.trim();
+		appleKeyId = appleKeyId == null ? "" : appleKeyId.trim();
+		applePrivateKey = applePrivateKey == null ? "" : applePrivateKey.trim();
 		naverUserInfoUri = naverUserInfoUri == null || naverUserInfoUri.isBlank()
 				? "https://openapi.naver.com/v1/nid/me"
 				: naverUserInfoUri.trim();
+		naverTokenUri = naverTokenUri == null || naverTokenUri.isBlank()
+				? "https://nid.naver.com/oauth2.0/token"
+				: naverTokenUri.trim();
+		naverClientId = naverClientId == null ? "" : naverClientId.trim();
+		naverClientSecret = naverClientSecret == null ? "" : naverClientSecret.trim();
 		kakaoUserInfoUri = kakaoUserInfoUri == null || kakaoUserInfoUri.isBlank()
 				? "https://kapi.kakao.com/v2/user/me"
 				: kakaoUserInfoUri.trim();
+		kakaoTokenUri = kakaoTokenUri == null || kakaoTokenUri.isBlank()
+				? "https://kauth.kakao.com/oauth/token"
+				: kakaoTokenUri.trim();
+		kakaoClientId = kakaoClientId == null ? "" : kakaoClientId.trim();
+		kakaoClientSecret = kakaoClientSecret == null ? "" : kakaoClientSecret.trim();
 	}
 }

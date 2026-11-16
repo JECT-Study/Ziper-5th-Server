@@ -64,6 +64,18 @@ public class AuthService {
 	public OAuthLoginResponse loginWithOAuth(String providerName, String token, String userAgent) {
 		OAuthProvider provider = OAuthProvider.from(providerName);
 		OAuthUserPrincipal principal = oauthClientComposite.authenticate(provider, token);
+		return completeLogin(provider, principal, userAgent);
+	}
+
+	@Transactional
+	public OAuthLoginResponse loginWithOAuthCode(String providerName, String code, String redirectUri, String state,
+			String userAgent) {
+		OAuthProvider provider = OAuthProvider.from(providerName);
+		OAuthUserPrincipal principal = oauthClientComposite.authenticateWithCode(provider, code, redirectUri, state);
+		return completeLogin(provider, principal, userAgent);
+	}
+
+	private OAuthLoginResponse completeLogin(OAuthProvider provider, OAuthUserPrincipal principal, String userAgent) {
 		Optional<OAuthUser> existingOAuth = oauthUserRepository.findByProviderAndProviderId(provider,
 				principal.providerId());
 		Instant now = clock.instant();
