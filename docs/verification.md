@@ -119,3 +119,10 @@ GitHub API로 커밋 `80678a5`의 check run과 PR #1 댓글을 조회했습니�
 Windows에서 `gradlew.bat check --console=plain`의 Spotless·Checkstyle·ArchUnit·전체 Java 테스트가 통과했습니다. 문서 정책 검사와 PR 정책 테스트 10개, Compose 설정 검사, `git diff --check`, 로컬 설정 셸 구문 검사가 통과했습니다. Windows에서 POSIX 기능이 없어 실패하는 검사기 자체 테스트 1개와 공개 상태 검사기 테스트 19개는 WSL Ubuntu에서 각각 통과했습니다. WSL에는 Java가 없어 `scripts/check.sh`를 한 번에 실행하지는 못했고, 그 구성 검사를 두 환경에서 나누어 실행했습니다.
 
 2026-11-14 로컬 Compose에서 연결된 본인 메일함으로 발급 API를 한 번 호출해 `201`과 새 Gmail 수신 메일을 확인했습니다. 해당 `flowId`의 로컬 PostgreSQL 행은 1개이며 만료 간격은 180초, 번호는 64자리 해시로 저장됐습니다. 최신 소스로 앱 이미지를 다시 빌드한 뒤 상태 조회 API의 `200`, 실패 0회, 남은 시도 5회도 확인했습니다. 첫 상태 조회의 `401`은 재빌드 전 실행 이미지에서 발생했습니다. 메일 연결 도구가 본문의 인증번호를 가려 실제 수신 번호 입력과 `verified_at` 갱신까지는 검증하지 못했습니다. 앞서 노출된 앱 비밀번호를 유효한 배포 자격으로 간주하지 않으며 운영 비밀 공급과 배포도 미검증입니다. 회원 가입과 인증 행 소비는 이번 범위에 없습니다.
+
+## 2026-11-16 Mailgun SMTP 이메일 인증 발송·수신
+
+- `joonamin.dev` 도메인의 Mailgun DNS(SPF·DKIM·MX) 검증과 `noreply@joonamin.dev` SMTP 발신 계정 구성을 마쳤습니다.
+- 로컬 Docker Compose(`ziper-local-app-1` + PostgreSQL 17.6, 커밋 `b97778e` 기준)에 `EMAIL_MAIL_ENABLED=true`, `EMAIL_FROM=noreply@joonamin.dev`, `MAIL_HOST=smtp.mailgun.org`, `MAIL_PORT=587`, `MAIL_USERNAME=noreply@joonamin.dev`를 적용해 기동(`Started ZiperApplication in 3.287 seconds`, `V5__create_email_verification_failures` 마이그레이션 포함)과 `/livez` `200`, `/readyz` `200`을 확인했습니다.
+- `POST /api/v1/auth/email/verifications` 호출로 `201 Created`(`flowId=22e1e65f-a6a6-47b5-b242-6b20a2252812`) 응답과 `noreply@joonamin.dev` 발신 메일이 Mailgun 및 Cloudflare Email Routing을 거쳐 Gmail 수신함까지 도착함을 확인했습니다. 검증 후 테스트용 `ziper-local-app-1` 컨테이너는 중지·정리했습니다.
+- GCP Secret Manager(`ziper-production` 프로젝트 `ziper-runtime-properties`)에 Mailgun SMTP 키를 포함한 버전 `3` 및 OAuth 키를 통합한 버전 `4`를 등록했습니다(비밀 값 미출력 확인). 운영 적용은 `Ziper-5th-Infra` `config/production.json`의 `secretVersions` 갱신 및 `main` 쌍 배포 이후 별도로 검증해야 하며, 운영 배포 전 대화에 노출됐던 초기 `MAIL_PASSWORD`의 회전이 필요합니다.
