@@ -44,5 +44,19 @@ class EmailVerificationOpenApiTest extends PostgresTestSupport {
 		assertThat(status.isMissingNode()).isFalse();
 		assertThat(status.path("security").isArray()).isTrue();
 		assertThat(status.path("security").isEmpty()).isTrue();
+
+		for (String authPath : new String[]{"/api/v1/auth/oauth/{provider}", "/api/v1/auth/oauth/{provider}/code",
+				"/api/v1/auth/reissue", "/api/v1/auth/logout"}) {
+			JsonNode operation = paths.path(authPath).path("post");
+			assertThat(operation.isMissingNode()).isFalse();
+			assertThat(operation.path("summary").asText()).isNotBlank();
+			assertThat(operation.path("security").isArray()).isTrue();
+			assertThat(operation.path("security").isEmpty()).isTrue();
+		}
+		JsonNode nickname = paths.path("/api/v1/users/nickname/availability").path("get");
+		assertThat(nickname.isMissingNode()).isFalse();
+		assertThat(nickname.path("summary").asText()).isNotBlank();
+		assertThat(nickname.path("security").isArray()).isTrue();
+		assertThat(nickname.path("security").isEmpty()).isTrue();
 	}
 }

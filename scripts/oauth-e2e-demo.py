@@ -23,7 +23,7 @@ import urllib.request
 import webbrowser
 
 
-OAUTH_PATH_PATTERN = re.compile(r"^/api/v1/auth/oauth/(apple|naver|kakao)$")
+OAUTH_PATH_PATTERN = re.compile(r"^/api/v1/auth/oauth/(apple|naver|kakao)(/code)?$")
 ALLOWED_POST_PATHS = {"/api/v1/auth/reissue", "/api/v1/auth/logout"}
 
 MOCK_PERSONAS = {
@@ -402,8 +402,15 @@ HTML_TEMPLATE = r"""<!doctype html>
   <div class="box">
     <strong>1. 원클릭 소셜 로그인 &amp; Ziper JWT 발급</strong>
     <p class="muted" style="margin:6px 0 0;">
-      Client Secret·개인키는 서버 프로세스(또는 로컬 Mock IdP)에만 고정되어 있으며 브라우저에 노출되지 않습니다. 버튼을 누르면 인가 → 토큰 교환 → <code>POST /api/v1/auth/oauth/{provider}</code>까지 자동으로 이어집니다.
+      Client Secret·개인키는 서버 프로세스(또는 로컬 Mock IdP)에만 고정되어 있으며 브라우저에 노출되지 않습니다. 아래에서 Server-to-Server 인가 코드 교환 방식과 ID/Access Token 직접 전달 방식을 전환해 테스트할 수 있습니다.
     </p>
+    <div style="margin-top:8px;max-width:460px;">
+      <label for="authFlowMode">백엔드 로그인 처리 방식</label>
+      <select id="authFlowMode">
+        <option value="code" selected>Server-to-Server Code 교환 (POST /api/v1/auth/oauth/{provider}/code)</option>
+        <option value="token">ID Token / Access Token 직접 전달 (POST /api/v1/auth/oauth/{provider})</option>
+      </select>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -617,6 +624,11 @@ HTML_TEMPLATE = r"""<!doctype html>
         const response = await AppleID.auth.signIn();
         const code = response?.authorization?.code || "";
         let idToken = response?.authorization?.id_token || "";
+        const flowMode = document.getElementById("authFlowMode").value;
+        if (flowMode === "code" && code) {
+          await callBackendCodeLogin("apple", code, originUrl + "/callback", state);
+          return;
+        }
         if (demoConfig.apple.codeExchangeConfigured && code) {
           const ex = await postJson("/test/exchange/apple", { code, redirectUri: originUrl + "/callback" });
           log("Apple /auth/token 교환 결과", ex);
@@ -694,6 +706,11 @@ HTML_TEMPLATE = r"""<!doctype html>
         return;
       }
       const redirectUri = (provider === "kakao" && sessionStorage.getItem("ziper.kakaoRedirectUri")) || (originUrl + `/callback/${provider}`);
+      const flowMode = document.getElementById("authFlowMode").value;
+      if (flowMode === "code") {
+        await callBackendCodeLogin(provider, code, redirectUri, state || "");
+        return;
+      }
       const ex = await postJson(`/test/exchange/${provider}`, { code, state, redirectUri });
       log(`${provider.toUpperCase()} 토큰 교환 결과`, { status: ex.status, hasAccessToken: Boolean(ex.body?.access_token), hasIdToken: Boolean(ex.body?.id_token), scope: ex.body?.scope || null });
       const backendToken = provider === "apple" ? ex.body?.id_token : ex.body?.access_token;
@@ -710,6 +727,27 @@ HTML_TEMPLATE = r"""<!doctype html>
       new BroadcastChannel("ziper-oauth-callback").onmessage = async (event) => {
         await handleCallbackPayload(event.data);
       };
+    }
+
+    async function callBackendCodeLogin(provider, code, redirectUri, state) {
+      if (!code) {
+        log("오류", { message: "전달할 Authorization Code가 비어 있습니다." });
+        return;
+      }
+      const res = await postJson(`/api/v1/auth/oauth/${provider}/code`, { code, redirectUri, state });
+      if (res.status === 200 && res.body?.refreshToken) {
+        previousRefreshToken = latestRefreshToken;
+        latestAccessToken = res.body.accessToken;
+        latestRefreshToken = res.body.refreshToken;
+      }
+      log(`Ziper 백엔드 POST /api/v1/auth/oauth/${provider}/code 결과`, {
+        status: res.status,
+        requestId: res.requestId,
+        isNewUser: res.body?.isNewUser ?? null,
+        accessClaims: decodeJwtPayload(res.body?.accessToken),
+        refreshClaims: decodeJwtPayload(res.body?.refreshToken),
+        body: res.status === 200 ? { receivedAccessToken: true, receivedRefreshToken: true, isNewUser: res.body?.isNewUser } : res.body
+      });
     }
 
     async function callBackendLogin(provider, rawToken) {
@@ -924,6 +962,15 @@ def make_handler(config: DemoConfig, mock_state: MockOAuthState | None):
         def do_POST(self):
             parsed = urllib.parse.urlsplit(self.path)
             path = parsed.path
+            if mock_state is not None and path in ("/mock/apple/token", "/mock/naver/token", "/mock/kakao/token"):
+                provider = path.split("/")[2]
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8", errors="replace") if length > 0 else ""
+                form = urllib.parse.parse_qs(raw)
+                code = (form.get("code", [""])[0] or "").strip()
+                status, resp = mock_state.exchange_code(provider, code)
+                self._send_json(status, resp)
+                return
             if path in ("/test/exchange/apple", "/test/exchange/naver", "/test/exchange/kakao"):
                 self._handle_exchange(path.rsplit("/", 1)[-1])
                 return
@@ -1076,8 +1123,23 @@ def start_backend(repo_root: Path, backend_port: int, ui_port: int, apple_client
         base = f"http://127.0.0.1:{ui_port}"
         env["APPLE_ISSUER"] = "https://appleid.apple.com"
         env["APPLE_JWKS_URI"] = f"{base}/mock/apple/keys"
+        env["APPLE_TOKEN_URI"] = f"{base}/mock/apple/token"
+        env["APPLE_AUTH_CLIENT_ID"] = apple_client_id
+        env["APPLE_TEAM_ID"] = "MOCKTEAM12"
+        env["APPLE_KEY_ID"] = "MOCKKEY123"
+        ec_pem = subprocess.check_output(
+            ["sh", "-c", "openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt"],
+            text=True,
+        )
+        env["APPLE_PRIVATE_KEY"] = ec_pem.strip().replace("\n", "\\n")
         env["NAVER_USER_INFO_URI"] = f"{base}/mock/naver/v1/nid/me"
+        env["NAVER_TOKEN_URI"] = f"{base}/mock/naver/token"
+        env["NAVER_CLIENT_ID"] = "mock-naver-client"
+        env["NAVER_CLIENT_SECRET"] = "mock-naver-secret"
         env["KAKAO_USER_INFO_URI"] = f"{base}/mock/kakao/v2/user/me"
+        env["KAKAO_TOKEN_URI"] = f"{base}/mock/kakao/token"
+        env["KAKAO_CLIENT_ID"] = "mock-kakao-client"
+        env["KAKAO_CLIENT_SECRET"] = "mock-kakao-secret"
     proc = subprocess.Popen(
         [str(repo_root / "gradlew"), "--no-daemon", "bootRun"],
         cwd=repo_root,
