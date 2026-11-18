@@ -50,6 +50,43 @@ def diff_endpoints(head_spec, before_spec=None, force=False):
     }
 
 
+def _resolve_json_pointer(root, ref):
+    if not isinstance(ref, str) or not ref.startswith('#/'):
+        return None
+    node = root
+    for raw_part in ref[2:].split('/'):
+        part = raw_part.replace('~1', '/').replace('~0', '~')
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _dereference_node(node, root, seen):
+    if isinstance(node, list):
+        return [_dereference_node(item, root, seen) for item in node]
+    if not isinstance(node, dict):
+        return node
+    ref = node.get('$ref')
+    if isinstance(ref, str) and ref.startswith('#/') and ref not in seen:
+        target = _resolve_json_pointer(root, ref)
+        if isinstance(target, dict):
+            merged = dict(target)
+            for key, value in node.items():
+                if key != '$ref':
+                    merged[key] = value
+            return _dereference_node(merged, root, seen | {ref})
+    return {key: _dereference_node(value, root, seen) for key, value in node.items()}
+
+
+def inline_local_refs(spec):
+    """Inline local #/... JSON references so file:// Swagger UI renders without Resolver errors."""
+    resolved = _dereference_node(spec, spec, frozenset())
+    if isinstance(resolved, dict):
+        resolved.pop('servers', None)
+    return resolved
+
+
 def _escape_style(text):
     return re.sub(r'</(style)', r'<\\/\1', text, flags=re.IGNORECASE)
 
@@ -66,7 +103,8 @@ def _embed_json(data):
 def build_html(input_dir, output_path, title='Ziper API Documentation'):
     """Bundle OpenAPI JSON and Swagger UI assets into one self-contained HTML file."""
     src = Path(input_dir)
-    spec = json.loads((src / 'openapi.json').read_text(encoding='utf-8'))
+    raw_spec = json.loads((src / 'openapi.json').read_text(encoding='utf-8'))
+    spec = inline_local_refs(raw_spec)
     swagger_css = _escape_style((src / 'swagger-ui.css').read_text(encoding='utf-8'))
     index_css = _escape_style((src / 'index.css').read_text(encoding='utf-8'))
     bundle_js = _escape_script((src / 'swagger-ui-bundle.js').read_text(encoding='utf-8'))
@@ -104,6 +142,10 @@ def build_html(input_dir, output_path, title='Ziper API Documentation'):
         '          spec: spec,',
         '          dom_id: "#swagger-ui",',
         '          deepLinking: true,',
+        '          supportedSubmitMethods: [],',
+        '          defaultModelRendering: "model",',
+        '          defaultModelsExpandDepth: 1,',
+        '          defaultModelExpandDepth: 5,',
         '          presets: [',
         '            SwaggerUIBundle.presets.apis,',
         '            SwaggerUIStandalonePreset',

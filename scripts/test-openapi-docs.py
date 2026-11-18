@@ -72,7 +72,32 @@ class OpenApiDocsTests(unittest.TestCase):
                 json.dumps({
                     'openapi': '3.1.0',
                     'info': {'title': 'Ziper API', 'version': 'v1'},
-                    'paths': {'/api/v1/test': {'get': {'description': 'unsafe </script><script>alert(1)</script>'}}},
+                    'servers': [{'url': 'http://localhost:8080'}],
+                    'paths': {
+                        '/api/v1/test': {
+                            'post': {
+                                'requestBody': {
+                                    'content': {
+                                        'application/json': {
+                                            'schema': {'$ref': '#/components/schemas/SampleReq'}
+                                        }
+                                    }
+                                },
+                                'responses': {
+                                    '200': {'description': 'unsafe </script><script>alert(1)</script>'}
+                                },
+                            }
+                        }
+                    },
+                    'components': {
+                        'schemas': {
+                            'SampleReq': {
+                                'type': 'object',
+                                'properties': {'nested': {'$ref': '#/components/schemas/Nested'}},
+                            },
+                            'Nested': {'type': 'object', 'properties': {'id': {'type': 'string'}}},
+                        }
+                    },
                 }),
                 encoding='utf-8',
             )
@@ -88,9 +113,13 @@ class OpenApiDocsTests(unittest.TestCase):
 
             self.assertIn('<title>Ziper &lt;API&gt;</title>', html_text)
             self.assertIn('spec: spec', html_text)
+            self.assertIn('supportedSubmitMethods: []', html_text)
+            self.assertIn('defaultModelRendering: "model"', html_text)
             self.assertIn('SwaggerUIBundle', html_text)
             self.assertIn('data:image/png;base64,', html_text)
             self.assertNotIn('url: "./openapi.json"', html_text)
+            self.assertNotIn('"$ref"', html_text)
+            self.assertNotIn('http://localhost:8080', html_text)
             self.assertNotIn('</script><script>alert(1)', html_text)
             self.assertIn('<\\/script><script>alert(1)<\\/script>', html_text)
             self.assertNotIn('/* </style> */', html_text)
