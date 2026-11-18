@@ -18,7 +18,11 @@
 
 가입 전에는 회원 행을 만들지 않고 이메일 인증번호를 `auth_codes`에 보관합니다. `user_id`는 두지 않습니다. 서버가 생성한 `flow_id`는 첫 발급과 재전송을 한 인증 흐름으로 묶습니다. `failed_attempts`는 각 번호의 잘못된 입력 횟수 기록입니다. 재전송 시 새 행을 추가합니다. 오입력 제한은 `email_verification_failures`가 이메일 단위로 판정합니다. 이 테이블은 이메일별 실패 횟수(1~5), 마지막 실패 시각, 5회 도달 시 30분 잠금 해제 시각을 보관하며 인증 성공 시 행을 지웁니다. 잠금 해제 시각이나 마지막 실패 후 30분이 지난 행은 횟수 0으로 판정합니다([ADR 0012](adr/0012-email-verification-lockout.md)). 검증에는 해당 흐름의 최신 번호만 허용합니다. 이메일 입력 화면에서 새로 시작하면 새 `flow_id`를 발급합니다.
 
-`requested_at`과 이메일·요청자 키 인덱스는 발급 빈도 제한에 사용합니다. 요청자 키는 HTTP 연결의 `remoteAddr`를 별도 HMAC 키로 변환해 저장하며 원본 IP는 저장하지 않습니다. 같은 이메일은 3분 간격, 같은 연결 출처는 시간당 20회로 제한합니다. 이메일당 시간당 발송 한도는 두지 않습니다. 프록시가 여러 사용자를 같은 주소로 전달하면 출처별 한도를 공유할 수 있습니다. 번호 원문은 저장하지 않고 HMAC 해시만 보관합니다. 발급·재전송·확인과 이메일 단위 실패 횟수 집계·잠금을 구현했습니다. 이메일 가입은 흐름의 최신 행에 `consumed_at`을 기록하고 회원(`password_hash` 포함)·기본 보드·세션을 같은 트랜잭션에서 생성합니다([ADR 0015](adr/0015-email-password-signup.md)). 필수 약관 동의는 저장하지 않고 `marketing_agreed`만 저장합니다.
+`requested_at`과 이메일·요청자 키 인덱스는 발급 빈도 제한에 사용합니다. 요청자 키는 HTTP 연결의 `remoteAddr`를 별도 HMAC 키로 변환해 저장하며 원본 IP는 저장하지 않습니다. 같은 이메일은 3분 간격, 같은 연결 출처는 시간당 20회로 제한합니다. 이메일당 시간당 발송 한도는 두지 않습니다. 프록시가 여러 사용자를 같은 주소로 전달하면 출처별 한도를 공유할 수 있습니다. 번호 원문은 저장하지 않고 HMAC 해시만 보관합니다. 발급·재전송·확인과 이메일 단위 실패 횟수 집계·잠금을 구현했습니다. 이메일 가입은 흐름의 최신 행에 `consumed_at`을 기록하고 회원(`password_hash` 포함)·기본 보드·세션을 같은 트랜잭션에서 생성합니다([ADR 0016](adr/0016-email-password-signup.md)). 필수 약관 동의는 저장하지 않고 `marketing_agreed`만 저장합니다.
+
+`V6__create_product_and_tag_tables.sql`은 상품·보드 매핑·해시태그·파일·재발견 이벤트 스키마를 추가합니다([ADR 0015](adr/0015-product-card-and-rediscovery-schema.md), [백엔드 PRD](prd.md)). `product_boards`에는 `WHERE is_deleted = FALSE` 부분 고유 인덱스를 두어 동일 사용자 내 활성 보드 이름 중복을 막습니다. `product_cards`는 사용자별 동일 `product_url`을 단일 행(`UNIQUE (user_id, product_url)`)으로 관리하고 `product_board_card`로 여러 보드에 다대다 연결합니다. 구매 완료(`status = 'PURCHASED'`)나 전체 삭제(`is_deleted = TRUE`) 시에도 3초 내 `[되돌리기]` 원복을 위해 `product_board_card` 행은 유지하고 일반 보드 조회에서 `status = 'PLANNED' AND is_deleted = FALSE`로 필터링합니다. 개별 보드에서 상품을 빼거나 보드를 삭제할 때만 매핑을 지우고 남은 활성 보드 연결이 0개(고아 상품)가 되면 카드를 휴지통으로 이동합니다.
+
+`tags`는 기본 계절 태그 4종(`봄`, `여름`, `가을`, `겨울`)을 시드하고 `product_card_tags`로 카드당 0개 이상의 다중 태그를 매핑합니다. 상품 이미지는 외부 OG URL(`image_url`), 업로드·리사이징 파일(`files` 테이블 참조 `image_file_id`), 파싱 실패 시 대체 아이콘(`fallback_icon`: `TOP`, `PANTS`, `SKIRT`, `ACCESSORY`, `BEAUTY`)을 함께 지원합니다. 재발견 주기는 `product_cards`의 `rediscovery_stage`(0=14일, 1=30일, 2=90일), `last_interacted_at`, `next_rediscovery_at`, `is_link_valid`로 관리하며 상세 조회·원본 이동·스와이프 이력은 `user_card_events`에 기록합니다.
 
 ## 로컬 시드 실행
 

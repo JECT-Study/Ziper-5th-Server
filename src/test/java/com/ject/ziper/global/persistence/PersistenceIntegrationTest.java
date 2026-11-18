@@ -74,4 +74,46 @@ class PersistenceIntegrationTest extends PostgresTestSupport {
 			}
 		}
 	}
+
+	@Test
+	void V6상품과태그테이블이적용된DB_기본태그와카드제약조건을검증하면_시드와무결성제약이정상동작한다() {
+		assertThat(jdbc.queryForList("SELECT title FROM ziper.tags WHERE is_default = TRUE ORDER BY id", String.class))
+				.containsExactly("봄", "여름", "가을", "겨울");
+
+		Long userId = jdbc.queryForObject(
+				"INSERT INTO ziper.users(email, nickname, status) VALUES ('v6@ziper.test', '집퍼V6', 'ACTIVE') RETURNING id",
+				Long.class);
+		Long boardId = jdbc.queryForObject(
+				"INSERT INTO ziper.product_boards(user_id, name, modifiable) VALUES (?, '기본 보드', FALSE) RETURNING id",
+				Long.class, userId);
+
+		assertThatThrownBy(() -> jdbc.update(
+				"INSERT INTO ziper.product_boards(user_id, name, modifiable) VALUES (?, '기본 보드', TRUE)", userId))
+				.hasRootCauseInstanceOf(SQLException.class);
+
+		Long fileId = jdbc
+				.queryForObject("INSERT INTO ziper.files(storage_key, original_filename, content_type, file_size) "
+						+ "VALUES ('products/1.webp', '1.webp', 'image/webp', 1024) RETURNING id", Long.class);
+		Long cardId = jdbc.queryForObject(
+				"INSERT INTO ziper.product_cards(user_id, product_url, product_title, price, image_file_id, fallback_icon) "
+						+ "VALUES (?, 'https://store.example/items/1', '봄 가디건', 39000, ?, 'TOP') RETURNING id",
+				Long.class, userId, fileId);
+
+		assertThatThrownBy(() -> jdbc.update("INSERT INTO ziper.product_cards(user_id, product_url, product_title) "
+				+ "VALUES (?, 'https://store.example/items/1', '중복 상품')", userId))
+				.hasRootCauseInstanceOf(SQLException.class);
+
+		Long tagId = jdbc.queryForObject("SELECT id FROM ziper.tags WHERE title = '봄'", Long.class);
+		assertThat(
+				jdbc.update("INSERT INTO ziper.product_board_card(board_id, card_id) VALUES (?, ?)", boardId, cardId))
+				.isOne();
+		assertThat(jdbc.update("INSERT INTO ziper.product_card_tags(card_id, tag_id) VALUES (?, ?)", cardId, tagId))
+				.isOne();
+		assertThat(jdbc.update(
+				"INSERT INTO ziper.user_card_events(user_id, card_id, event_type) VALUES (?, ?, 'VIEW_DETAIL')", userId,
+				cardId)).isOne();
+
+		jdbc.update("DELETE FROM ziper.users WHERE id = ?", userId);
+		jdbc.update("DELETE FROM ziper.files WHERE id = ?", fileId);
+	}
 }

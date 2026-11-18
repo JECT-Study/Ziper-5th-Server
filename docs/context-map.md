@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | [README](../README.md) | 현재 구현 범위와 첫 실행 | 진입 명령·준비물·구현 상태 변경 시 실제 실행 경로 반영 |
 | [AGENTS](../AGENTS.md) | 작업 경계와 금지 사항 | 협업·검증·문서 정책 변경 시 강제 계약 반영 |
+| [PRD](prd.md) | 제품 목적·가치·도메인 정책 | 도메인 요구사항·상태 전이·MVP 범위 변경 시 실제 기준 반영 |
 | [개발](development.md) | 코드 구조·오류·스타일·검증 | 공통 경계나 명령 변경 시 현재 코드 기준 갱신 |
 | [DB](database.md) | 역할·마이그레이션·연결 | 스키마·권한·DB 연결 변경 시 최소 권한과 이행 절차 갱신 |
 | [운영](operations.md) | JWT·probe·Sentry·아티팩트 | 인증·관측·배포물 변경 시 런타임 계약 갱신 |
@@ -44,4 +45,5 @@
 - [0012 이메일 단위 인증번호 오입력 잠금](adr/0012-email-verification-lockout.md)
 - [0013 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0013-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체
 - [0014 Spring Security RestClient 기반 무상태 OAuth Authorization Code 교환](adr/0014-oauth-authorization-code-grant.md)
-- [0015 이메일·비밀번호 가입, 인증 흐름 소비와 OAuth 이메일 중복 처리](adr/0015-email-password-signup.md) — 0009의 후속 작업인 가입·코드 소비와 OAuth 자동 연결 금지를 결정
+- [0015 상품·보드·해시태그·재발견 스키마 경계](adr/0015-product-card-and-rediscovery-schema.md)
+- [0016 이메일·비밀번호 가입, 인증 흐름 소비와 OAuth 이메일 중복 처리](adr/0016-email-password-signup.md) — 0009의 후속 작업인 가입·코드 소비와 OAuth 자동 연결 금지를 결정
