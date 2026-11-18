@@ -10,6 +10,10 @@ PR은 feature·bug·chore 의도를 구분하고 변경 목적, 동작 변화와
 
 Spring Boot 3.5를 사용하는 동안 springdoc-openapi는 호환되는 2.x를 유지합니다. Dependabot은 Spring Boot와 springdoc의 메이저 업데이트를 제외하며, 프레임워크 메이저 이전은 두 라이브러리의 호환성을 함께 확인하는 변경으로 진행합니다. [springdoc 호환성 안내](https://springdoc.org/faq.html)
 
+## 정적 OpenAPI 문서 공유
+
+`.github/workflows/openapi-docs.yml`(`OpenAPI Docs`)은 `main` 브랜치 푸시(머지) 시에만 자동 트리거되며(`workflow_dispatch`도 `main`에서만 허용), `contents: read` 권한으로 동작합니다. API 요청·응답 변경은 API 버저닝으로 관리하므로 직전 `main` 커밋과 `HEAD`의 `openapi.json` 엔드포인트 집합(`METHOD /path`)을 비교해 엔드포인트 증감이 발생한 경우(또는 `scripts/export-openapi.sh`가 없던 최초 기준 생성 및 `force_publish=true` 수동 실행)에만 단일 HTML 아티팩트 `ziper-api-docs-html`(`ziper-api-docs.html`)을 생성합니다. 엔드포인트 증감이 없으면 아티팩트 생성과 Discord 전송을 건너뜁니다. 생성된 HTML은 `DISCORD_BOT_TOKEN`(또는 `DISCORD_OPENAPI_WEBHOOK_URL`) 시크릿을 사용해 Discord 채널 `1537457718326067330`으로 첨부 전송합니다. 시크릿 등록 여부와 실제 Discord 채널 수신은 저장소 시크릿 구성 후 별도로 검증합니다.
+
 ## 성능 계측 검증
 
 `sentry-source-upload.yml`은 동일 브랜치·SHA의 성공한 push CI에서 `tested-release`를 받아 이미지 JAR 해시와 bundle ID를 검증한 후 소스 번들만 업로드합니다. 별도 Gradle 빌드로 Debug ID를 다시 만들지 않습니다. Actions 읽기 권한은 그 아티팩트를 내려받는 데만 사용합니다. `sentry-source-upload` 환경과 main/develop 실행 제한은 유지합니다.

@@ -7,5 +7,5 @@ import io.swagger.v3.oas.annotations.media.Schema.RequiredMode;
 
 @Schema(description = "토큰 재발급 요청")
 public record TokenReissueRequest(
-		@Schema(description = "유효한 자체 Refresh Token", requiredMode = RequiredMode.REQUIRED) @NotBlank String refreshToken) {
+		@Schema(description = "유효한 자체 Refresh Token", example = "eyJhbGciOiJIUzI1NiJ9.refresh.token", requiredMode = RequiredMode.REQUIRED) @NotBlank String refreshToken) {
 }

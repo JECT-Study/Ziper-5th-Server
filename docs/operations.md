@@ -96,7 +96,9 @@ Swagger는 기본값과 서버 환경에서 꺼집니다. 활성 프로필이 `l
 SWAGGER_ENABLED=true docker compose up --build -d app
 ```
 
-브라우저에서 `http://localhost:8080/swagger-ui.html`을 열고 JSON은 `/v3/api-docs`, YAML은 `/v3/api-docs.yaml`에서 확인합니다. JSON과 UI가 모두 활성화된 유효한 로컬 환경에서만 문서 GET·HEAD를 인증 없이 허용하며 업무 API의 JWT 인증은 유지합니다. 생성 범위는 `domain` 아래의 `controller` 패키지로 제한하고 현재 업무 경로는 비어 있습니다. Bearer JWT 보안 스키마를 제공하며 서버 환경에 문서를 공개하지 않습니다.
+브라우저에서 `http://localhost:8080/swagger-ui.html`을 열고 JSON은 `/v3/api-docs`, YAML은 `/v3/api-docs.yaml`에서 확인합니다. JSON과 UI가 모두 활성화된 유효한 로컬 환경에서만 문서 GET·HEAD를 인증 없이 허용하며 업무 API의 JWT 인증은 유지합니다. 생성 범위는 `domain` 아래의 `controller` 패키지로 제한하며 Bearer JWT 보안 스키마를 제공하고 서버 환경에 문서를 공개하지 않습니다.
+
+운영 서버(`prod`)에 Swagger를 여는 대신 클라이언트 팀과 API 명세를 공유할 때는 `./scripts/export-openapi.sh`로 단일 self-contained HTML(`ziper-api-docs.html`)을 생성해 공유합니다. [OpenAPI Docs 워크플로](../.github/workflows/openapi-docs.yml)는 `main` 브랜치에 병합될 때만 실행되며, API 버저닝 정책에 맞춰 직전 `main` 커밋 대비 엔드포인트 증감이 발생한 경우에만 `ziper-api-docs-html` 아티팩트를 생성하고 Discord 채널 `1537457718326067330`으로 첨부 전달합니다(`DISCORD_BOT_TOKEN` 또는 `DISCORD_OPENAPI_WEBHOOK_URL` 시크릿 사용).
 
 배포 시 업로드된 JAR를 그대로 이미지에 복사하는 경로를 사용하고 재컴파일하지 않습니다. 일반 소스 빌드 이미지는 로컬 개발용이며 업로드한 소스 번들과 일치하는 배포물로 간주하지 않습니다. 다음 명령은 기존 JAR를 재컴파일하지 않고 패키징한 뒤 이미지 내부 JAR의 SHA256과 현재 JAR가 요구하는 Sentry debug ID에 대응하는 소스 번들을 대조합니다. 증분 빌드 디렉터리의 무관한 과거 번들은 무시하지만 현재 ID 누락·중복과 이미지 JAR 변조는 실패합니다.
 
