@@ -6,4 +6,5 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/check-harness-policy.py --repo .
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-pr-policy.py
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-public-health.py
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-oauth-e2e-demo.py
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-openapi-docs.py
 exec ./gradlew check "$@"

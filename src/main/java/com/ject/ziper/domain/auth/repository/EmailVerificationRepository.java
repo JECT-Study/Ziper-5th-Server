@@ -17,11 +17,6 @@ public class EmailVerificationRepository {
 		this.jdbc = jdbc;
 	}
 
-	public void lock(String key) {
-		jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", result -> {
-		}, key);
-	}
-
 	public int countByRequester(String requesterKey, Instant since) {
 		return jdbc.queryForObject(
 				"SELECT COUNT(*) FROM ziper.auth_codes WHERE requester_key = ? AND requested_at >= ?", Integer.class,
@@ -37,14 +32,15 @@ public class EmailVerificationRepository {
 	}
 
 	public AuthCode latestByFlow(UUID flowId) {
-		List<AuthCode> values = jdbc.query(
-				"SELECT id, email, code_hash, expired_at, "
-						+ "verified_at IS NOT NULL AS verified, consumed_at IS NOT NULL AS consumed "
-						+ "FROM ziper.auth_codes WHERE flow_id = ? ORDER BY id DESC LIMIT 1",
-				(result, row) -> new AuthCode(result.getLong("id"), result.getString("email"),
-						result.getString("code_hash"), result.getObject("expired_at", OffsetDateTime.class).toInstant(),
-						result.getBoolean("verified"), result.getBoolean("consumed")),
-				flowId);
+		List<AuthCode> values = jdbc
+				.query("SELECT id, email, code_hash, expired_at, verified_at, consumed_at IS NOT NULL AS consumed "
+						+ "FROM ziper.auth_codes WHERE flow_id = ? ORDER BY id DESC LIMIT 1", (result, row) -> {
+							OffsetDateTime verifiedAt = result.getObject("verified_at", OffsetDateTime.class);
+							return new AuthCode(result.getLong("id"), result.getString("email"),
+									result.getString("code_hash"),
+									result.getObject("expired_at", OffsetDateTime.class).toInstant(),
+									verifiedAt == null ? null : verifiedAt.toInstant(), result.getBoolean("consumed"));
+						}, flowId);
 		return values.isEmpty() ? null : values.getFirst();
 	}
 
@@ -62,6 +58,10 @@ public class EmailVerificationRepository {
 
 	public void markVerified(long id, Instant at) {
 		jdbc.update("UPDATE ziper.auth_codes SET verified_at = ? WHERE id = ?", Timestamp.from(at), id);
+	}
+
+	public void markConsumed(long id, Instant at) {
+		jdbc.update("UPDATE ziper.auth_codes SET consumed_at = ? WHERE id = ?", Timestamp.from(at), id);
 	}
 
 	public EmailFailures failuresByEmail(String email) {
@@ -92,7 +92,10 @@ public class EmailVerificationRepository {
 	public record EmailFailures(int failedAttempts, Instant lastFailedAt, Instant lockedUntil) {
 	}
 
-	public record AuthCode(long id, String email, String codeHash, Instant expiredAt, boolean verified,
+	public record AuthCode(long id, String email, String codeHash, Instant expiredAt, Instant verifiedAt,
 			boolean consumed) {
+		public boolean verified() {
+			return verifiedAt != null;
+		}
 	}
 }

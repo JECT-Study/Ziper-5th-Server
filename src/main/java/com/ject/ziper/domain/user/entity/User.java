@@ -51,11 +51,13 @@ public class User {
 	protected User() {
 	}
 
-	private User(String email, String nickname, Long oauthConnectId, Instant now) {
+	private User(String email, String passwordHash, String nickname, boolean marketingAgreed, Long oauthConnectId,
+			Instant now) {
 		this.email = email;
+		this.passwordHash = passwordHash;
 		this.nickname = nickname;
 		this.status = UserStatus.ACTIVE;
-		this.marketingAgreed = false;
+		this.marketingAgreed = marketingAgreed;
 		this.marketingAgreedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
 		this.createdAt = now;
 		this.lastLoggedAt = now;
@@ -63,7 +65,12 @@ public class User {
 	}
 
 	public static User createOAuthUser(String email, String nickname, Long oauthConnectId, Instant now) {
-		return new User(email, nickname, oauthConnectId, now);
+		return new User(email, null, nickname, false, oauthConnectId, now);
+	}
+
+	public static User createEmailUser(String email, String passwordHash, String nickname, boolean marketingAgreed,
+			Instant now) {
+		return new User(email, passwordHash, nickname, marketingAgreed, null, now);
 	}
 
 	public void recordLogin(Instant now) {
@@ -88,6 +95,10 @@ public class User {
 
 	public Instant getLastLoggedAt() {
 		return lastLoggedAt;
+	}
+
+	public boolean isMarketingAgreed() {
+		return marketingAgreed;
 	}
 
 	public Long getOauthConnectId() {

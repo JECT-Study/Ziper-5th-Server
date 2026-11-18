@@ -1,0 +1,170 @@
+name: OpenAPI Docs
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: 'Force HTML artifact build and Discord delivery even if endpoints did not change'
+        type: boolean
+        required: false
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: openapi-docs-main
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Determine baseline commit and API change candidates
+        id: precheck
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          FORCE_PUBLISH: ${{ inputs.force_publish || 'false' }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess
+
+          head = os.environ['HEAD_SHA']
+          event_name = os.environ['EVENT_NAME']
+          raw_before = os.environ.get('EVENT_BEFORE', '')
+          force = os.environ.get('FORCE_PUBLISH', 'false').lower() == 'true'
+
+          if event_name == 'workflow_dispatch':
+              try:
+                  raw_before = subprocess.check_output(['git', 'rev-parse', f'{head}~1'], text=True).strip()
+              except subprocess.CalledProcessError:
+                  raw_before = ''
+
+          zero_sha = '0' * 40
+          has_before = (
+              bool(re.fullmatch(r'[0-9a-f]{40}', raw_before))
+              and raw_before != zero_sha
+              and subprocess.run(
+                  ['git', 'cat-file', '-e', f'{raw_before}^{{commit}}'],
+                  stdout=subprocess.DEVNULL,
+                  stderr=subprocess.DEVNULL,
+              ).returncode == 0
+          )
+
+          has_before_exporter = False
+          should_export = True
+          if has_before:
+              has_before_exporter = (
+                  subprocess.run(
+                      ['git', 'cat-file', '-e', f'{raw_before}:scripts/export-openapi.sh'],
+                      stdout=subprocess.DEVNULL,
+                      stderr=subprocess.DEVNULL,
+                  ).returncode == 0
+              )
+              if has_before_exporter and not force:
+                  changed_files = subprocess.check_output(
+                      [
+                          'git', '--no-pager', 'diff', '--no-ext-diff', '--no-textconv',
+                          '--name-only', raw_before, head, '--',
+                          'src/main/java/com/ject/ziper/domain/',
+                          'src/main/java/com/ject/ziper/global/config/OpenApiConfiguration.java',
+                          'src/main/resources/',
+                      ],
+                      text=True,
+                  ).strip()
+                  should_export = bool(changed_files)
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f'before_sha={raw_before if has_before else ""}\n')
+              out.write(f'has_before_exporter={"true" if has_before_exporter else "false"}\n')
+              out.write(f'should_export={"true" if should_export else "false"}\n')
+
+          if not should_export:
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+                  summary.write('## OpenAPI Docs\n\nNo API domain/controller changes detected; skipped HTML artifact and Discord delivery.\n')
+          PY
+      - uses: actions/setup-java@v6
+        if: steps.precheck.outputs.should_export == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/wrapper-validation@v6
+        if: steps.precheck.outputs.should_export == 'true'
+      - uses: gradle/actions/setup-gradle@v6
+        if: steps.precheck.outputs.should_export == 'true'
+      - name: Export head OpenAPI bundle
+        if: steps.precheck.outputs.should_export == 'true'
+        run: ./scripts/export-openapi.sh build/openapi-head
+      - name: Export baseline OpenAPI spec from previous main commit
+        if: steps.precheck.outputs.should_export == 'true' && steps.precheck.outputs.has_before_exporter == 'true'
+        env:
+          BEFORE_SHA: ${{ steps.precheck.outputs.before_sha }}
+        run: |
+          git worktree add --detach ../openapi-before "$BEFORE_SHA"
+          ../openapi-before/scripts/export-openapi.sh "$PWD/build/openapi-before"
+      - name: Diff endpoints and prepare static HTML artifact
+        id: package
+        if: steps.precheck.outputs.should_export == 'true'
+        env:
+          HAS_BEFORE_EXPORTER: ${{ steps.precheck.outputs.has_before_exporter }}
+          FORCE_PUBLISH: ${{ inputs.force_publish || 'false' }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, shutil, subprocess
+
+          cmd = [
+              'python3', 'scripts/openapi_docs.py', 'diff',
+              '--head', 'build/openapi-head/openapi.json',
+              '--output', 'build/openapi-diff.json',
+          ]
+          if os.environ.get('HAS_BEFORE_EXPORTER') == 'true':
+              cmd.extend(['--before', 'build/openapi-before/openapi.json'])
+          if os.environ.get('FORCE_PUBLISH', 'false').lower() == 'true':
+              cmd.append('--force')
+          subprocess.run(cmd, check=True)
+
+          diff = json.loads(pathlib.Path('build/openapi-diff.json').read_text(encoding='utf-8'))
+          should_publish = bool(diff.get('should_publish'))
+          if should_publish:
+              artifact_dir = pathlib.Path('build/openapi-artifact')
+              artifact_dir.mkdir(parents=True, exist_ok=True)
+              shutil.copy2('build/openapi-head/ziper-api-docs.html', artifact_dir / 'ziper-api-docs.html')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f"should_publish={'true' if should_publish else 'false'}\n")
+
+          lines = [
+              '## OpenAPI Endpoint Diff',
+              '',
+              f"- Total endpoints: `{diff['total']}`",
+              f"- Added ({len(diff['added'])}): {', '.join(f'`{e}`' for e in diff['added']) or 'none'}",
+              f"- Removed ({len(diff['removed'])}): {', '.join(f'`{e}`' for e in diff['removed']) or 'none'}",
+              f"- HTML artifact published: `{'yes' if should_publish else 'no'}`",
+          ]
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('\n'.join(lines) + '\n')
+          PY
+      - uses: actions/upload-artifact@v7
+        if: steps.precheck.outputs.should_export == 'true' && steps.package.outputs.should_publish == 'true'
+        with:
+          name: ziper-api-docs-html
+          path: build/openapi-artifact/ziper-api-docs.html
+          if-no-files-found: error
+      - name: Send static HTML documentation to Discord channel
+        if: steps.precheck.outputs.should_export == 'true' && steps.package.outputs.should_publish == 'true'
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_OPENAPI_WEBHOOK_URL: ${{ secrets.DISCORD_OPENAPI_WEBHOOK_URL }}
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/openapi_docs.py send-discord \
+            --channel-id 1537457718326067330 \
+            --html build/openapi-artifact/ziper-api-docs.html \
+            --diff-json build/openapi-diff.json \
+            --sha "${{ github.sha }}" \
+            --repository "${{ github.repository }}"

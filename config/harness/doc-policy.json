@@ -3,6 +3,7 @@
   "maintained_docs": [
     "README.md",
     "AGENTS.md",
+    "docs/prd.md",
     "docs/development.md",
     "docs/database.md",
     "docs/operations.md",
