@@ -20,6 +20,8 @@ import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
@@ -46,9 +48,15 @@ public class SecurityConfiguration {
 			"/actuator/health/readiness"};
 	private static final String[] AUTH_PUBLIC_PATHS = {"/api/v1/auth/oauth/*", "/api/v1/auth/oauth/*/code",
 			"/api/v1/auth/reissue", "/api/v1/auth/logout", "/api/v1/auth/email/verifications",
-			"/api/v1/auth/email/verifications/*/resend", "/api/v1/auth/email/verifications/*/verify"};
+			"/api/v1/auth/email/verifications/*/resend", "/api/v1/auth/email/verifications/*/verify",
+			"/api/v1/auth/email/signup"};
 	private static final String[] PUBLIC_GET_PATHS = {"/api/v1/users/nickname/availability",
 			"/api/v1/auth/email/verifications/*"};
+
+	@Bean
+	PasswordEncoder passwordEncoder() {
+		return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+	}
 
 	@Bean
 	JwtDecoder jwtDecoder(SecurityProperties properties) {

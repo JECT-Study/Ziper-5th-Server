@@ -18,8 +18,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.ject.ziper.domain.auth.repository.EmailVerificationRepository;
 import com.ject.ziper.domain.auth.repository.EmailVerificationRepository.AuthCode;
 import com.ject.ziper.domain.auth.repository.EmailVerificationRepository.EmailFailures;
+import com.ject.ziper.domain.user.repository.UserRepository;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
+import com.ject.ziper.global.persistence.AdvisoryLockRepository;
 import com.ject.ziper.global.security.EmailCodeHmac;
 
 @Service
@@ -34,19 +36,23 @@ public class EmailVerificationService {
 	private static final Duration LOCK_DURATION = Duration.ofMinutes(30);
 
 	private final EmailVerificationRepository repository;
+	private final UserRepository users;
+	private final AdvisoryLockRepository locks;
 	private final JavaMailSender mailSender;
 	private final TransactionTemplate transactions;
 	private final EmailCodeHmac hmac;
 	private final String from;
 	private final SecureRandom random = new SecureRandom();
 
-	public EmailVerificationService(EmailVerificationRepository repository, JavaMailSender mailSender,
-			TransactionTemplate transactions, @Value("${app.mail.code-secret-base64:}") String secretBase64,
-			@Value("${app.mail.from:}") String from) {
+	public EmailVerificationService(EmailVerificationRepository repository, UserRepository users,
+			AdvisoryLockRepository locks, JavaMailSender mailSender, TransactionTemplate transactions,
+			@Value("${app.mail.code-secret-base64:}") String secretBase64, @Value("${app.mail.from:}") String from) {
 		if (from.isBlank()) {
 			throw new IllegalArgumentException("Email sender address is required");
 		}
 		this.repository = repository;
+		this.users = users;
+		this.locks = locks;
 		this.mailSender = mailSender;
 		this.transactions = transactions;
 		this.hmac = new EmailCodeHmac(secretBase64);
@@ -59,9 +65,10 @@ public class EmailVerificationService {
 		UUID flowId = UUID.randomUUID();
 		String code = code();
 		transactions.executeWithoutResult(status -> {
-			repository.lock("email:" + email);
-			repository.lock("requester:" + requesterKey);
+			locks.lock("email:" + email);
+			locks.lock("requester:" + requesterKey);
 			rejectLocked(email, Instant.now());
+			rejectRegistered(email);
 			checkLimits(email, requesterKey);
 			insert(flowId, email, requesterKey, code);
 		});
@@ -73,11 +80,12 @@ public class EmailVerificationService {
 		String requesterKey = hmac.hash("requester:" + requester);
 		String code = code();
 		String email = transactions.execute(status -> {
-			repository.lock("flow:" + flowId);
+			locks.lock("flow:" + flowId);
 			AuthCode latest = activeFlow(flowId);
-			repository.lock("email:" + latest.email());
-			repository.lock("requester:" + requesterKey);
+			locks.lock("email:" + latest.email());
+			locks.lock("requester:" + requesterKey);
 			rejectLocked(latest.email(), Instant.now());
+			rejectRegistered(latest.email());
 			checkLimits(latest.email(), requesterKey);
 			insert(flowId, latest.email(), requesterKey, code);
 			return latest.email();
@@ -87,9 +95,9 @@ public class EmailVerificationService {
 
 	public void verify(UUID flowId, String code) {
 		ErrorCode failure = transactions.execute(status -> {
-			repository.lock("flow:" + flowId);
+			locks.lock("flow:" + flowId);
 			AuthCode latest = activeFlow(flowId);
-			repository.lock("email:" + latest.email());
+			locks.lock("email:" + latest.email());
 			Instant now = Instant.now();
 			FailureState state = failureState(latest.email(), now);
 			if (state.locked()) {
@@ -118,7 +126,7 @@ public class EmailVerificationService {
 
 	public VerificationStatus status(UUID flowId) {
 		return transactions.execute(status -> {
-			repository.lock("flow:" + flowId);
+			locks.lock("flow:" + flowId);
 			AuthCode latest = repository.latestByFlow(flowId);
 			if (latest == null) {
 				throw new BusinessException(ErrorCode.EMAIL_FLOW_INVALID);
@@ -144,6 +152,12 @@ public class EmailVerificationService {
 	private void rejectLocked(String email, Instant now) {
 		if (failureState(email, now).locked()) {
 			throw new BusinessException(ErrorCode.EMAIL_CODE_ATTEMPTS_EXCEEDED);
+		}
+	}
+
+	private void rejectRegistered(String email) {
+		if (users.existsByEmailIgnoreCase(email)) {
+			throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED);
 		}
 	}
 

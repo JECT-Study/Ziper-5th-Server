@@ -2,6 +2,7 @@ package com.ject.ziper.domain.auth.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,7 @@ import com.ject.ziper.domain.user.repository.OAuthUserRepository;
 import com.ject.ziper.domain.user.repository.UserRepository;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
+import com.ject.ziper.global.persistence.AdvisoryLockRepository;
 import com.ject.ziper.global.security.JwtTokenProvider;
 import com.ject.ziper.global.security.oauth.OAuthClientComposite;
 import com.ject.ziper.global.security.oauth.OAuthProvider;
@@ -35,21 +37,22 @@ public class AuthService {
 	private final SessionRepository sessionRepository;
 	private final NicknameGenerator nicknameGenerator;
 	private final JwtTokenProvider jwtTokenProvider;
+	private final AdvisoryLockRepository locks;
 	private final Clock clock;
 
 	@Autowired
 	public AuthService(OAuthClientComposite oauthClientComposite, OAuthUserRepository oauthUserRepository,
 			UserRepository userRepository, ProductBoardRepository productBoardRepository,
-			SessionRepository sessionRepository, NicknameGenerator nicknameGenerator,
-			JwtTokenProvider jwtTokenProvider) {
+			SessionRepository sessionRepository, NicknameGenerator nicknameGenerator, JwtTokenProvider jwtTokenProvider,
+			AdvisoryLockRepository locks) {
 		this(oauthClientComposite, oauthUserRepository, userRepository, productBoardRepository, sessionRepository,
-				nicknameGenerator, jwtTokenProvider, Clock.systemUTC());
+				nicknameGenerator, jwtTokenProvider, locks, Clock.systemUTC());
 	}
 
 	public AuthService(OAuthClientComposite oauthClientComposite, OAuthUserRepository oauthUserRepository,
 			UserRepository userRepository, ProductBoardRepository productBoardRepository,
 			SessionRepository sessionRepository, NicknameGenerator nicknameGenerator, JwtTokenProvider jwtTokenProvider,
-			Clock clock) {
+			AdvisoryLockRepository locks, Clock clock) {
 		this.oauthClientComposite = oauthClientComposite;
 		this.oauthUserRepository = oauthUserRepository;
 		this.userRepository = userRepository;
@@ -57,6 +60,7 @@ public class AuthService {
 		this.sessionRepository = sessionRepository;
 		this.nicknameGenerator = nicknameGenerator;
 		this.jwtTokenProvider = jwtTokenProvider;
+		this.locks = locks;
 		this.clock = clock;
 	}
 
@@ -76,6 +80,8 @@ public class AuthService {
 	}
 
 	private OAuthLoginResponse completeLogin(OAuthProvider provider, OAuthUserPrincipal principal, String userAgent) {
+		// 같은 소셜 계정의 동시 첫 로그인을 직렬화해, 뒤 요청이 고유 제약 위반 대신 먼저 가입된 회원으로 로그인하게 한다.
+		locks.lock("oauth:" + provider.name() + ":" + principal.providerId());
 		Optional<OAuthUser> existingOAuth = oauthUserRepository.findByProviderAndProviderId(provider,
 				principal.providerId());
 		Instant now = clock.instant();
@@ -90,9 +96,13 @@ public class AuthService {
 			user.recordLogin(now);
 			isNewUser = false;
 		} else {
-			String email = principal.email() == null || principal.email().isBlank() ? null : principal.email();
-			if (email != null && userRepository.existsByEmail(email)) {
-				throw new BusinessException(ErrorCode.CONFLICT);
+			String email = normalizeEmail(principal.email());
+			if (email != null) {
+				// 이메일 가입·인증과 같은 키로 잠가 같은 이메일의 동시 가입을 막는다. 이메일 계정과 자동 연결하지 않는다.
+				locks.lock("email:" + email);
+				if (userRepository.existsByEmailIgnoreCase(email)) {
+					throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED);
+				}
 			}
 			String nickname = nicknameGenerator.generateUniqueNickname();
 			OAuthUser savedOAuth = oauthUserRepository.save(OAuthUser.create(provider, principal.providerId()));
@@ -100,11 +110,20 @@ public class AuthService {
 			productBoardRepository.save(ProductBoard.createDefault(user.getId()));
 			isNewUser = true;
 		}
-		String accessToken = jwtTokenProvider.issueAccessToken(user.getId());
-		String refreshToken = jwtTokenProvider.issueRefreshToken(user.getId());
-		String tokenHash = jwtTokenProvider.hashToken(refreshToken);
-		sessionRepository.save(Session.create(user.getId(), userAgent, tokenHash));
-		return new OAuthLoginResponse(accessToken, refreshToken, isNewUser);
+		TokenResponse tokens = startSession(user.getId(), userAgent);
+		return new OAuthLoginResponse(tokens.accessToken(), tokens.refreshToken(), isNewUser);
+	}
+
+	private static String normalizeEmail(String email) {
+		return email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT);
+	}
+
+	@Transactional
+	public TokenResponse startSession(Long userId, String userAgent) {
+		String accessToken = jwtTokenProvider.issueAccessToken(userId);
+		String refreshToken = jwtTokenProvider.issueRefreshToken(userId);
+		sessionRepository.save(Session.create(userId, userAgent, jwtTokenProvider.hashToken(refreshToken)));
+		return new TokenResponse(accessToken, refreshToken);
 	}
 
 	@Transactional

@@ -46,3 +46,4 @@
 - [0013 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0013-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체
 - [0014 Spring Security RestClient 기반 무상태 OAuth Authorization Code 교환](adr/0014-oauth-authorization-code-grant.md)
 - [0015 상품·보드·해시태그·재발견 스키마 경계](adr/0015-product-card-and-rediscovery-schema.md)
+- [0016 이메일·비밀번호 가입, 인증 흐름 소비와 OAuth 이메일 중복 처리](adr/0016-email-password-signup.md) — 0009의 후속 작업인 가입·코드 소비와 OAuth 자동 연결 금지를 결정
