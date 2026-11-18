@@ -28,13 +28,13 @@ class EmailVerificationOpenApiTest extends PostgresTestSupport {
 	private ObjectMapper mapper;
 
 	@Test
-	void 로컬에서메일기능을켰을때_문서를요청하면_네경로를공개인증으로표시한다() throws Exception {
+	void 로컬에서메일기능을켰을때_문서를요청하면_가입을포함한경로를공개인증으로표시한다() throws Exception {
 		String body = mvc.perform(get("/v3/api-docs")).andExpect(status().isOk()).andReturn().getResponse()
 				.getContentAsString();
 		JsonNode paths = mapper.readTree(body).path("paths");
 		for (String path : new String[]{"/api/v1/auth/email/verifications",
-				"/api/v1/auth/email/verifications/{flowId}/resend",
-				"/api/v1/auth/email/verifications/{flowId}/verify"}) {
+				"/api/v1/auth/email/verifications/{flowId}/resend", "/api/v1/auth/email/verifications/{flowId}/verify",
+				"/api/v1/auth/email/signup"}) {
 			JsonNode operation = paths.path(path).path("post");
 			assertThat(operation.isMissingNode()).isFalse();
 			assertThat(operation.path("security").isArray()).isTrue();

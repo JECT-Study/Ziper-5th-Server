@@ -22,7 +22,11 @@ public enum ErrorCode {
 																									HttpStatus.GONE,
 																									"인증번호가 만료되었습니다."), EMAIL_CODE_ATTEMPTS_EXCEEDED(
 																											HttpStatus.TOO_MANY_REQUESTS,
-																											"인증을 완료하지 못했어요.");
+																											"인증을 완료하지 못했어요."), EMAIL_ALREADY_REGISTERED(
+																													HttpStatus.CONFLICT,
+																													"이미 가입된 이메일입니다."), INVALID_PASSWORD(
+																															HttpStatus.BAD_REQUEST,
+																															"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요.");
 
 	private final HttpStatus status;
 	private final String detail;

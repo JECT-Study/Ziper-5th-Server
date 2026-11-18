@@ -15,9 +15,14 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.ECGenParameterSpec;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -41,8 +46,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ject.ziper.domain.auth.dto.OAuthLoginResponse;
 import com.ject.ziper.domain.auth.entity.Session;
 import com.ject.ziper.domain.auth.repository.SessionRepository;
+import com.ject.ziper.domain.auth.service.AuthService;
 import com.ject.ziper.domain.board.entity.ProductBoard;
 import com.ject.ziper.domain.board.repository.ProductBoardRepository;
 import com.ject.ziper.domain.user.entity.User;
@@ -91,6 +98,9 @@ class AuthIntegrationTest extends PostgresTestSupport {
 
 	@Autowired
 	private JwtDecoder accessJwtDecoder;
+
+	@Autowired
+	private AuthService authService;
 
 	@DynamicPropertySource
 	static void kakaoProperties(DynamicPropertyRegistry registry) throws Exception {
@@ -220,11 +230,56 @@ class AuthIntegrationTest extends PostgresTestSupport {
 		String conflictToken = createAppleIdToken("apple-sub-2", "dup@privaterelay.appleid.com", "com.ject.ziper");
 		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"token\":\"" + conflictToken + "\"}")).andExpect(status().isConflict())
-				.andExpect(jsonPath("code").value("CONFLICT"));
+				.andExpect(jsonPath("code").value("EMAIL_ALREADY_REGISTERED"));
 
 		mvc.perform(post("/api/v1/auth/oauth/unknown").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"token\":\"" + firstToken + "\"}")).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("code").value("INVALID_REQUEST"));
+	}
+
+	@Test
+	void 이메일로가입한회원과대소문자만다른소셜이메일_소셜로그인을시도하면_연결하지않고이메일중복으로거부한다() throws Exception {
+		userRepository.save(User.createEmailUser("shared@example.com", "{bcrypt}hash", "이메일회원", false, Instant.now()));
+
+		String appleToken = createAppleIdToken("apple-sub-email-dup", "Shared@Example.com", "com.ject.ziper");
+		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"" + appleToken + "\"}")).andExpect(status().isConflict())
+				.andExpect(jsonPath("code").value("EMAIL_ALREADY_REGISTERED"));
+
+		assertThat(oauthUserRepository.count()).isZero();
+		assertThat(userRepository.count()).isOne();
+	}
+
+	@Test
+	void 대소문자가섞인소셜이메일_자동가입하면_소문자로정규화해저장한다() throws Exception {
+		String appleToken = createAppleIdToken("apple-sub-mixed", " Mixed.Case@Example.com", "com.ject.ziper");
+		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"" + appleToken + "\"}")).andExpect(status().isOk());
+
+		assertThat(userRepository.findAll()).singleElement()
+				.satisfies(user -> assertThat(user.getEmail()).isEqualTo("mixed.case@example.com"));
+	}
+
+	@Test
+	void 같은소셜계정의첫로그인이동시에들어왔을때_처리하면_한명만가입하고둘다로그인한다() throws Exception {
+		String appleToken = createAppleIdToken("apple-sub-concurrent", "concurrent@example.com", "com.ject.ziper");
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		List<OAuthLoginResponse> responses = new ArrayList<>();
+		try {
+			List<Callable<OAuthLoginResponse>> tasks = List.of(
+					() -> authService.loginWithOAuth("apple", appleToken, null),
+					() -> authService.loginWithOAuth("apple", appleToken, null));
+			for (Future<OAuthLoginResponse> future : executor.invokeAll(tasks)) {
+				responses.add(future.get());
+			}
+		} finally {
+			executor.shutdownNow();
+		}
+
+		assertThat(responses).extracting(OAuthLoginResponse::isNewUser).containsExactlyInAnyOrder(true, false);
+		assertThat(userRepository.count()).isOne();
+		assertThat(oauthUserRepository.count()).isOne();
+		assertThat(sessionRepository.count()).isEqualTo(2);
 	}
 
 	@Test
@@ -272,7 +327,7 @@ class AuthIntegrationTest extends PostgresTestSupport {
 		String conflictAppleToken = createAppleIdToken("apple-sub-dup", "shared@example.com", "com.ject.ziper");
 		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"token\":\"" + conflictAppleToken + "\"}")).andExpect(status().isConflict())
-				.andExpect(jsonPath("code").value("CONFLICT"));
+				.andExpect(jsonPath("code").value("EMAIL_ALREADY_REGISTERED"));
 
 		mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"token\":\"invalid-kakao-token\"}")).andExpect(status().isUnauthorized())
