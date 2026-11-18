@@ -20,6 +20,10 @@
 
 `requested_at`과 이메일·요청자 키 인덱스는 발급 빈도 제한에 사용합니다. 요청자 키는 HTTP 연결의 `remoteAddr`를 별도 HMAC 키로 변환해 저장하며 원본 IP는 저장하지 않습니다. 같은 이메일은 3분 간격, 같은 연결 출처는 시간당 20회로 제한합니다. 이메일당 시간당 발송 한도는 두지 않습니다. 프록시가 여러 사용자를 같은 주소로 전달하면 출처별 한도를 공유할 수 있습니다. 번호 원문은 저장하지 않고 HMAC 해시만 보관합니다. 발급·재전송·확인과 이메일 단위 실패 횟수 집계·잠금은 구현했으며, 가입 시 검증 행 소비와 회원·기본 보드의 단일 트랜잭션 생성은 후속 작업입니다.
 
+`V6__create_product_and_tag_tables.sql`은 상품·보드 매핑·해시태그·파일·재발견 이벤트 스키마를 추가합니다([ADR 0015](adr/0015-product-card-and-rediscovery-schema.md), [백엔드 PRD](prd.md)). `product_boards`에는 `WHERE is_deleted = FALSE` 부분 고유 인덱스를 두어 동일 사용자 내 활성 보드 이름 중복을 막습니다. `product_cards`는 사용자별 동일 `product_url`을 단일 행(`UNIQUE (user_id, product_url)`)으로 관리하고 `product_board_card`로 여러 보드에 다대다 연결합니다. 구매 완료(`status = 'PURCHASED'`)나 전체 삭제(`is_deleted = TRUE`) 시에도 3초 내 `[되돌리기]` 원복을 위해 `product_board_card` 행은 유지하고 일반 보드 조회에서 `status = 'PLANNED' AND is_deleted = FALSE`로 필터링합니다. 개별 보드에서 상품을 빼거나 보드를 삭제할 때만 매핑을 지우고 남은 활성 보드 연결이 0개(고아 상품)가 되면 카드를 휴지통으로 이동합니다.
+
+`tags`는 기본 계절 태그 4종(`봄`, `여름`, `가을`, `겨울`)을 시드하고 `product_card_tags`로 카드당 0개 이상의 다중 태그를 매핑합니다. 상품 이미지는 외부 OG URL(`image_url`), 업로드·리사이징 파일(`files` 테이블 참조 `image_file_id`), 파싱 실패 시 대체 아이콘(`fallback_icon`: `TOP`, `PANTS`, `SKIRT`, `ACCESSORY`, `BEAUTY`)을 함께 지원합니다. 재발견 주기는 `product_cards`의 `rediscovery_stage`(0=14일, 1=30일, 2=90일), `last_interacted_at`, `next_rediscovery_at`, `is_link_valid`로 관리하며 상세 조회·원본 이동·스와이프 이력은 `user_card_events`에 기록합니다.
+
 ## 로컬 시드 실행
 
 ```sh
