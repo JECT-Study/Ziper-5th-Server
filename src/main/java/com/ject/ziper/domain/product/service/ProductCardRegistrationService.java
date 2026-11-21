@@ -18,7 +18,6 @@ import com.ject.ziper.domain.board.repository.ProductBoardRepository;
 import com.ject.ziper.domain.file.service.FileImageService;
 import com.ject.ziper.domain.file.service.ImageMirrorService;
 import com.ject.ziper.domain.product.dto.CreateProductCardRequest;
-import com.ject.ziper.domain.product.dto.CreateProductCardResponse;
 import com.ject.ziper.domain.product.entity.FallbackIcon;
 import com.ject.ziper.domain.product.entity.MetadataSource;
 import com.ject.ziper.domain.product.entity.ProductBoardCard;
@@ -32,7 +31,6 @@ import com.ject.ziper.domain.product.link.service.ProductLinkService;
 import com.ject.ziper.domain.product.repository.ProductBoardCardRepository;
 import com.ject.ziper.domain.product.repository.ProductCardRepository;
 import com.ject.ziper.domain.product.repository.ProductCardTagRepository;
-import com.ject.ziper.domain.tag.dto.TagResponse;
 import com.ject.ziper.domain.tag.entity.Tag;
 import com.ject.ziper.domain.tag.service.TagService;
 import com.ject.ziper.global.error.BusinessException;
@@ -46,9 +44,16 @@ public class ProductCardRegistrationService {
 	public static final int MAX_SHOP_LENGTH = 100;
 	public static final long MAX_PRICE = 1_000_000_000L;
 
-	private static final String LOCK_PREFIX = "product-card:";
+	// 잠금 순서: board:{userId} -> product-card:{userId} -> link:{uuid} ->
+	// link-id:{id}. 역순으로 잡지 않는다.
+	private static final String BOARD_LOCK_PREFIX = "board:";
+	private static final String PRODUCT_CARD_LOCK_PREFIX = "product-card:";
 	private static final Pattern SCRIPT_OR_STYLE_BLOCK = Pattern.compile("(?is)<(script|style)\\b[^>]*>.*?</\\1\\s*>");
-	private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[^>]*>");
+	// 실제 태그·주석 형태만 제거한다. "S<M 사이즈 > L"처럼 평문 부등호는 속성 이름이 ASCII가 아니므로 태그로 보지 않는다.
+	private static final Pattern HTML_TAG_PATTERN = Pattern.compile(
+			"<!--.*?-->|</?[A-Za-z][A-Za-z0-9-]*"
+					+ "(?:\\s+[A-Za-z_:][-A-Za-z0-9_:.]*(?:\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s\"'=<>`]+))?)*\\s*/?>",
+			Pattern.DOTALL);
 	private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
 
 	private final ProductCardRepository productCardRepository;
@@ -92,8 +97,12 @@ public class ProductCardRegistrationService {
 		this.clock = clock;
 	}
 
+	/**
+	 * 카드·보드 연결·태그·미러링 작업을 한 트랜잭션으로 저장한다. 서명 URL 발급 같은 스토리지 호출은 이 트랜잭션 밖
+	 * ({@link ProductCardRegistrationFacade})에서 하므로 서명이 실패해도 저장은 롤백되지 않는다.
+	 */
 	@Transactional
-	public CreateProductCardResponse registerProductCard(Long userId, CreateProductCardRequest request) {
+	public RegisteredProductCard registerProductCard(Long userId, CreateProductCardRequest request) {
 		if (request == null) {
 			throw new BusinessException(ErrorCode.INVALID_PRODUCT_CARD_INPUT);
 		}
@@ -116,23 +125,30 @@ public class ProductCardRegistrationService {
 		if (imageFileId != null) {
 			fileImageService.requireOwnedFile(imageFileId, userId);
 		}
-		verifyActiveOwnedBoards(userId, boardIds);
 
-		advisoryLockRepository.lock(LOCK_PREFIX + userId);
+		// 보드 삭제(ProductBoardCommandService.deleteBoard)와 같은 board:{userId} 잠금 아래에서 활성
+		// 보드를
+		// 검증하고 연결까지 마친다. 그러면 검증 직후 삭제된 보드에만 연결된 활성 카드가 생기지 않는다.
+		advisoryLockRepository.lock(BOARD_LOCK_PREFIX + userId);
+		advisoryLockRepository.lock(PRODUCT_CARD_LOCK_PREFIX + userId);
+		verifyActiveOwnedBoards(userId, boardIds);
 
 		if (productCardRepository.existsByUserIdAndProductUrl(userId, normalized.canonicalUrl())) {
 			throw new BusinessException(ErrorCode.DUPLICATE_PRODUCT_URL);
 		}
 
+		// link-id 잠금을 잡은 채 최신 링크 상태를 읽는다. 상태 전파(ProductLinkService)와 직렬화되어 새 카드만
+		// 이전 상태로 남지 않는다.
 		ProductLink link = productLinkService.resolveOrCreateLink(normalized.canonicalUrl(), finalShop);
 		List<Tag> resolvedTags = tagService.resolveOrCreateForCard(userId, request.tags());
 
 		Instant now = clock.instant();
-		ProductImageStatus initialImageStatus = determineInitialImageStatus(imageFileId, imageUrl);
+		// PENDING은 외부 이미지를 미러링할 때만 쓴다. 직접 업로드·대체 아이콘만 있으면 NONE이다.
+		boolean mirrorCandidate = imageFileId == null && imageUrl != null;
 
-		ProductCard card = productCardRepository.saveAndFlush(
-				ProductCard.create(userId, normalized.canonicalUrl(), sharedUrl, finalShop, productTitle, price, memo,
-						imageUrl, imageFileId, fallbackIcon, metadataSource, initialImageStatus, link, now));
+		ProductCard card = productCardRepository.saveAndFlush(ProductCard.create(userId, normalized.canonicalUrl(),
+				sharedUrl, finalShop, productTitle, price, memo, imageUrl, imageFileId, fallbackIcon, metadataSource,
+				mirrorCandidate ? ProductImageStatus.PENDING : ProductImageStatus.NONE, link, now));
 
 		List<ProductBoardCard> boardCards = boardIds.stream()
 				.map(boardId -> ProductBoardCard.create(boardId, card.getId(), now)).toList();
@@ -142,17 +158,18 @@ public class ProductCardRegistrationService {
 				.map(tag -> ProductCardTag.create(card.getId(), tag.getId(), now)).toList();
 		productCardTagRepository.saveAll(cardTags);
 
-		if (imageFileId == null && imageUrl != null) {
-			boolean enqueued = imageMirrorService.enqueueMirrorJob(card.getId(), userId, imageUrl, finalShop);
+		if (mirrorCandidate) {
+			// 이미지 정책(허용 호스트·미러링 전략)은 사용자가 입력한 쇼핑몰 이름이 아니라 서버가 URL로 판정한 쇼핑몰로
+			// 고른다. 미지원 몰은 null(일반 정책)이다.
+			String policyShop = normalized.supported() ? normalized.shop() : null;
+			boolean enqueued = imageMirrorService.enqueueMirrorJob(card.getId(), userId, imageUrl, policyShop);
 			if (!enqueued) {
 				card.updateImageStatus(ProductImageStatus.NONE, now);
 				productCardRepository.saveAndFlush(card);
 			}
 		}
 
-		String imageFileUrl = fileImageService.findSignedUrl(card.getImageFileId()).orElse(null);
-		List<TagResponse> tagResponses = resolvedTags.stream().map(TagResponse::from).toList();
-		return CreateProductCardResponse.of(card, imageFileUrl, boardIds, tagResponses);
+		return new RegisteredProductCard(card, boardIds, resolvedTags);
 	}
 
 	public String validateOptionalSharedUrl(String rawSharedUrl) {
@@ -180,6 +197,7 @@ public class ProductCardRegistrationService {
 
 	public List<Long> validateActiveOwnedBoardIds(Long userId, List<Long> rawBoardIds) {
 		List<Long> boardIds = deduplicateBoardIds(rawBoardIds);
+		advisoryLockRepository.lock(BOARD_LOCK_PREFIX + userId);
 		verifyActiveOwnedBoards(userId, boardIds);
 		return boardIds;
 	}
@@ -295,15 +313,5 @@ public class ProductCardRegistrationService {
 		for (String rawTag : rawTags) {
 			TagService.normalizeTitle(rawTag);
 		}
-	}
-
-	private static ProductImageStatus determineInitialImageStatus(Long imageFileId, String imageUrl) {
-		if (imageFileId != null) {
-			return ProductImageStatus.READY;
-		}
-		if (imageUrl != null) {
-			return ProductImageStatus.PENDING;
-		}
-		return ProductImageStatus.NONE;
 	}
 }

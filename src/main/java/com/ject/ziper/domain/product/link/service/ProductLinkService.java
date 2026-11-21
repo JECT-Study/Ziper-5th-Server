@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,7 +90,7 @@ public class ProductLinkService {
 			productCardLinkJdbcRepository.attachLinkId(card.cardId(), linkId, now);
 		}
 
-		locks.lock("link-id:" + linkId);
+		locks.lock(linkIdLockKey(linkId));
 
 		ProductCardLinkSnapshot lockedCard = productCardLinkJdbcRepository.findOwnedActiveCard(cardId, userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND));
@@ -133,6 +134,14 @@ public class ProductLinkService {
 		return new ProductLinkStatusResponse(reportedStatus, effectiveObservedAt, ProductLinkCheckSource.CLIENT);
 	}
 
+	/**
+	 * 정규화 URL의 링크를 찾거나 만들고, 상태
+	 * 갱신({@link #reportLinkStatus}·{@link #applyServerCheck})과 같은
+	 * {@code link-id:{id}} 잠금을 호출 트랜잭션이 끝날 때까지 잡은 채 최신 상태로 반환한다. 이 잠금 때문에 호출자가 반환된
+	 * 상태로 카드를 저장하면, 그 사이에 커밋된 상태 전파를 놓치지 않는다(저장 이후의 전파는 새 카드까지 갱신한다). 잠금 순서는
+	 * {@code link:{uuid}} → {@code link-id:{id}}이며, 호출자는 이 뒤에 {@code board:}·{@code
+	 * product-card:} 잠금을 잡지 않는다.
+	 */
 	@Transactional
 	public ProductLink resolveOrCreateLink(String canonicalUrl, String shop) {
 		if (canonicalUrl == null || canonicalUrl.isBlank()) {
@@ -141,10 +150,18 @@ public class ProductLinkService {
 		String normalizedUrl = canonicalUrl.trim();
 		locks.lock(linkUrlLockKey(normalizedUrl));
 		Instant now = clock.instant();
-		return productLinkRepository.findByCanonicalUrl(normalizedUrl).map(existing -> {
+		Optional<Long> existingId = productLinkRepository.findIdByCanonicalUrl(normalizedUrl);
+		if (existingId.isPresent()) {
+			// 잠금을 잡은 뒤에 엔티티를 처음 읽어야 다른 트랜잭션이 방금 커밋한 상태를 본다.
+			locks.lock(linkIdLockKey(existingId.get()));
+			ProductLink existing = productLinkRepository.findById(existingId.get())
+					.orElseThrow(() -> new IllegalStateException("product_links row disappeared: " + existingId.get()));
 			existing.updateShopIfBlank(shop, now);
 			return existing;
-		}).orElseGet(() -> productLinkRepository.saveAndFlush(ProductLink.create(normalizedUrl, shop, now)));
+		}
+		ProductLink created = productLinkRepository.saveAndFlush(ProductLink.create(normalizedUrl, shop, now));
+		locks.lock(linkIdLockKey(created.getId()));
+		return created;
 	}
 
 	@Transactional
@@ -155,7 +172,7 @@ public class ProductLinkService {
 				|| status == ProductLinkStatus.REMOVED) {
 			return;
 		}
-		locks.lock("link-id:" + linkId);
+		locks.lock(linkIdLockKey(linkId));
 		Instant now = clock.instant();
 		ProductLink link = productLinkRepository.findById(linkId).orElse(null);
 		if (link == null) {
@@ -166,6 +183,10 @@ public class ProductLinkService {
 		}
 		productCardLinkJdbcRepository.propagateLinkStatus(linkId, null, status, checkedAt,
 				ProductLinkCheckSource.SERVER, now);
+	}
+
+	private static String linkIdLockKey(Long linkId) {
+		return "link-id:" + linkId;
 	}
 
 	private static String linkUrlLockKey(String normalizedUrl) {

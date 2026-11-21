@@ -16,9 +16,11 @@ WHERE image_url IS NULL
   AND image_file_id IS NULL
   AND fallback_icon IS NULL;
 
+-- 직접 업로드 파일(외부 image_url 없음)은 NONE, 외부 이미지를 미러링한 파일(image_url과 image_file_id 모두 있음)은 READY
 UPDATE ziper.product_cards
 SET image_status = 'READY'
-WHERE image_file_id IS NOT NULL;
+WHERE image_file_id IS NOT NULL
+  AND image_url IS NOT NULL;
 
 -- 3. 가격·이미지·메타데이터 출처·이미지 상태 제약 조건 강화
 ALTER TABLE ziper.product_cards
@@ -34,3 +36,12 @@ ALTER TABLE ziper.product_cards
     ADD CONSTRAINT ck_product_cards_image_status CHECK (
         image_status IN ('NONE', 'PENDING', 'READY', 'FAILED')
     );
+
+-- 4. 이미지 필수 CHECK와 파일 삭제 정책의 충돌 해소
+-- V6의 ON DELETE SET NULL은 파일만 이미지로 가진 카드의 image_file_id를 NULL로 만들어
+-- ck_product_cards_image_present를 위반한다. 카드가 참조 중인 파일의 삭제는 RESTRICT로 거부하고,
+-- 호출자(고아 파일 정리, JEC-10)가 카드 이미지를 먼저 교체·해제한 뒤 파일을 삭제한다.
+ALTER TABLE ziper.product_cards
+    DROP CONSTRAINT fk_product_cards_image_file_id,
+    ADD CONSTRAINT fk_product_cards_image_file_id FOREIGN KEY (image_file_id)
+        REFERENCES ziper.files (id) ON DELETE RESTRICT;
