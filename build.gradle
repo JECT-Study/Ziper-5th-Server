@@ -35,6 +35,8 @@ dependencies {
     implementation 'io.sentry:sentry-spring-boot-starter-jakarta'
     implementation 'io.sentry:sentry-jdbc'
     implementation 'io.sentry:sentry-async-profiler'
+    implementation 'com.github.usefulness:webp-imageio:0.11.0'
+    implementation 'org.apache.httpcomponents.client5:httpclient5'
     runtimeOnly 'org.postgresql:postgresql'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'

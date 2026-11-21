@@ -39,6 +39,12 @@ public class User {
 	@Column(name = "marketing_agreed_at", nullable = false)
 	private LocalDateTime marketingAgreedAt;
 
+	@Column(name = "terms_agreed_at")
+	private Instant termsAgreedAt;
+
+	@Column(name = "privacy_agreed_at")
+	private Instant privacyAgreedAt;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -59,13 +65,16 @@ public class User {
 		this.status = UserStatus.ACTIVE;
 		this.marketingAgreed = marketingAgreed;
 		this.marketingAgreedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
+		this.termsAgreedAt = now;
+		this.privacyAgreedAt = now;
 		this.createdAt = now;
 		this.lastLoggedAt = now;
 		this.oauthConnectId = oauthConnectId;
 	}
 
-	public static User createOAuthUser(String email, String nickname, Long oauthConnectId, Instant now) {
-		return new User(email, null, nickname, false, oauthConnectId, now);
+	public static User createOAuthUser(String email, String nickname, Long oauthConnectId, boolean marketingAgreed,
+			Instant now) {
+		return new User(email, null, nickname, marketingAgreed, oauthConnectId, now);
 	}
 
 	public static User createEmailUser(String email, String passwordHash, String nickname, boolean marketingAgreed,
@@ -85,6 +94,10 @@ public class User {
 		return email;
 	}
 
+	public String getPasswordHash() {
+		return passwordHash;
+	}
+
 	public String getNickname() {
 		return nickname;
 	}
@@ -99,6 +112,18 @@ public class User {
 
 	public boolean isMarketingAgreed() {
 		return marketingAgreed;
+	}
+
+	public Instant getMarketingAgreedAt() {
+		return marketingAgreedAt.toInstant(ZoneOffset.UTC);
+	}
+
+	public Instant getTermsAgreedAt() {
+		return termsAgreedAt;
+	}
+
+	public Instant getPrivacyAgreedAt() {
+		return privacyAgreedAt;
 	}
 
 	public Long getOauthConnectId() {

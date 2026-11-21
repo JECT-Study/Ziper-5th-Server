@@ -1,10 +1,18 @@
 spring:
+  http:
+    client:
+      # httpclient5 is on the classpath only for the SSRF-pinned image fetcher; keep every other RestClient on the JDK client.
+      factory: jdk
   application:
     name: ziper-server
   jmx:
     enabled: false
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   datasource:
     url: ${DB_JDBC_URL}
     username: ${DB_USERNAME}
@@ -107,6 +115,32 @@ app:
     kakao-token-uri: ${KAKAO_TOKEN_URI:https://kauth.kakao.com/oauth/token}
     kakao-client-id: ${KAKAO_CLIENT_ID:}
     kakao-client-secret: ${KAKAO_CLIENT_SECRET:}
+  storage:
+    provider: ${STORAGE_PROVIDER:supabase}
+    supabase-url: ${STORAGE_SUPABASE_URL:}
+    supabase-service-role-key: ${STORAGE_SUPABASE_SERVICE_ROLE_KEY:}
+    bucket: ${STORAGE_BUCKET:product-images}
+    signed-url-expiration-seconds: ${STORAGE_SIGNED_URL_EXPIRATION_SECONDS:900}
+    max-file-size-bytes: ${STORAGE_MAX_FILE_SIZE_BYTES:5242880}
+    mirroring-enabled: ${IMAGE_MIRRORING_ENABLED:true}
+    disabled-mirror-hosts: ${IMAGE_MIRRORING_DISABLED_HOSTS:}
+    worker-enabled: ${IMAGE_MIRRORING_WORKER_ENABLED:true}
+    mirror-poll-interval-ms: ${IMAGE_MIRRORING_POLL_INTERVAL_MS:5000}
+    mirror-batch-size: ${IMAGE_MIRRORING_BATCH_SIZE:5}
+    mirror-connect-timeout-ms: ${IMAGE_MIRRORING_CONNECT_TIMEOUT_MS:5000}
+    mirror-read-timeout-ms: ${IMAGE_MIRRORING_READ_TIMEOUT_MS:10000}
+    mirror-host-max-concurrency: ${IMAGE_MIRRORING_HOST_MAX_CONCURRENCY:2}
+    mirror-host-min-interval-ms: ${IMAGE_MIRRORING_HOST_MIN_INTERVAL_MS:200}
+    mirror-circuit-failure-threshold: ${IMAGE_MIRRORING_CIRCUIT_FAILURE_THRESHOLD:3}
+    mirror-circuit-open-seconds: ${IMAGE_MIRRORING_CIRCUIT_OPEN_SECONDS:300}
+    mirror-dedup-ttl-seconds: ${IMAGE_MIRRORING_DEDUP_TTL_SECONDS:30}
+    mirror-dedup-max-bytes: ${IMAGE_MIRRORING_DEDUP_MAX_BYTES:16777216}
+    mirror-max-attempts: ${IMAGE_MIRRORING_MAX_ATTEMPTS:5}
+    mirror-retry-base-delay-seconds: ${IMAGE_MIRRORING_RETRY_BASE_DELAY_SECONDS:60}
+    mirror-retry-max-delay-seconds: ${IMAGE_MIRRORING_RETRY_MAX_DELAY_SECONDS:3600}
+    mirror-lock-timeout-seconds: ${IMAGE_MIRRORING_LOCK_TIMEOUT_SECONDS:600}
+    supabase-connect-timeout-ms: ${STORAGE_SUPABASE_CONNECT_TIMEOUT_MS:3000}
+    supabase-read-timeout-ms: ${STORAGE_SUPABASE_READ_TIMEOUT_MS:15000}
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}

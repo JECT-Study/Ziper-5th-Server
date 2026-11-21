@@ -3,6 +3,8 @@
 - 상태: 채택; 실제 메일 수신 번호로 진행하는 가입 E2E와 운영 배포는 미검증
 - 날짜: 2026-11-18
 
+필수 약관 시각 기록과 소셜 가입 절차는 [ADR 0018](0018-web-refresh-and-signup-consent.md)에서 변경했습니다.
+
 ## 배경
 
 [ADR 0009](0009-email-verification-delivery.md)와 [0012](0012-email-verification-lockout.md)는 가입 전 이메일 인증까지만 결정했고 회원 가입과 인증 코드 소비는 후속 작업으로 남겼다. 이메일 가입 화면은 이메일 인증 → 비밀번호·약관 동의 → 닉네임 순서로 진행하며, 가입 완료 후 바로 홈으로 이동한다. `users.password_hash`와 `auth_codes.consumed_at` 컬럼은 이미 있지만 비밀번호 해시 방식과 인증 흐름을 가입에 연결하는 규칙이 없었다.
