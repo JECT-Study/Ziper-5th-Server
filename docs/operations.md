@@ -24,6 +24,28 @@ CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향
 
 발급 기록은 DB에 먼저 커밋한 뒤 메일을 보냅니다. SMTP 실패는 전역 `5xx` 오류로 전달하고 자동 재발송하지 않으며, 남은 기록에도 발송 제한을 적용합니다. 로컬 Gmail 발송·수신의 검증 범위는 [2026-11-14 검증 이력](verification.md#2026-11-14-jec-43-이메일-인증번호-발송확인)에, Mailgun(`smtp.mailgun.org`, `noreply@joonamin.dev`) 로컬 발송·수신 및 Secret Manager 등록 기록은 [2026-11-16 Mailgun 검증 이력](verification.md#2026-11-16-mailgun-smtp-이메일-인증-발송수신)에 기록합니다. [ADR 0009](adr/0009-email-verification-delivery.md)에 이 일관성 경계를, [ADR 0012](adr/0012-email-verification-lockout.md)에 이메일 단위 잠금과 한도 변경을 기록했습니다.
 
+## 상품 카드 이미지 저장소와 비동기 B-2 미러링
+
+상품 카드 직접 업로드(`POST /api/v1/files/images`, JWT 인증 필수)와 외부 OG 이미지 비동기 미러링은 모두 4:3 세로 비율(최대 `480×640`) WebP 썸네일로 정규화해 비공개 Object Storage에 저장하고 단기 서명 URL로 서빙합니다([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)). 로컬(`local`)과 테스트(`test`) 프로필은 기본으로 인메모리 어댑터(`memory`)를 사용하며, 운영 환경은 `STORAGE_PROVIDER=supabase`와 비공개 버킷 자격 증명을 사용합니다.
+
+| 환경 변수 | 기본값 | 역할 |
+| --- | --- | --- |
+| `STORAGE_PROVIDER` | `supabase` (`local`/`test`: `memory`) | Object Storage 어댑터 선택 (`supabase` \| `memory`) |
+| `STORAGE_SUPABASE_URL` | 없음 | Supabase 프로젝트 HTTPS URL |
+| `STORAGE_SUPABASE_SERVICE_ROLE_KEY` | 없음 | Supabase Storage 접근용 Service Role 키(로그·응답 노출 금지) |
+| `STORAGE_BUCKET` | `product-images` | 비공개 이미지 버킷 이름 |
+| `STORAGE_SIGNED_URL_EXPIRATION_SECONDS` | `900` | 단기 서명 URL 유효 시간(초) |
+| `STORAGE_MAX_FILE_SIZE_BYTES` | `5242880` | 업로드·다운로드 최대 파일 크기(5MB) |
+| `IMAGE_MIRRORING_ENABLED` | `true` | 외부 OG 이미지 미러링 전역 킬 스위치(`false` 시 작업 미등록, 원본 `image_url` 유지) |
+| `IMAGE_MIRRORING_DISABLED_HOSTS` | 없음 | 쉼표 구분 호스트별 미러링 중단 목록 |
+| `IMAGE_MIRRORING_WORKER_ENABLED` | `true` (`test`: `false`) | `ziper.image_mirror_jobs` 폴링 및 커밋 후 빠른 경로 워커 활성화 |
+| `IMAGE_MIRRORING_POLL_INTERVAL_MS` | `5000` | 스케줄러 `FOR UPDATE SKIP LOCKED` 폴링 주기(ms) |
+| `IMAGE_MIRRORING_BATCH_SIZE` | `5` | 워커 1회 클레임 최대 작업 수 |
+| `IMAGE_MIRRORING_CONNECT_TIMEOUT_MS` / `IMAGE_MIRRORING_READ_TIMEOUT_MS` | `5000` / `10000` | 외부 이미지 다운로드 연결·읽기 타임아웃(ms) |
+| `IMAGE_MIRRORING_HOST_MAX_CONCURRENCY` / `IMAGE_MIRRORING_HOST_MIN_INTERVAL_MS` | `2` / `200` | CDN 호스트별 동시 요청 상한 및 최소 요청 간격(ms) |
+| `IMAGE_MIRRORING_CIRCUIT_FAILURE_THRESHOLD` / `IMAGE_MIRRORING_CIRCUIT_OPEN_SECONDS` | `3` / `300` | 연속 `403`/`429` 발생 시 호스트 자동 차단 임계치 및 쿨다운(초) |
+| `IMAGE_MIRRORING_DEDUP_TTL_SECONDS` | `30` | 동일 `source_url_hash` 최근 다운로드 중복 제거 TTL(초) |
+
 ## 상태 점검
 
 | 경로 | 확인 대상 | 정상 | 비정상 |
