@@ -41,10 +41,12 @@
 - [0008 서비스·쿼리 추적과 성능 데이터 경계](adr/0008-service-and-query-tracing.md)
 - [0009 이메일 인증번호 발송과 검증 경계](adr/0009-email-verification-delivery.md) — 요청 한도·오입력 제한은 0012로 대체
 - [0010 소셜 OAuth 로그인과 자체 JWT·세션 수명 주기](adr/0010-oauth-login-and-token-lifecycle.md)
+  - [0018 웹 Refresh 쿠키와 소셜 가입 약관](adr/0018-web-refresh-and-signup-consent.md) — 0010·0016의 소셜 자동 가입과 필수 약관 저장 규칙을 대체
 - [0011 OAuth 무이메일 회원을 위한 users.email Nullable 완화](adr/0011-nullable-user-email-for-oauth.md)
 - [0012 이메일 단위 인증번호 오입력 잠금](adr/0012-email-verification-lockout.md)
 - [0013 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0013-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체
 - [0014 Spring Security RestClient 기반 무상태 OAuth Authorization Code 교환](adr/0014-oauth-authorization-code-grant.md)
 - [0015 상품·보드·해시태그·재발견 스키마 경계](adr/0015-product-card-and-rediscovery-schema.md)
 - [0016 이메일·비밀번호 가입, 인증 흐름 소비와 OAuth 이메일 중복 처리](adr/0016-email-password-signup.md) — 0009의 후속 작업인 가입·코드 소비와 OAuth 자동 연결 금지를 결정
-- [0017 상품 카드 이미지 외부 저장소 도입 및 단일 중해상도 썸네일(B-2) 정책](adr/0017-product-image-storage-and-thumbnail-policy.md) — 제안 상태; 무상태 환경의 외부 Object Storage 도입, B-2 공용 썸네일, 법적 컴플라이언스 퇴각 전략 기록
+- [0017 상품 카드 이미지 외부 저장소 도입 및 단일 중해상도 썸네일(B-2) 정책](adr/0017-product-image-storage-and-thumbnail-policy.md) — 채택; Supabase Storage 확정(S3 호환 추상화 유지), B-2 공용 썸네일, DB 작업 테이블 기반 1회 비동기 미러링 및 `CLIENT_UPLOAD`·법적 퇴각 전략
+- [0019 클라이언트 격리 WebView 상품 추출, URL 정규화 및 링크 상태 경계](adr/0019-client-side-product-extraction-and-url-policy.md)
