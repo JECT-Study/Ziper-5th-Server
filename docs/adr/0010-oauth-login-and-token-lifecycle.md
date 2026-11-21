@@ -3,6 +3,8 @@
 - 상태: 채택 — Apple JWKS 통합 검증 완료, 실제 운영 Apple 클라이언트 ID 연동은 배포 시 확인
 - 날짜: 2026-11-13
 
+소셜 자동 가입과 웹 Refresh Token 전달 방식은 [ADR 0018](0018-web-refresh-and-signup-consent.md)에서 변경했습니다.
+
 ## 배경
 
 iOS 네이티브 앱(Expo)과 웹·REST API 클라이언트가 동일한 백엔드 인증 계약을 사용해야 합니다. Apple은 별도 UserInfo API를 제공하지 않고 RS256으로 서명된 ID Token에 사용자 식별자(`sub`)와 이메일을 담습니다. 향후 카카오·구글 등 다른 OAuth 프로바이더도 같은 로그인 진입점으로 확장할 수 있어야 하며, 최초 소셜 인증 이후에는 자체 Access Token과 Refresh Token으로 인가와 세션 갱신을 처리해야 합니다.
