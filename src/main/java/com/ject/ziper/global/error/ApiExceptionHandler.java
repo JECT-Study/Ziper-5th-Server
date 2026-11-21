@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import com.ject.ziper.global.observability.RequestIdFilter;
@@ -25,6 +26,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
 	public ApiExceptionHandler(ProblemFactory problems) {
 		this.problems = problems;
+	}
+
+	@Override
+	protected ResponseEntity<Object> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException exception,
+			HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+		HttpServletRequest servlet = ((ServletWebRequest) request).getRequest();
+		return new ResponseEntity<>(
+				problems.create(HttpStatus.PAYLOAD_TOO_LARGE.value(), ErrorCode.IMAGE_FILE_TOO_LARGE, servlet), headers,
+				HttpStatus.PAYLOAD_TOO_LARGE);
 	}
 
 	@Override

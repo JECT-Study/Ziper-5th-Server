@@ -24,7 +24,7 @@ import webbrowser
 
 
 OAUTH_PATH_PATTERN = re.compile(r"^/api/v1/auth/oauth/(apple|naver|kakao)(/code)?$")
-ALLOWED_POST_PATHS = {"/api/v1/auth/reissue", "/api/v1/auth/logout"}
+ALLOWED_POST_PATHS = {"/api/v1/auth/oauth/signup", "/api/v1/auth/reissue", "/api/v1/auth/logout"}
 
 MOCK_PERSONAS = {
     "apple-email": {
@@ -510,6 +510,16 @@ HTML_TEMPLATE = r"""<!doctype html>
     </div>
   </div>
 
+  <div class="box hidden" id="signupBox">
+    <strong>소셜 회원 가입 약관</strong>
+    <form id="signupForm" onsubmit="completeSignup(event)">
+      <label><input id="termsOfService" type="checkbox" required> 서비스 이용약관 동의 (필수)</label>
+      <label><input id="privacyPolicy" type="checkbox" required> 개인정보 수집 및 이용 동의 (필수)</label>
+      <label><input id="marketing" type="checkbox"> 마케팅 수신 동의 (선택)</label>
+      <button type="submit">가입 완료</button>
+    </form>
+  </div>
+
   <div class="box">
     <div class="row" style="justify-content:space-between;">
       <strong>2. 발급된 세션 생명주기 확인 (회전 · 재사용 차단 · 로그아웃)</strong>
@@ -565,6 +575,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     let latestAccessToken = null;
     let latestRefreshToken = null;
     let previousRefreshToken = null;
+    let signupToken = null;
     let pendingState = {};
     const handledCodes = new Set();
     const logEntries = [];
@@ -800,19 +811,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         return;
       }
       const res = await postJson(`/api/v1/auth/oauth/${provider}/code`, { code, redirectUri, state });
-      if (res.status === 200 && res.body?.refreshToken) {
-        previousRefreshToken = latestRefreshToken;
-        latestAccessToken = res.body.accessToken;
-        latestRefreshToken = res.body.refreshToken;
-      }
-      log(`Ziper 백엔드 POST /api/v1/auth/oauth/${provider}/code 결과`, {
-        status: res.status,
-        requestId: res.requestId,
-        isNewUser: res.body?.isNewUser ?? null,
-        accessClaims: decodeJwtPayload(res.body?.accessToken),
-        refreshClaims: decodeJwtPayload(res.body?.refreshToken),
-        body: res.status === 200 ? { receivedAccessToken: true, receivedRefreshToken: true, isNewUser: res.body?.isNewUser } : res.body
-      });
+      handleAuthResponse(`POST /api/v1/auth/oauth/${provider}/code`, res);
     }
 
     async function callBackendLogin(provider, rawToken) {
@@ -822,19 +821,46 @@ HTML_TEMPLATE = r"""<!doctype html>
         return;
       }
       const res = await postJson(`/api/v1/auth/oauth/${provider}`, { token });
-      if (res.status === 200 && res.body?.refreshToken) {
+      handleAuthResponse(`POST /api/v1/auth/oauth/${provider}`, res);
+    }
+
+    async function completeSignup(event) {
+      event.preventDefault();
+      if (!signupToken) return;
+      const res = await postJson("/api/v1/auth/oauth/signup", {
+        signupToken,
+        agreements: {
+          termsOfService: document.getElementById("termsOfService").checked,
+          privacyPolicy: document.getElementById("privacyPolicy").checked,
+          marketing: document.getElementById("marketing").checked
+        }
+      });
+      handleAuthResponse("POST /api/v1/auth/oauth/signup", res);
+    }
+
+    function handleAuthResponse(label, res) {
+      if (res.body?.authType === "SIGNUP_REQUIRED") {
+        signupToken = res.body.signupToken;
+        document.getElementById("signupForm").reset();
+        document.getElementById("signupBox").classList.remove("hidden");
+      }
+      if (res.body?.refreshToken) {
+        signupToken = null;
+        document.getElementById("signupBox").classList.add("hidden");
         previousRefreshToken = latestRefreshToken;
         latestAccessToken = res.body.accessToken;
         latestRefreshToken = res.body.refreshToken;
       }
-      const note = res.status === 400 ? " (현재 백엔드 브랜치에 해당 프로바이더 전략이 미포함일 수 있습니다)" : "";
-      log(`Ziper 백엔드 POST /api/v1/auth/oauth/${provider} 결과${note}`, {
+      log(`${label} 결과`, {
         status: res.status,
         requestId: res.requestId,
-        isNewUser: res.body?.isNewUser ?? null,
-        accessClaims: decodeJwtPayload(res.body?.accessToken),
-        refreshClaims: decodeJwtPayload(res.body?.refreshToken),
-        body: res.status === 200 ? { receivedAccessToken: true, receivedRefreshToken: true, isNewUser: res.body?.isNewUser } : res.body
+        body: res.status >= 400 ? res.body : {
+          authType: res.body?.authType,
+          receivedSignupToken: Boolean(res.body?.signupToken),
+          receivedAccessToken: Boolean(res.body?.accessToken),
+          receivedRefreshToken: Boolean(res.body?.refreshToken),
+          agreements: res.body?.agreements
+        }
       });
     }
 
