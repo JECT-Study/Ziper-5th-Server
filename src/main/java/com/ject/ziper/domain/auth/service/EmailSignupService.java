@@ -75,6 +75,6 @@ public class EmailSignupService {
 				User.createEmailUser(latest.email(), passwordEncoder.encode(password), nickname, marketingAgreed, now));
 		boards.save(ProductBoard.createDefault(user.getId()));
 		verifications.markConsumed(latest.id(), now);
-		return authService.startSession(user.getId(), userAgent);
+		return authService.startSession(user, userAgent);
 	}
 }

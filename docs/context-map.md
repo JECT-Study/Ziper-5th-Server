@@ -41,6 +41,7 @@
 - [0008 서비스·쿼리 추적과 성능 데이터 경계](adr/0008-service-and-query-tracing.md)
 - [0009 이메일 인증번호 발송과 검증 경계](adr/0009-email-verification-delivery.md) — 요청 한도·오입력 제한은 0012로 대체
 - [0010 소셜 OAuth 로그인과 자체 JWT·세션 수명 주기](adr/0010-oauth-login-and-token-lifecycle.md)
+  - [0018 웹 Refresh 쿠키와 소셜 가입 약관](adr/0018-web-refresh-and-signup-consent.md) — 0010·0016의 소셜 자동 가입과 필수 약관 저장 규칙을 대체
 - [0011 OAuth 무이메일 회원을 위한 users.email Nullable 완화](adr/0011-nullable-user-email-for-oauth.md)
 - [0012 이메일 단위 인증번호 오입력 잠금](adr/0012-email-verification-lockout.md)
 - [0013 운영 비밀의 단일 원본을 Secret Manager 고정 버전으로 전환](adr/0013-secret-manager-single-source.md) — 0006의 홈 호스트 환경 파일 기준을 대체

@@ -1,6 +1,7 @@
 package com.ject.ziper.global.security;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
@@ -44,12 +45,14 @@ import com.ject.ziper.global.error.ProblemFactory;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(SecurityProperties.class)
 public class SecurityConfiguration {
+	public static final String REFRESH_TOKEN_MODE_HEADER = "X-Refresh-Token-Mode";
+
 	private static final String[] PROBES = {"/livez", "/readyz", "/actuator/health/liveness",
 			"/actuator/health/readiness"};
 	private static final String[] AUTH_PUBLIC_PATHS = {"/api/v1/auth/oauth/*", "/api/v1/auth/oauth/*/code",
 			"/api/v1/auth/reissue", "/api/v1/auth/logout", "/api/v1/auth/email/verifications",
 			"/api/v1/auth/email/verifications/*/resend", "/api/v1/auth/email/verifications/*/verify",
-			"/api/v1/auth/email/signup"};
+			"/api/v1/auth/email/signup", "/api/v1/auth/email/login"};
 	private static final String[] PUBLIC_GET_PATHS = {"/api/v1/users/nickname/availability",
 			"/api/v1/auth/email/verifications/*"};
 
@@ -129,7 +132,13 @@ public class SecurityConfiguration {
 		cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
 		cors.setExposedHeaders(List.of("X-Request-Id", "ETag"));
 		cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "If-None-Match", "sentry-trace", "baggage"));
+		var authCors = new CorsConfiguration(cors);
+		authCors.setAllowCredentials(true);
+		var authHeaders = new ArrayList<>(cors.getAllowedHeaders());
+		authHeaders.add(REFRESH_TOKEN_MODE_HEADER);
+		authCors.setAllowedHeaders(authHeaders);
 		var source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/api/v1/auth/**", authCors);
 		source.registerCorsConfiguration("/**", cors);
 		return source;
 	}

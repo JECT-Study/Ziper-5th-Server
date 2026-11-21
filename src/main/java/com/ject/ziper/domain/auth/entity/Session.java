@@ -25,6 +25,9 @@ public class Session {
 	@Column(name = "token_hash", nullable = false, length = 255)
 	private String tokenHash;
 
+	@Column(name = "previous_token_hash", length = 255)
+	private String previousTokenHash;
+
 	protected Session() {
 	}
 
@@ -39,6 +42,7 @@ public class Session {
 	}
 
 	public void rotate(String newTokenHash, String newUserAgent) {
+		this.previousTokenHash = this.tokenHash;
 		this.tokenHash = newTokenHash;
 		this.userAgent = normalizeUserAgent(newUserAgent);
 	}
@@ -65,5 +69,9 @@ public class Session {
 
 	public String getTokenHash() {
 		return tokenHash;
+	}
+
+	public String getPreviousTokenHash() {
+		return previousTokenHash;
 	}
 }
