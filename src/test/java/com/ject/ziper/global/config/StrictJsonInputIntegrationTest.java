@@ -15,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,6 +25,7 @@ import com.ject.ziper.global.error.ApiExceptionHandler;
 import com.ject.ziper.global.error.ProblemFactory;
 import com.ject.ziper.global.error.SafeErrorController;
 import com.ject.ziper.global.observability.RequestIdFilter;
+import com.ject.ziper.global.security.ActiveUserChecker;
 import com.ject.ziper.global.security.SecurityConfiguration;
 
 @SpringBootTest(classes = StrictJsonInputIntegrationTest.Fixture.class, properties = {
@@ -33,6 +35,9 @@ import com.ject.ziper.global.security.SecurityConfiguration;
 class StrictJsonInputIntegrationTest {
 	@Autowired
 	MockMvc mvc;
+
+	@MockitoBean
+	ActiveUserChecker activeUserChecker;
 
 	@ParameterizedTest
 	@ValueSource(strings = {"\\u0000", "x\\u0000y", "\\u0007"})

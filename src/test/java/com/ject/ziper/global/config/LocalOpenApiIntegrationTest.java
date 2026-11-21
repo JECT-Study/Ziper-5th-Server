@@ -11,12 +11,14 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ject.ziper.global.error.ProblemFactory;
+import com.ject.ziper.global.security.ActiveUserChecker;
 import com.ject.ziper.global.security.SecurityConfiguration;
 
 @SpringBootTest(classes = LocalOpenApiIntegrationTest.Fixture.class, properties = {"app.runtime-mode=local",
@@ -46,5 +48,9 @@ class LocalOpenApiIntegrationTest {
 	@EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
 	@Import({OpenApiConfiguration.class, SecurityConfiguration.class, ProblemFactory.class})
 	static class Fixture {
+		@Bean
+		ActiveUserChecker activeUserChecker() {
+			return userId -> true;
+		}
 	}
 }
