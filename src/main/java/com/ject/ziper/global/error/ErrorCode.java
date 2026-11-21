@@ -46,7 +46,14 @@ public enum ErrorCode {
 																																					HttpStatus.FORBIDDEN,
 																																					"기본 보드는 수정하거나 삭제할 수 없습니다."), BOARD_NOT_FOUND(
 																																							HttpStatus.NOT_FOUND,
-																																							"보드를 찾을 수 없습니다.");
+																																							"보드를 찾을 수 없습니다."),
+	"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."), INVALID_IMAGE_FILE(
+																																	HttpStatus.BAD_REQUEST,
+																																	"지원하지 않거나 손상된 이미지 파일입니다."), IMAGE_FILE_TOO_LARGE(
+																																			HttpStatus.PAYLOAD_TOO_LARGE,
+																																			"이미지 파일 크기는 최대 5MB까지 허용됩니다."), FILE_NOT_FOUND(
+																																					HttpStatus.NOT_FOUND,
+																																					"파일을 찾을 수 없습니다.");
 
 	private final HttpStatus status;
 	private final String detail;
