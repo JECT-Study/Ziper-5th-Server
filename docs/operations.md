@@ -8,7 +8,7 @@
 
 브라우저가 Refresh Token 쿠키를 받으려면 로그인·가입·재발급·로그아웃에 `X-Refresh-Token-Mode: cookie`와 `credentials: "include"`를 사용합니다. 서버는 쿠키 모드에서 `Origin`이 `CORS_ALLOWED_ORIGINS`에 명시된 출처와 정확히 일치할 때만 처리합니다. 일반 API는 Bearer 헤더를 사용하며 쿠키 인증용 CSRF 검사는 인증 경로의 쿠키 요청에 적용합니다. 인증 경로에 한해 CORS 자격 증명을 허용합니다.
 
-운영 웹의 Origin은 `https://app.ziper.cc`를 런타임 `CORS_ALLOWED_ORIGINS`에 등록하고, 웹은 같은 사이트인 `https://api.ziper.cc`로 API를 요청합니다. Cookie 속성은 `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth`이며 API 호스트에 한정합니다. 웹은 재발급과 로그아웃에 Refresh Token 본문을 보내지 않습니다. 모바일은 opt-in 헤더 없이 기존 JSON 본문으로 Refresh Token을 보내고 받습니다. [ADR 0017](adr/0017-web-refresh-and-signup-consent.md)을 따릅니다.
+운영 웹의 Origin은 `https://app.ziper.cc`를 런타임 `CORS_ALLOWED_ORIGINS`에 등록하고, 웹은 같은 사이트인 `https://api.ziper.cc`로 API를 요청합니다. Cookie 속성은 `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth`이며 API 호스트에 한정합니다. 웹은 재발급과 로그아웃에 Refresh Token 본문을 보내지 않습니다. 모바일은 opt-in 헤더 없이 기존 JSON 본문으로 Refresh Token을 보내고 받습니다. [ADR 0018](adr/0018-web-refresh-and-signup-consent.md)을 따릅니다.
 
 자체 토큰은 `type` 클레임으로 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 구분하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. 만료 시간은 `JWT_ACCESS_EXPIRATION_SECONDS`(기본 3600초)와 `JWT_REFRESH_EXPIRATION_SECONDS`(기본 1209600초)로 설정합니다.
 

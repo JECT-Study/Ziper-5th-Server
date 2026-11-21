@@ -3,7 +3,7 @@
 - 상태: 채택 — Apple JWKS 통합 검증 완료, 실제 운영 Apple 클라이언트 ID 연동은 배포 시 확인
 - 날짜: 2026-11-13
 
-소셜 자동 가입과 웹 Refresh Token 전달 방식은 [ADR 0017](0017-web-refresh-and-signup-consent.md)에서 변경했습니다.
+소셜 자동 가입과 웹 Refresh Token 전달 방식은 [ADR 0018](0018-web-refresh-and-signup-consent.md)에서 변경했습니다.
 
 ## 배경
 
