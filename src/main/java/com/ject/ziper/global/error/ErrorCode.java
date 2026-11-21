@@ -26,7 +26,9 @@ public enum ErrorCode {
 																													HttpStatus.CONFLICT,
 																													"이미 가입된 이메일입니다."), INVALID_PASSWORD(
 																															HttpStatus.BAD_REQUEST,
-																															"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요.");
+																															"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."), INVALID_PRODUCT_URL(
+																																	HttpStatus.BAD_REQUEST,
+																																	"올바른 상품 URL 형식이 아닙니다.");
 
 	private final HttpStatus status;
 	private final String detail;
