@@ -56,9 +56,10 @@
   1. **1차 (서버 파싱)**: 백엔드 `lookup` API가 지원 쇼핑몰 URL의 Open Graph 메타데이터(첫 번째 대표 이미지 1장, 전체 상품명, KRW 가격, 쇼핑몰명 `shop`) 추출
   2. **2차 (클라이언트 1차 폴백 파싱)**: 쇼핑몰의 서버 IP/Bot 차단 시 클라이언트(앱/웹뷰)가 직접 파싱하여 입력 폼 자동 채움
   3. **3차 (수기 보정 + 직접 업로드 / 대체 아이콘)**: 유효한 `http(s)` URL이면 추출 실패·미지원 쇼핑몰 모두 차단하지 않고 `manual` 수기 입력 폼으로 전환하여 저장 허용 (유효하지 않은 URL 형식·비허용 스킴만 `unsupported`/400 거부)
-- **이미지 정책**:
-  - 자동 추출 시 원본 OG 대표 이미지 URL 직접 참조 (서버 OG 이미지 리사이징은 별도 백그라운드/개선 이슈로 분리)
-  - 유저가 직접 보유한 이미지를 등록하는 **직접 이미지 업로드(`files` + Object Storage)** 및 **카테고리 대체 아이콘 5종(`TOP`, `PANTS`, `SKIRT`, `ACCESSORY`, `BEAUTY`)** 모두 MVP에 포함
+- **이미지 정책** ([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)):
+  - **B-2 단일 중해상도 WebP 썸네일 공용 저장**: 무상태(홈서버+Cloud Run) 환경에서 공유 외부 Object Storage(Supabase Storage 1차 우선 후보 · Cloudflare R2 대안 후보, `JEC-76` 구현 시 확정)를 도입해, 1차 MVP(`JEC-76`)부터 유저 직접 업로드 이미지와 외부 OG 이미지 미러링 모두 `480~600px` WebP 썸네일로 저장해 홈·보드·상세·재발견 전 화면에서 공용 서빙 (원본 `image_url`도 메타데이터·폴백용으로 병행 보관, 비동기 워커 고도화·고아 파일 정리는 `JEC-10`)
+  - **표시 우선순위 및 폴백**: `imageFileUrl`(자체 Object Storage) → `imageUrl`(원본 외부 URL) → **카테고리 대체 아이콘 5종(`TOP`, `PANTS`, `SKIRT`, `ACCESSORY`, `BEAUTY`)**. 클라이언트 로드 실패(`onError`) 시 재요청 대기 없이 즉시 대체 아이콘으로 폴백
+  - **컴플라이언스 가드레일**: 외부 쇼핑몰 이미지 미러링은 도메인별/전역 플래그로 즉시 중단(원본 URL 참조 + 대체 아이콘 폴백 전환) 가능하게 설계하며, 미러링 썸네일은 소유자 인증 기반 비공개 접근 및 삭제/탈퇴 시 즉시 파기를 원칙으로 함
 - **입력 항목 필수 여부 및 길이 정책**:
   - 필수: 상품 URL, 상품명(최대 200자), 저장할 보드(1개 이상 다중 선택), 해시태그(1개 이상 다중 선택·입력), 가격(0원 이상 KRW 정수), 카드 이미지(OG URL / 직접 업로드 파일 / 카테고리 대체 아이콘 5종 중 1종 필수)
   - 선택: 쇼핑몰명(`shop`), 한 줄 메모(최대 100자)
@@ -121,12 +122,12 @@
   - 소셜(카카오·네이버·애플) 및 이메일 회원가입·로그인·자동 로그인·로그아웃
   - 마이페이지 조회, 프로필(닉네임) 수정, 비밀번호 변경(이메일 계정), 회원 탈퇴(`WITHDRAWN` 소프트 삭제)
   - 외부 공유하기 및 앱 내 링크 등록 + 1차 지원몰(무신사·에이블리·지그재그) 자동 추출/단축 URL 정규화 + 수기 보정(`manual`) 폴백
-  - 원본 OG 이미지 직접 참조 + 유저 직접 이미지 업로드(`files`) + 카테고리 대체 아이콘 5종
+  - 외부 Object Storage 기반 B-2 단일 중해상도 WebP 썸네일 저장(`files`, 유저 직접 업로드 + OG 이미지 미러링) + 원본 `image_url` 폴백 + 카테고리 대체 아이콘 5종 ([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md))
   - 한 줄 메모 및 다중 해시태그(기본 4종 보호 + 유저별 커스텀 태그 조회·생성·삭제)
   - 홈 요약(재발견 대기 수·보드별 대표 썸네일 최대 3장·최근 저장), 다중 보드 관리(보드 상세 4종 정렬·태그 필터), 상품 상세/수정, 구매 완료 목록, 30일 휴지통 및 지정 복구(상품 카드)
   - 방치 상품 재발견 스와이프 (14/30/90일 주기, 클라 3초 지연 전송 기반 되돌리기, Stateless 완료 금액 리포트)
 - **1차 MVP 제외 / 별도 분리 (후속·개선)**:
-  - 별도 백그라운드/개선 이슈: OG 이미지 서버 리사이징(`JEC-10`), 외부 쇼핑몰 주기적 링크 동기화(`JEC-9`), 재발견 서버 `UNDO` API(예비)
+  - 별도 백그라운드/개선 이슈: OG 이미지 비동기 리사이징 워커 고도화·고아 파일 정리(`JEC-10`), 외부 쇼핑몰 주기적 링크 동기화(`JEC-9`), 재발견 서버 `UNDO` API(예비)
   - 1차 제외: ID/PW 찾기, 삭제된 보드 복구
   - 2차 MVP: 보드/단품 카드 링크 공유(선택적 비공개 지원), 타 유저 탐색·댓글, 가격 하락 알림
   - 3차 MVP: 제휴 파트너스 링크 자동 수익화, 캡처 이미지 OCR 인식, 웹 브라우저 확장 프로그램
@@ -183,7 +184,7 @@
    - **유저별 커스텀 태그 소유권** (후속 Flyway 마이그레이션 확장): `tags.user_id` (nullable, 기본 4종 `NULL` / 커스텀 태그는 소유 `user_id` 보유, 기본 태그 `title` 전역 고유 + 커스텀 태그 `(user_id, title)` 고유) 또는 `user_tags` 매핑으로 유저별 커스텀 태그 목록 조회·생성·삭제를 지원한다.
    - 카드당 태그 수: **`1..N`개 필수** (상품 등록·수정 시 최소 1개 이상의 해시태그 연결을 애플리케이션 계층에서 필수 검증한다).
 6. **`ziper.files`**
-   - 유저 직접 업로드 이미지(및 추후 백그라운드 리사이징 결과물) 메타데이터 저장 (`storage_key UNIQUE`, `file_size >= 0`).
+   - 유저 직접 업로드 이미지 및 B-2 공용 WebP 썸네일(`480~600px`) 메타데이터 저장 (`storage_key UNIQUE`, `file_size >= 0`, [ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)). 카드 영구 삭제·회원 탈퇴 시 연결된 Object Storage 객체도 함께 파기한다.
 7. **`ziper.user_card_events`**
    - `event_type IN ('VIEW_DETAIL', 'OPEN_ORIGINAL_URL', 'REDISCOVERY_KEEP', 'REDISCOVERY_PURCHASE', 'REDISCOVERY_DELETE', 'REDISCOVERY_UNDO')`.
 
@@ -236,9 +237,9 @@
      - `totalProcessedCount`, `totalProcessedPrice`
 6. **홈 요약 조회 (`B-1`)**:
    - 재발견 대기 상품 개수 (`§7.4` 조건 카운트)
-   - 내 보드 미리보기 목록: 순수 최신 생성순 (`pb.created_at DESC, pb.id DESC`, `'기본 보드'` 최상단 고정 없음), 각 보드별 활성 `PLANNED` 상품 개수 + 최신 등록 상품 대표 썸네일 최대 3장
+   - 내 보드 미리보기 목록: 순수 최신 생성순 (`pb.created_at DESC, pb.id DESC`, `'기본 보드'` 최상단 고정 없음), 각 보드별 활성 `PLANNED` 상품 개수 + 최신 등록 상품 대표 썸네일 최대 3장(`[{ cardId, imageUrl, fallbackIcon }]`, `imageUrl`은 `imageFileUrl ?? image_url` 우선)
    - 최근 저장 상품 목록: `pc.user_id = :userId AND pc.is_deleted = FALSE AND pc.status = 'PLANNED' ORDER BY pc.created_at DESC, pc.id DESC` (상위 N개)
 7. **보드 목록 조회 (`D-1`, 저장 바텀시트 공용)**:
    - 조건: `pb.user_id = :userId AND pb.is_deleted = FALSE`
    - 정렬: 순수 최신 생성순 (`ORDER BY pb.created_at DESC, pb.id DESC`, `'기본 보드'` 최상단 고정 없음)
-   - 부가 정보: 각 보드별 활성 `PLANNED` 상품 개수 + 최신 등록 상품 대표 썸네일 최대 3장, 및 특수 `'구매 완료 목록'` 요약(`purchasedSummary`: 개수 + 대표 썸네일 최대 3장)
+   - 부가 정보: 각 보드별 활성 `PLANNED` 상품 개수 + 최신 등록 상품 대표 썸네일 최대 3장(`[{ cardId, imageUrl, fallbackIcon }]`, `imageUrl`은 `imageFileUrl ?? image_url` 우선), 및 특수 `'구매 완료 목록'` 요약(`purchasedSummary`: 개수 + 대표 썸네일 최대 3장)
