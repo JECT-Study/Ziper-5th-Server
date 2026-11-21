@@ -226,6 +226,8 @@
 1. **일반 보드 내 상품 목록 조회 (`D-2`)**:
    - 조건: `pbc.board_id = :boardId AND pc.user_id = :userId AND pc.is_deleted = FALSE AND pc.status = 'PLANNED'`
    - 선택 필터: `tagIds`(또는 `tagId`) 전달 시 `product_card_tags` 조인으로 해당 태그 포함 카드만 필터링
+   - 보드 상세의 `productCount`는 현재 태그 필터와 일치하는 활성 구매 예정 상품의 전체 개수이며 페이지 크기와 무관하다. 보드 목록의 개수는 태그 필터 없이 집계한다.
+   - 다음 페이지는 같은 보드와 정렬에서 직전 응답의 `nextCursor`를 그대로 전달한다. 서버는 마지막 항목의 정렬 키와 보드 연결 ID를 기준으로 다음 항목을 조회한다.
    - 정렬 4종(`sort`):
      - `RECENT` (기본): `ORDER BY pbc.created_at DESC, pbc.id DESC`
      - `OLDEST`: `ORDER BY pbc.created_at ASC, pbc.id ASC`
