@@ -5,12 +5,16 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -23,7 +27,10 @@ public class SupabaseObjectStorageClient implements ObjectStorageClient {
 
 	public SupabaseObjectStorageClient(StorageProperties properties, RestClient.Builder restClientBuilder) {
 		this.properties = properties;
-		this.restClient = restClientBuilder.build();
+		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+		requestFactory.setConnectTimeout(properties.supabaseConnectTimeoutMs());
+		requestFactory.setReadTimeout(properties.supabaseReadTimeoutMs());
+		this.restClient = restClientBuilder.requestFactory(requestFactory).build();
 	}
 
 	@Override
@@ -58,6 +65,42 @@ public class SupabaseObjectStorageClient implements ObjectStorageClient {
 			throw new IllegalStateException("Supabase Storage returned empty signed URL");
 		}
 		return resolveSignedUrl(response.signedUrl().trim());
+	}
+
+	@Override
+	public Map<String, String> createSignedUrls(Collection<String> storageKeys, Duration expiresIn) {
+		if (storageKeys == null || storageKeys.isEmpty()) {
+			return Map.of();
+		}
+		ensureConfigured();
+		long seconds = expiresIn == null
+				? properties.signedUrlExpirationSeconds()
+				: Math.max(1L, expiresIn.toSeconds());
+		List<String> paths = List.copyOf(storageKeys);
+		URI uri = URI
+				.create(properties.supabaseUrl() + "/storage/v1/object/sign/" + encodeSegment(properties.bucket()));
+		BatchSignedUrlItem[] items;
+		try {
+			items = restClient.post().uri(uri).header(HttpHeaders.AUTHORIZATION, bearerHeader())
+					.header("apikey", properties.supabaseServiceRoleKey()).contentType(MediaType.APPLICATION_JSON)
+					.body(Map.of("expiresIn", seconds, "paths", paths)).retrieve().body(BatchSignedUrlItem[].class);
+		} catch (RestClientException exception) {
+			throw new IllegalStateException("Failed to create signed URLs from Supabase Storage", exception);
+		}
+		if (items == null) {
+			throw new IllegalStateException("Supabase Storage returned an empty batch signed URL response");
+		}
+		Map<String, String> result = new LinkedHashMap<>();
+		for (BatchSignedUrlItem item : items) {
+			// A per-path error (for example a missing object) is data: that key simply has
+			// no URL.
+			if (item == null || item.path() == null || item.error() != null || item.signedUrl() == null
+					|| item.signedUrl().isBlank()) {
+				continue;
+			}
+			result.put(item.path(), resolveSignedUrl(item.signedUrl().trim()));
+		}
+		return result;
 	}
 
 	@Override
@@ -118,6 +161,9 @@ public class SupabaseObjectStorageClient implements ObjectStorageClient {
 
 	private static String encodeSegment(String segment) {
 		return URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20");
+	}
+
+	private record BatchSignedUrlItem(String error, String path, @JsonProperty("signedURL") String signedUrl) {
 	}
 
 	private record SignedUrlResponse(@JsonProperty("signedURL") String signedUrl) {

@@ -7,7 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +41,7 @@ import com.ject.ziper.domain.product.link.repository.ProductLinkRepository;
 import com.ject.ziper.domain.product.link.service.ProductLinkService;
 import com.ject.ziper.domain.user.entity.User;
 import com.ject.ziper.domain.user.repository.UserRepository;
+import com.ject.ziper.global.persistence.AdvisoryLockRepository;
 import com.ject.ziper.global.persistence.PostgresTestSupport;
 import com.ject.ziper.global.security.JwtTokenProvider;
 
@@ -69,6 +72,9 @@ class ProductLinkStatusIntegrationTest extends PostgresTestSupport {
 
 	@Autowired
 	private ProductLinkService productLinkService;
+
+	@Autowired
+	private AdvisoryLockRepository locks;
 
 	@Autowired
 	private JwtTokenProvider jwtTokenProvider;
@@ -332,16 +338,16 @@ class ProductLinkStatusIntegrationTest extends PostgresTestSupport {
 		productCardLinkJdbcRepository.updateCardLinkStatus(card2, user2.getId(), link.getId(),
 				ProductLinkStatus.AVAILABLE, newerClientTime, ProductLinkCheckSource.CLIENT, newerClientTime);
 
-		productLinkService.applyServerCheck(link.getId(), ProductLinkStatus.REMOVED, serverTime);
+		productLinkService.applyServerCheck(link.getId(), ProductLinkStatus.SOLD_OUT, serverTime);
 
 		ProductLink reloaded = productLinkRepository.findById(link.getId()).orElseThrow();
-		assertThat(reloaded.getStatus()).isEqualTo(ProductLinkStatus.REMOVED);
+		assertThat(reloaded.getStatus()).isEqualTo(ProductLinkStatus.SOLD_OUT);
 		assertThat(reloaded.getCheckedAt()).isEqualTo(serverTime);
 		assertThat(reloaded.getCheckSource()).isEqualTo(ProductLinkCheckSource.SERVER);
 
 		ProductCardLinkSnapshot card1Snapshot = productCardLinkJdbcRepository.findOwnedActiveCard(card1, user1.getId())
 				.orElseThrow();
-		assertThat(card1Snapshot.linkStatus()).isEqualTo(ProductLinkStatus.REMOVED);
+		assertThat(card1Snapshot.linkStatus()).isEqualTo(ProductLinkStatus.SOLD_OUT);
 		assertThat(card1Snapshot.linkCheckedAt()).isEqualTo(serverTime);
 		assertThat(card1Snapshot.linkCheckSource()).isEqualTo(ProductLinkCheckSource.SERVER);
 
@@ -354,7 +360,7 @@ class ProductLinkStatusIntegrationTest extends PostgresTestSupport {
 		// UNKNOWN 서버 점검 결과는 기존 상태를 덮어쓰지 않음
 		productLinkService.applyServerCheck(link.getId(), ProductLinkStatus.UNKNOWN, Instant.now());
 		ProductLink afterUnknown = productLinkRepository.findById(link.getId()).orElseThrow();
-		assertThat(afterUnknown.getStatus()).isEqualTo(ProductLinkStatus.REMOVED);
+		assertThat(afterUnknown.getStatus()).isEqualTo(ProductLinkStatus.SOLD_OUT);
 		assertThat(afterUnknown.getCheckedAt()).isEqualTo(serverTime);
 	}
 
@@ -377,6 +383,120 @@ class ProductLinkStatusIntegrationTest extends PostgresTestSupport {
 		} finally {
 			executor.shutdownNow();
 		}
+	}
+
+	@Test
+	void 오래된관측이늦게도착해합의될때_보고하면_합의시각은가장최신관측이고그사이반대상태카드도갱신된다() throws Exception {
+		User a = createUser("late-a@ziper.test", "지연일");
+		User b = createUser("late-b@ziper.test", "지연이");
+		User c = createUser("late-c@ziper.test", "지연삼");
+		ProductLink link = productLinkService.resolveOrCreateLink("https://shop.example/items/late", "m");
+		long cardA = insertCard(a.getId(), link.getCanonicalUrl(), link.getId(), false);
+		long cardB = insertCard(b.getId(), link.getCanonicalUrl(), link.getId(), false);
+		long cardC = insertCard(c.getId(), link.getCanonicalUrl(), link.getId(), false);
+		Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+		Instant newer = now.minusSeconds(10);
+		Instant older = now.minusSeconds(20);
+		productCardLinkJdbcRepository.updateCardLinkStatus(cardC, c.getId(), link.getId(), ProductLinkStatus.AVAILABLE,
+				now.minusSeconds(15), ProductLinkCheckSource.CLIENT, now);
+
+		postReport(cardA, a, "SOLD_OUT", newer);
+		postReport(cardB, b, "SOLD_OUT", older);
+
+		ProductLink reloaded = productLinkRepository.findById(link.getId()).orElseThrow();
+		assertThat(reloaded.getStatus()).isEqualTo(ProductLinkStatus.SOLD_OUT);
+		assertThat(reloaded.getCheckedAt()).isEqualTo(newer);
+		ProductCardLinkSnapshot snapshotC = productCardLinkJdbcRepository.findOwnedActiveCard(cardC, c.getId())
+				.orElseThrow();
+		assertThat(snapshotC.linkStatus()).isEqualTo(ProductLinkStatus.SOLD_OUT);
+		assertThat(snapshotC.linkCheckedAt()).isEqualTo(newer);
+	}
+
+	@Test
+	void 서버시각보다일초앞선관측을보고할때_고정시계로호출하면_서버현재시각으로보정해저장한다() {
+		User user = createUser("future@ziper.test", "미래유저");
+		ProductLink link = productLinkService.resolveOrCreateLink("https://shop.example/items/future", "m");
+		long cardId = insertCard(user.getId(), link.getCanonicalUrl(), link.getId(), false);
+		Instant now = Instant.parse("2026-05-01T00:00:00Z");
+		Clock fixed = Clock.fixed(now, ZoneOffset.UTC);
+		ProductLinkService fixedService = new ProductLinkService(productLinkRepository, productLinkReportRepository,
+				productCardLinkJdbcRepository, locks, 0L, fixed);
+
+		fixedService.reportLinkStatus(user.getId(), cardId, "SOLD_OUT", now.plusSeconds(1));
+
+		ProductCardLinkSnapshot snapshot = productCardLinkJdbcRepository.findOwnedActiveCard(cardId, user.getId())
+				.orElseThrow();
+		assertThat(snapshot.linkCheckedAt()).isEqualTo(now);
+		assertThat(productLinkReportRepository.findAll()).singleElement()
+				.satisfies(report -> assertThat(report.getObservedAt()).isEqualTo(now));
+	}
+
+	@Test
+	void 극단적으로오래된관측시각으로보고할때_요청을보내면_400을반환한다() throws Exception {
+		User user = createUser("ancient@ziper.test", "과거유저");
+		ProductLink link = productLinkService.resolveOrCreateLink("https://shop.example/items/ancient", "m");
+		long cardId = insertCard(user.getId(), link.getCanonicalUrl(), link.getId(), false);
+
+		for (String observedAt : List.of("-999999999-01-01T00:00:00Z", "-5000-01-01T00:00:00Z",
+				Instant.now().minus(25, ChronoUnit.HOURS).toString())) {
+			mvc.perform(post("/api/v1/products/{cardId}/link-status/reports", cardId)
+					.header(HttpHeaders.AUTHORIZATION, bearer(user.getId())).contentType(MediaType.APPLICATION_JSON)
+					.content("{\"status\":\"SOLD_OUT\",\"observedAt\":\"" + observedAt + "\"}"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("INVALID_LINK_STATUS_REPORT"));
+		}
+		assertThat(productLinkReportRepository.count()).isZero();
+	}
+
+	@Test
+	void 한사용자가품절보고를번복했을때_다른사용자가품절을보고하면_합의로간주되지않는다() throws Exception {
+		User a = createUser("rev-a@ziper.test", "번복일");
+		User b = createUser("rev-b@ziper.test", "번복이");
+		User c = createUser("rev-c@ziper.test", "번복삼");
+		ProductLink link = productLinkService.resolveOrCreateLink("https://shop.example/items/revoke", "m");
+		insertCard(a.getId(), link.getCanonicalUrl(), link.getId(), false);
+		long cardB = insertCard(b.getId(), link.getCanonicalUrl(), link.getId(), false);
+		long cardC = insertCard(c.getId(), link.getCanonicalUrl(), link.getId(), false);
+		Instant now = Instant.now();
+		jdbc.update(
+				"INSERT INTO ziper.product_link_reports(link_id, user_id, status, observed_at, created_at) "
+						+ "VALUES (?, ?, 'SOLD_OUT', ?, ?)",
+				link.getId(), a.getId(), Timestamp.from(now.minusSeconds(7200)),
+				Timestamp.from(now.minusSeconds(7200)));
+		jdbc.update(
+				"INSERT INTO ziper.product_link_reports(link_id, user_id, status, observed_at, created_at) "
+						+ "VALUES (?, ?, 'AVAILABLE', ?, ?)",
+				link.getId(), a.getId(), Timestamp.from(now.minusSeconds(3600)),
+				Timestamp.from(now.minusSeconds(3600)));
+
+		postReport(cardB, b, "SOLD_OUT", now.minusSeconds(5));
+
+		ProductCardLinkSnapshot snapshotC = productCardLinkJdbcRepository.findOwnedActiveCard(cardC, c.getId())
+				.orElseThrow();
+		assertThat(snapshotC.linkStatus()).isEqualTo(ProductLinkStatus.UNKNOWN);
+		assertThat(productLinkRepository.findById(link.getId()).orElseThrow().getStatus())
+				.isEqualTo(ProductLinkStatus.UNKNOWN);
+	}
+
+	@Test
+	void 서버점검이REMOVED를관측했을때_적용하면_삭제확정을전파하지않는다() {
+		User user = createUser("srv-removed@ziper.test", "서버삭제");
+		ProductLink link = productLinkService.resolveOrCreateLink("https://shop.example/items/srv-removed", "m");
+		long cardId = insertCard(user.getId(), link.getCanonicalUrl(), link.getId(), false);
+
+		productLinkService.applyServerCheck(link.getId(), ProductLinkStatus.REMOVED, Instant.now().minusSeconds(5));
+
+		assertThat(productLinkRepository.findById(link.getId()).orElseThrow().getStatus())
+				.isEqualTo(ProductLinkStatus.UNKNOWN);
+		assertThat(productCardLinkJdbcRepository.findOwnedActiveCard(cardId, user.getId()).orElseThrow().linkStatus())
+				.isEqualTo(ProductLinkStatus.UNKNOWN);
+	}
+
+	private void postReport(long cardId, User user, String status, Instant observedAt) throws Exception {
+		mvc.perform(post("/api/v1/products/{cardId}/link-status/reports", cardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(user.getId())).contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(new ProductLinkReportRequest(status, observedAt))))
+				.andExpect(status().isOk());
 	}
 
 	private User createUser(String email, String nickname) {

@@ -12,17 +12,22 @@ public class JdbcProductCardImageUpdater implements ProductCardImageUpdater {
 	}
 
 	@Override
-	public void markMirrorReady(Long cardId, Long fileId) {
-		jdbcTemplate.update(
-				"UPDATE ziper.product_cards SET image_file_id = ?, image_status = 'READY', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-				fileId, cardId);
+	public boolean markMirrorReady(Long cardId, String expectedImageUrl, Long fileId) {
+		return jdbcTemplate.update("""
+				UPDATE ziper.product_cards
+				SET image_file_id = ?, image_status = 'READY', updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND is_deleted = FALSE AND image_url = ?
+				""", fileId, cardId, expectedImageUrl) > 0;
 	}
 
 	@Override
-	public void markMirrorFailed(Long cardId) {
-		// Original image_url is intentionally preserved for fallback rendering.
-		jdbcTemplate.update(
-				"UPDATE ziper.product_cards SET image_status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-				cardId);
+	public boolean markMirrorFailed(Long cardId, String expectedImageUrl) {
+		// The original image_url is kept so the client can still render it as a
+		// fallback.
+		return jdbcTemplate.update("""
+				UPDATE ziper.product_cards
+				SET image_status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND is_deleted = FALSE AND image_url = ?
+				""", cardId, expectedImageUrl) > 0;
 	}
 }

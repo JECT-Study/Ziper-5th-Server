@@ -12,8 +12,16 @@ public class TagCardLinkRepository {
 	}
 
 	public boolean existsCardOwnedByUser(Long cardId, Long userId) {
-		Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM ziper.product_cards WHERE id = ? AND user_id = ?",
+		Integer count = jdbc.queryForObject(
+				"SELECT COUNT(*) FROM ziper.product_cards WHERE id = ? AND user_id = ? AND is_deleted = FALSE",
 				Integer.class, cardId, userId);
+		return count != null && count > 0;
+	}
+
+	public boolean existsLink(Long cardId, Long tagId) {
+		Integer count = jdbc.queryForObject(
+				"SELECT COUNT(*) FROM ziper.product_card_tags WHERE card_id = ? AND tag_id = ?", Integer.class, cardId,
+				tagId);
 		return count != null && count > 0;
 	}
 

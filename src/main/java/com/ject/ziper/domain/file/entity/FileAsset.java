@@ -19,6 +19,9 @@ public class FileAsset {
 	@Column(name = "storage_key", nullable = false, unique = true, length = 512)
 	private String storageKey;
 
+	@Column(name = "owner_user_id")
+	private Long ownerUserId;
+
 	@Column(name = "original_filename", nullable = false, length = 255)
 	private String originalFilename;
 
@@ -34,22 +37,27 @@ public class FileAsset {
 	protected FileAsset() {
 	}
 
-	private FileAsset(String storageKey, String originalFilename, String contentType, long fileSize,
+	private FileAsset(String storageKey, Long ownerUserId, String originalFilename, String contentType, long fileSize,
 			Instant createdAt) {
 		this.storageKey = storageKey;
+		this.ownerUserId = ownerUserId;
 		this.originalFilename = originalFilename;
 		this.contentType = contentType;
 		this.fileSize = fileSize;
 		this.createdAt = createdAt;
 	}
 
-	public static FileAsset create(String storageKey, String originalFilename, String contentType, long fileSize,
-			Instant createdAt) {
-		return new FileAsset(storageKey, originalFilename, contentType, fileSize, createdAt);
+	public static FileAsset create(String storageKey, Long ownerUserId, String originalFilename, String contentType,
+			long fileSize, Instant createdAt) {
+		return new FileAsset(storageKey, ownerUserId, originalFilename, contentType, fileSize, createdAt);
 	}
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getOwnerUserId() {
+		return ownerUserId;
 	}
 
 	public String getStorageKey() {

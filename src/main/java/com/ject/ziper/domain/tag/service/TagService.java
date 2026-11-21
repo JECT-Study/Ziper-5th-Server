@@ -1,5 +1,6 @@
 package com.ject.ziper.domain.tag.service;
 
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -7,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ import com.ject.ziper.global.persistence.AdvisoryLockRepository;
 public class TagService {
 	public static final int MAX_TAG_LENGTH = 6;
 	private static final String LOCK_PREFIX = "tag:";
+	private static final Pattern WHITESPACE_RUN = Pattern.compile("[\\s\\p{Z}]+");
 
 	private final TagRepository tagRepository;
 	private final TagCardLinkRepository tagCardLinkRepository;
@@ -68,6 +71,9 @@ public class TagService {
 			if (!tagCardLinkRepository.existsCardOwnedByUser(cardId, userId)) {
 				throw new BusinessException(ErrorCode.NOT_FOUND);
 			}
+			if (!tagCardLinkRepository.existsLink(cardId, tagId)) {
+				return;
+			}
 			int otherLinkedCount = tagCardLinkRepository.countOtherLinkedCards(tagId, cardId);
 			if (otherLinkedCount > 0) {
 				tagCardLinkRepository.unlinkCardTag(cardId, tagId);
@@ -109,16 +115,32 @@ public class TagService {
 		if (rawTitle == null) {
 			throw new BusinessException(ErrorCode.INVALID_TAG_TITLE);
 		}
-		String stripped = rawTitle.strip();
-		int index = 0;
-		while (index < stripped.length() && stripped.charAt(index) == '#') {
-			index++;
+		String nfc = Normalizer.normalize(rawTitle, Normalizer.Form.NFC);
+		if (nfc.codePoints().anyMatch(TagService::isControlOrFormat)) {
+			throw new BusinessException(ErrorCode.INVALID_TAG_TITLE);
 		}
-		String normalized = stripped.substring(index).strip();
+		int start = 0;
+		while (start < nfc.length()) {
+			int codePoint = nfc.codePointAt(start);
+			if (codePoint != '#' && !isSpace(codePoint)) {
+				break;
+			}
+			start += Character.charCount(codePoint);
+		}
+		String normalized = WHITESPACE_RUN.matcher(nfc.substring(start)).replaceAll(" ").strip();
 		int length = normalized.codePointCount(0, normalized.length());
 		if (normalized.isEmpty() || length > MAX_TAG_LENGTH) {
 			throw new BusinessException(ErrorCode.INVALID_TAG_TITLE);
 		}
 		return normalized;
+	}
+
+	private static boolean isControlOrFormat(int codePoint) {
+		int type = Character.getType(codePoint);
+		return type == Character.CONTROL || type == Character.FORMAT;
+	}
+
+	private static boolean isSpace(int codePoint) {
+		return Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint);
 	}
 }

@@ -40,8 +40,8 @@ public class FileUploadController {
 		if (file == null || file.isEmpty()) {
 			throw new BusinessException(ErrorCode.INVALID_IMAGE_FILE);
 		}
-		ImageUploadResponse response = fileImageService.uploadDirectImage(file.getBytes(), file.getOriginalFilename(),
-				file.getContentType(), file.getSize());
+		ImageUploadResponse response = fileImageService.uploadDirectImage(Long.parseLong(jwt.getSubject()),
+				file.getBytes(), file.getOriginalFilename(), file.getContentType(), file.getSize());
 		return ResponseEntity.status(HttpStatus.CREATED).body(response);
 	}
 }
