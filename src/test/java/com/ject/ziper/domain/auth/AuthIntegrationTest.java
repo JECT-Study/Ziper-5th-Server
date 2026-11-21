@@ -1,7 +1,9 @@
 package com.ject.ziper.domain.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,14 +17,16 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.ECGenParameterSpec;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+
+import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,6 +40,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -43,13 +49,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ject.ziper.domain.auth.dto.OAuthLoginResponse;
 import com.ject.ziper.domain.auth.entity.Session;
 import com.ject.ziper.domain.auth.repository.SessionRepository;
-import com.ject.ziper.domain.auth.service.AuthService;
 import com.ject.ziper.domain.board.entity.ProductBoard;
 import com.ject.ziper.domain.board.repository.ProductBoardRepository;
 import com.ject.ziper.domain.user.entity.User;
@@ -70,6 +76,10 @@ import com.sun.net.httpserver.HttpServer;
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 class AuthIntegrationTest extends PostgresTestSupport {
+	private static final String WEB_ORIGIN = "https://app.ziper.cc";
+	private static final String COOKIE_MODE = "X-Refresh-Token-Mode";
+	private static final String COOKIE_NAME = "ziper_refresh_token";
+	private static final String OAUTH_SIGNUP = "/api/v1/auth/oauth/signup";
 	private static RSAPublicKey applePublicKey;
 	private static RSAPrivateKey applePrivateKey;
 	private static ECPrivateKey appleClientSecretEcPrivateKey;
@@ -100,13 +110,17 @@ class AuthIntegrationTest extends PostgresTestSupport {
 	private JwtDecoder accessJwtDecoder;
 
 	@Autowired
-	private AuthService authService;
+	private JdbcTemplate jdbc;
+
+	@Autowired
+	private PasswordEncoder passwordEncoder;
 
 	@DynamicPropertySource
 	static void kakaoProperties(DynamicPropertyRegistry registry) throws Exception {
 		initAppleKeys();
 		startKakaoServer();
 		int port = kakaoUserInfoServer.getAddress().getPort();
+		registry.add("app.security.allowed-origins", () -> WEB_ORIGIN);
 		registry.add("app.security.kakao-user-info-uri", () -> "http://127.0.0.1:" + port + "/v2/user/me");
 		registry.add("app.security.kakao-token-uri", () -> "http://127.0.0.1:" + port + "/oauth/token");
 		registry.add("app.security.kakao-client-id", () -> "kakao-client-id");
@@ -150,6 +164,7 @@ class AuthIntegrationTest extends PostgresTestSupport {
 
 	@BeforeEach
 	void cleanTables() {
+		jdbc.update("DELETE FROM ziper.oauth_signup_tickets");
 		sessionRepository.deleteAll();
 		productBoardRepository.deleteAll();
 		userRepository.deleteAll();
@@ -157,19 +172,28 @@ class AuthIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
-	void 미가입유저의AppleID토큰_소셜로그인과재발급과로그아웃을수행하면_자동가입후토큰을회전하고세션을정리한다() throws Exception {
+	void 미가입유저의AppleID토큰_약관동의후가입하고재발급과로그아웃을수행하면_토큰을회전하고세션을정리한다() throws Exception {
 		String appleIdToken = createAppleIdToken("apple-sub-100", "apple100@privaterelay.appleid.com",
 				"com.ject.ziper");
 
-		String firstResponse = mvc
-				.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
-						.header(HttpHeaders.USER_AGENT, "Expo/iOS-18.0")
-						.content("{\"token\":\"" + appleIdToken + "\"}"))
-				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
-				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty())
-				.andReturn().getResponse().getContentAsString();
+		String signupToken = pendingSignup(mvc.perform(post("/api/v1/auth/oauth/apple")
+				.contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.USER_AGENT, "Expo/iOS-18.0")
+				.content("{\"token\":\"" + appleIdToken + "\"}")).andReturn());
+		assertThat(userRepository.count()).isZero();
+		assertThat(oauthUserRepository.count()).isZero();
+		assertThat(sessionRepository.count()).isZero();
+		mvc.perform(signupRequest(signupToken, false, true)).andExpect(status().isBadRequest());
+		mvc.perform(signupRequest(signupToken, true, false)).andExpect(status().isBadRequest());
+		assertThat(userRepository.count()).isZero();
+		assertThat(sessionRepository.count()).isZero();
 
-		JsonNode firstJson = objectMapper.readTree(firstResponse);
+		JsonNode firstJson = signup(signupToken);
+		assertThat(firstJson.path("agreements").path("termsOfService").asBoolean()).isTrue();
+		assertThat(firstJson.path("agreements").path("privacyPolicy").asBoolean()).isTrue();
+		assertThat(firstJson.path("agreements").path("marketing").asBoolean()).isFalse();
+		assertThat(firstJson.path("agreements").path("termsAgreedAt").asText()).isNotBlank();
+		assertThat(firstJson.path("agreements").path("privacyAgreedAt").asText()).isNotBlank();
+		mvc.perform(signupRequest(signupToken, true, true)).andExpect(status().isUnauthorized());
 		String firstAccessToken = firstJson.get("accessToken").asText();
 		String firstRefreshToken = firstJson.get("refreshToken").asText();
 
@@ -194,7 +218,8 @@ class AuthIntegrationTest extends PostgresTestSupport {
 				"com.ject.ziper.web");
 		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
 				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0").content("{\"token\":\"" + webAppleToken + "\"}"))
-				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(false));
+				.andExpect(status().isOk()).andExpect(jsonPath("authType").value("LOGIN"))
+				.andExpect(jsonPath("isNewUser").value(false));
 		assertThat(userRepository.count()).isOne();
 		assertThat(sessionRepository.count()).isEqualTo(2);
 
@@ -224,8 +249,8 @@ class AuthIntegrationTest extends PostgresTestSupport {
 	@Test
 	void 이미가입된이메일과중복되거나잘못된프로바이더요청_소셜로그인을시도하면_4xx오류를반환한다() throws Exception {
 		String firstToken = createAppleIdToken("apple-sub-1", "dup@privaterelay.appleid.com", "com.ject.ziper");
-		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"token\":\"" + firstToken + "\"}")).andExpect(status().isOk());
+		signup(pendingSignup(mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"" + firstToken + "\"}")).andReturn()));
 
 		String conflictToken = createAppleIdToken("apple-sub-2", "dup@privaterelay.appleid.com", "com.ject.ziper");
 		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
@@ -251,51 +276,46 @@ class AuthIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
-	void 대소문자가섞인소셜이메일_자동가입하면_소문자로정규화해저장한다() throws Exception {
+	void 대소문자가섞인소셜이메일_동의후가입하면_소문자로정규화해저장한다() throws Exception {
 		String appleToken = createAppleIdToken("apple-sub-mixed", " Mixed.Case@Example.com", "com.ject.ziper");
-		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"token\":\"" + appleToken + "\"}")).andExpect(status().isOk());
+		signup(pendingSignup(mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"" + appleToken + "\"}")).andReturn()));
 
 		assertThat(userRepository.findAll()).singleElement()
 				.satisfies(user -> assertThat(user.getEmail()).isEqualTo("mixed.case@example.com"));
 	}
 
 	@Test
-	void 같은소셜계정의첫로그인이동시에들어왔을때_처리하면_한명만가입하고둘다로그인한다() throws Exception {
+	void 동일소셜가입토큰이동시에들어왔을때_가입을처리하면_일회용토큰으로한세션만생성한다() throws Exception {
 		String appleToken = createAppleIdToken("apple-sub-concurrent", "concurrent@example.com", "com.ject.ziper");
+		String ticket = pendingSignup(mvc.perform(post("/api/v1/auth/oauth/apple")
+				.contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"" + appleToken + "\"}")).andReturn());
 		ExecutorService executor = Executors.newFixedThreadPool(2);
-		List<OAuthLoginResponse> responses = new ArrayList<>();
+		List<Integer> responses;
 		try {
-			List<Callable<OAuthLoginResponse>> tasks = List.of(
-					() -> authService.loginWithOAuth("apple", appleToken, null),
-					() -> authService.loginWithOAuth("apple", appleToken, null));
-			for (Future<OAuthLoginResponse> future : executor.invokeAll(tasks)) {
-				responses.add(future.get());
-			}
+			Callable<Integer> signup = () -> mvc.perform(signupRequest(ticket, true, true)).andReturn().getResponse()
+					.getStatus();
+			List<Future<Integer>> results = executor.invokeAll(List.of(signup, signup));
+			responses = List.of(results.getFirst().get(), results.getLast().get());
 		} finally {
 			executor.shutdownNow();
 		}
 
-		assertThat(responses).extracting(OAuthLoginResponse::isNewUser).containsExactlyInAnyOrder(true, false);
+		assertThat(responses).containsExactlyInAnyOrder(201, 401);
 		assertThat(userRepository.count()).isOne();
 		assertThat(oauthUserRepository.count()).isOne();
-		assertThat(sessionRepository.count()).isEqualTo(2);
+		assertThat(sessionRepository.count()).isOne();
 	}
 
 	@Test
 	void 이메일없는Kakao액세스토큰_복수사용자가소셜로그인과재로그인을수행하면_NULL이메일로모두가입되고고유제약없이토큰을발급한다() throws Exception {
-		String firstResponse = mvc
-				.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
-						.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
-						.content("{\"token\":\"kakao-token-no-email-1\"}"))
-				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
-				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty())
-				.andReturn().getResponse().getContentAsString();
+		JsonNode firstResponse = signup(pendingSignup(mvc.perform(post("/api/v1/auth/oauth/kakao")
+				.contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+				.content("{\"token\":\"kakao-token-no-email-1\"}")).andReturn()));
 
-		mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+		signup(pendingSignup(mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
 				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0").content("{\"token\":\"kakao-token-no-email-2\"}"))
-				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
-				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty());
+				.andReturn()));
 
 		List<User> users = userRepository.findAll();
 		assertThat(users).hasSize(2);
@@ -305,7 +325,7 @@ class AuthIntegrationTest extends PostgresTestSupport {
 			assertThat(productBoardRepository.findAllByUserId(user.getId())).hasSize(1);
 		});
 
-		String firstAccessToken = objectMapper.readTree(firstResponse).get("accessToken").asText();
+		String firstAccessToken = firstResponse.get("accessToken").asText();
 		Long firstUserId = Long.valueOf(accessJwtDecoder.decode(firstAccessToken).getSubject());
 
 		String reloginResponse = mvc
@@ -320,9 +340,8 @@ class AuthIntegrationTest extends PostgresTestSupport {
 		assertThat(userRepository.count()).isEqualTo(2);
 		assertThat(sessionRepository.count()).isEqualTo(3);
 
-		mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"token\":\"kakao-token-with-email\"}")).andExpect(status().isOk())
-				.andExpect(jsonPath("isNewUser").value(true));
+		signup(pendingSignup(mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"kakao-token-with-email\"}")).andReturn()));
 
 		String conflictAppleToken = createAppleIdToken("apple-sub-dup", "shared@example.com", "com.ject.ziper");
 		mvc.perform(post("/api/v1/auth/oauth/apple").contentType(MediaType.APPLICATION_JSON)
@@ -335,24 +354,22 @@ class AuthIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
-	void 유효한KakaoNaverApple인가코드_코드교환로그인을요청하면_자동가입후자체토큰을발급한다() throws Exception {
-		mvc.perform(post("/api/v1/auth/oauth/kakao/code").contentType(MediaType.APPLICATION_JSON)
-				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
-				.content("{\"code\":\"kakao-code-1\",\"redirectUri\":\"https://app.ziper.dev/callback/kakao\"}"))
-				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
-				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty());
+	void 유효한KakaoNaverApple인가코드_코드를교환하고약관동의를제출하면_가입후자체토큰을발급한다() throws Exception {
+		signup(pendingSignup(mvc
+				.perform(post("/api/v1/auth/oauth/kakao/code").contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.USER_AGENT, "Mozilla/5.0").content(
+								"{\"code\":\"kakao-code-1\",\"redirectUri\":\"https://app.ziper.dev/callback/kakao\"}"))
+				.andReturn()));
 
-		mvc.perform(post("/api/v1/auth/oauth/naver/code").contentType(MediaType.APPLICATION_JSON)
+		signup(pendingSignup(mvc.perform(post("/api/v1/auth/oauth/naver/code").contentType(MediaType.APPLICATION_JSON)
 				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
-				.content("{\"code\":\"naver-code-1\",\"state\":\"naver-state-1\"}")).andExpect(status().isOk())
-				.andExpect(jsonPath("isNewUser").value(true)).andExpect(jsonPath("accessToken").isNotEmpty())
-				.andExpect(jsonPath("refreshToken").isNotEmpty());
+				.content("{\"code\":\"naver-code-1\",\"state\":\"naver-state-1\"}")).andReturn()));
 
-		mvc.perform(post("/api/v1/auth/oauth/apple/code").contentType(MediaType.APPLICATION_JSON)
-				.header(HttpHeaders.USER_AGENT, "Mozilla/5.0")
-				.content("{\"code\":\"apple-code-1\",\"redirectUri\":\"https://app.ziper.dev/callback/apple\"}"))
-				.andExpect(status().isOk()).andExpect(jsonPath("isNewUser").value(true))
-				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty());
+		signup(pendingSignup(mvc
+				.perform(post("/api/v1/auth/oauth/apple/code").contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.USER_AGENT, "Mozilla/5.0").content(
+								"{\"code\":\"apple-code-1\",\"redirectUri\":\"https://app.ziper.dev/callback/apple\"}"))
+				.andReturn()));
 
 		assertThat(userRepository.count()).isEqualTo(3);
 		assertThat(sessionRepository.count()).isEqualTo(3);
@@ -360,6 +377,124 @@ class AuthIntegrationTest extends PostgresTestSupport {
 		mvc.perform(post("/api/v1/auth/oauth/kakao/code").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"code\":\"invalid-code\"}")).andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("code").value("UNAUTHORIZED"));
+	}
+
+	@Test
+	void 허용웹출처_소셜가입부터재발급과로그아웃까지요청하면_리프레시토큰을쿠키로회전하고만료시킨다() throws Exception {
+		mvc.perform(options("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN)
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, COOKIE_MODE)).andExpect(status().isOk())
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, WEB_ORIGIN))
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, COOKIE_MODE));
+
+		String ticket = pendingSignup(mvc.perform(
+				post("/api/v1/auth/oauth/kakao").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie")
+						.contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"kakao-token-no-email-1\"}"))
+				.andReturn());
+		MvcResult registered = mvc
+				.perform(signupRequest(ticket, true, true).header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE,
+						"cookie"))
+				.andExpect(status().isCreated()).andExpect(jsonPath("accessToken").isNotEmpty())
+				.andExpect(jsonPath("refreshToken").doesNotExist())
+				.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store")).andReturn();
+		assertThat(registered.getResponse().getHeader(HttpHeaders.SET_COOKIE))
+				.contains("Path=/api/v1/auth", "Max-Age=1209600", "HttpOnly", "Secure", "SameSite=Lax")
+				.doesNotContain("Domain=");
+		Cookie refresh = registered.getResponse().getCookie(COOKIE_NAME);
+		assertThat(refresh).isNotNull();
+
+		mvc.perform(post("/api/v1/auth/reissue").header(COOKIE_MODE, "cookie").cookie(refresh))
+				.andExpect(status().isForbidden());
+		mvc.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, "https://untrusted.ziper.cc")
+				.header(COOKIE_MODE, "cookie").cookie(refresh)).andExpect(status().isForbidden());
+		mvc.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN).cookie(refresh))
+				.andExpect(status().isBadRequest());
+		mvc.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie")
+				.cookie(refresh).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"refreshToken\":\"another-token\"}")).andExpect(status().isBadRequest());
+
+		MvcResult rotated = mvc
+				.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN)
+						.header(COOKIE_MODE, "cookie").cookie(refresh))
+				.andExpect(status().isOk()).andExpect(jsonPath("accessToken").isNotEmpty())
+				.andExpect(jsonPath("refreshToken").doesNotExist())
+				.andExpect(jsonPath("agreements.termsOfService").value(true)).andReturn();
+		Cookie rotatedCookie = rotated.getResponse().getCookie(COOKIE_NAME);
+		assertThat(rotatedCookie.getValue()).isNotEqualTo(refresh.getValue());
+		mvc.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie")
+				.cookie(refresh)).andExpect(status().isUnauthorized());
+		MvcResult loggedOut = mvc
+				.perform(post("/api/v1/auth/logout").header(HttpHeaders.ORIGIN, WEB_ORIGIN)
+						.header(COOKIE_MODE, "cookie").cookie(rotatedCookie))
+				.andExpect(status().isNoContent()).andReturn();
+		assertThat(loggedOut.getResponse().getHeader(HttpHeaders.SET_COOKIE)).contains("Max-Age=0",
+				"Path=/api/v1/auth");
+		assertThat(sessionRepository.count()).isZero();
+	}
+
+	@Test
+	void 만료된소셜가입토큰이주어졌을때_가입을요청하면_계정과세션을생성하지않는다() throws Exception {
+		String ticket = pendingSignup(
+				mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"token\":\"kakao-token-no-email-1\"}")).andReturn());
+		jdbc.update("UPDATE ziper.oauth_signup_tickets SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'");
+		mvc.perform(signupRequest(ticket, true, true)).andExpect(status().isUnauthorized());
+		assertThat(userRepository.count()).isZero();
+		assertThat(sessionRepository.count()).isZero();
+	}
+
+	@Test
+	void 이메일계정과소셜계정이있을때_이메일로그인을요청하면_올바른비밀번호로만약관상태와토큰을받는다() throws Exception {
+		User user = userRepository.save(User.createEmailUser("login@example.com", passwordEncoder.encode("valid123!"),
+				"이메일가입자", false, Instant.now().minusSeconds(60)));
+		signup(pendingSignup(mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"kakao-token-with-email\"}")).andReturn()));
+
+		mvc.perform(emailLogin("LOGIN@example.com", "valid123!")).andExpect(status().isOk())
+				.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+				.andExpect(jsonPath("refreshToken").isNotEmpty())
+				.andExpect(jsonPath("agreements.privacyPolicy").value(true));
+		assertThat(userRepository.findById(user.getId()).orElseThrow().getLastLoggedAt())
+				.isAfter(user.getLastLoggedAt());
+
+		for (String email : List.of("login@example.com", "missing@example.com", "shared@example.com")) {
+			mvc.perform(emailLogin(email, "wrong123!")).andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("code").value("UNAUTHORIZED"));
+		}
+		jdbc.update("UPDATE ziper.users SET status = 'WITHDRAWN' WHERE id = ?", user.getId());
+		mvc.perform(emailLogin("login@example.com", "valid123!")).andExpect(status().isForbidden());
+	}
+
+	private static MockHttpServletRequestBuilder emailLogin(String email, String password) {
+		return post("/api/v1/auth/email/login").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password));
+	}
+
+	private String pendingSignup(MvcResult result) throws Exception {
+		var response = result.getResponse();
+		assertThat(response.getStatus()).isEqualTo(200);
+		assertThat(response.getHeader(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store");
+		assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+		JsonNode body = objectMapper.readTree(response.getContentAsString());
+		assertThat(body.path("authType").asText()).isEqualTo("SIGNUP_REQUIRED");
+		assertThat(body.has("accessToken")).isFalse();
+		assertThat(body.has("refreshToken")).isFalse();
+		return UUID.fromString(body.path("signupToken").asText()).toString();
+	}
+
+	private JsonNode signup(String token) throws Exception {
+		MvcResult result = mvc.perform(signupRequest(token, true, true)).andExpect(status().isCreated())
+				.andExpect(jsonPath("authType").value("LOGIN")).andExpect(jsonPath("isNewUser").value(true))
+				.andExpect(jsonPath("accessToken").isNotEmpty()).andExpect(jsonPath("refreshToken").isNotEmpty())
+				.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE)).andReturn();
+		return objectMapper.readTree(result.getResponse().getContentAsString());
+	}
+
+	private static MockHttpServletRequestBuilder signupRequest(String token, boolean terms, boolean privacy) {
+		return post(OAUTH_SIGNUP).contentType(MediaType.APPLICATION_JSON).content("""
+				{"signupToken":"%s","agreements":{"termsOfService":%s,"privacyPolicy":%s,"marketing":false}}
+				""".formatted(token, terms, privacy));
 	}
 
 	private static synchronized void startKakaoServer() throws IOException {
