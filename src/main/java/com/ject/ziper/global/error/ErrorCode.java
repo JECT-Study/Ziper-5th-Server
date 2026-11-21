@@ -26,7 +26,13 @@ public enum ErrorCode {
 																													HttpStatus.CONFLICT,
 																													"이미 가입된 이메일입니다."), INVALID_PASSWORD(
 																															HttpStatus.BAD_REQUEST,
-																															"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요.");
+																															"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."), PRODUCT_CARD_NOT_FOUND(
+																																	HttpStatus.NOT_FOUND,
+																																	"상품 카드를 찾을 수 없습니다."), INVALID_LINK_STATUS_REPORT(
+																																			HttpStatus.BAD_REQUEST,
+																																			"올바르지 않은 링크 상태 보고입니다."), LINK_STATUS_REPORT_RATE_LIMITED(
+																																					HttpStatus.TOO_MANY_REQUESTS,
+																																					"잠시 후 다시 보고해 주세요.");
 
 	private final HttpStatus status;
 	private final String detail;
