@@ -133,7 +133,7 @@ class HomeQueryIntegrationTest extends PostgresTestSupport {
 		Long otherUserBoardId = insertBoard(otherUserId, "타인 보드", true, false, null, baseTime.plusSeconds(40));
 
 		FileAsset storedAsset = fileAssetRepository.save(FileAsset.create("thumbnails/2026/11/home-preview-1.webp",
-				"preview.webp", "image/webp", 1024L, baseTime));
+				userId, "preview.webp", "image/webp", 1024L, baseTime));
 
 		Instant futureRediscovery = Instant.now().plus(14, ChronoUnit.DAYS);
 		Long cardOldest = insertCard(userId, "https://www.musinsa.com/products/2001", "무신사", "가장오래된상품", 10000L,
@@ -225,8 +225,8 @@ class HomeQueryIntegrationTest extends PostgresTestSupport {
 		Instant futureRediscovery = Instant.now().plus(14, ChronoUnit.DAYS);
 		Instant checkedAt = Instant.parse("2026-11-10T11:30:00Z");
 
-		FileAsset storedAsset = fileAssetRepository.save(
-				FileAsset.create("thumbnails/2026/11/recent-1.webp", "recent.webp", "image/webp", 2048L, baseTime));
+		FileAsset storedAsset = fileAssetRepository.save(FileAsset.create("thumbnails/2026/11/recent-1.webp", userId,
+				"recent.webp", "image/webp", 2048L, baseTime));
 
 		insertCard(userId, "https://www.musinsa.com/products/3001", "무신사", "오래된상품", 15000L,
 				"https://image.msscdn.net/3001.jpg", null, null, "PENDING", "PLANNED", "UNKNOWN", null, null,
@@ -310,8 +310,8 @@ class HomeQueryIntegrationTest extends PostgresTestSupport {
 		Instant past = now.minus(1, ChronoUnit.DAYS);
 		Long boardA = insertBoard(userId, "보드A", true, false, null, now.minusSeconds(20));
 		Long boardB = insertBoard(userId, "보드B", true, false, null, now.minusSeconds(10));
-		FileAsset storedAsset = fileAssetRepository
-				.save(FileAsset.create("thumbnails/2026/11/shared-card.webp", "shared.webp", "image/webp", 512L, now));
+		FileAsset storedAsset = fileAssetRepository.save(FileAsset.create("thumbnails/2026/11/shared-card.webp", userId,
+				"shared.webp", "image/webp", 512L, now));
 		Long sharedCardId = insertCard(userId, "https://www.musinsa.com/products/5001", "무신사", "공유상품", 45000L,
 				"https://image.msscdn.net/5001.jpg", storedAsset.getId(), null, "READY", "PLANNED", "AVAILABLE", past,
 				"SERVER", past, false, null, past);

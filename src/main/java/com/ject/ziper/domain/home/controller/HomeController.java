@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ject.ziper.domain.home.dto.HomeSummaryResponse;
-import com.ject.ziper.domain.home.service.HomeQueryService;
+import com.ject.ziper.domain.home.service.HomeQueryFacade;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
 
@@ -23,10 +23,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class HomeController {
 	private static final String MAX_LONG_TEXT = String.valueOf(Long.MAX_VALUE);
 
-	private final HomeQueryService homeQueryService;
+	private final HomeQueryFacade homeQueryFacade;
 
-	public HomeController(HomeQueryService homeQueryService) {
-		this.homeQueryService = homeQueryService;
+	public HomeController(HomeQueryFacade homeQueryFacade) {
+		this.homeQueryFacade = homeQueryFacade;
 	}
 
 	@GetMapping
@@ -34,7 +34,7 @@ public class HomeController {
 	public ResponseEntity<HomeSummaryResponse> getHomeSummary(
 			@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
 			@Parameter(description = "최근 저장 상품 최대 조회 개수 (1~50, 기본값 10)", example = "10") @RequestParam(defaultValue = "10") int recentLimit) {
-		HomeSummaryResponse response = homeQueryService.getHomeSummary(extractUserId(jwt), recentLimit);
+		HomeSummaryResponse response = homeQueryFacade.getHomeSummary(extractUserId(jwt), recentLimit);
 		return ResponseEntity.ok(response);
 	}
 
