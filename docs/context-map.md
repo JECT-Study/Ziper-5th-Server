@@ -47,3 +47,4 @@
 - [0014 Spring Security RestClient 기반 무상태 OAuth Authorization Code 교환](adr/0014-oauth-authorization-code-grant.md)
 - [0015 상품·보드·해시태그·재발견 스키마 경계](adr/0015-product-card-and-rediscovery-schema.md)
 - [0016 이메일·비밀번호 가입, 인증 흐름 소비와 OAuth 이메일 중복 처리](adr/0016-email-password-signup.md) — 0009의 후속 작업인 가입·코드 소비와 OAuth 자동 연결 금지를 결정
+- [0017 웹 Refresh 쿠키와 소셜 가입 약관](adr/0017-web-refresh-and-signup-consent.md) — 0010·0016의 소셜 자동 가입과 필수 약관 저장 규칙을 대체

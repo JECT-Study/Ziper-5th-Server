@@ -46,7 +46,8 @@ class EmailVerificationOpenApiTest extends PostgresTestSupport {
 		assertThat(status.path("security").isEmpty()).isTrue();
 
 		for (String authPath : new String[]{"/api/v1/auth/oauth/{provider}", "/api/v1/auth/oauth/{provider}/code",
-				"/api/v1/auth/reissue", "/api/v1/auth/logout"}) {
+				"/api/v1/auth/oauth/signup", "/api/v1/auth/email/login", "/api/v1/auth/reissue",
+				"/api/v1/auth/logout"}) {
 			JsonNode operation = paths.path(authPath).path("post");
 			assertThat(operation.isMissingNode()).isFalse();
 			assertThat(operation.path("summary").asText()).isNotBlank();
