@@ -130,8 +130,8 @@ public class SecurityConfiguration {
 		cors.setAllowedOrigins(properties.allowedOrigins());
 		cors.setAllowCredentials(false);
 		cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
-		cors.setExposedHeaders(List.of("X-Request-Id"));
-		cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "sentry-trace", "baggage"));
+		cors.setExposedHeaders(List.of("X-Request-Id", "ETag"));
+		cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "If-None-Match", "sentry-trace", "baggage"));
 		var authCors = new CorsConfiguration(cors);
 		authCors.setAllowCredentials(true);
 		var authHeaders = new ArrayList<>(cors.getAllowedHeaders());
