@@ -67,8 +67,23 @@ class SupabaseBootstrapIntegrationTest {
 					"test-runtime-password"); Statement statement = runtime.createStatement()) {
 				statement.execute("SELECT * FROM ziper.flyway_schema_history WHERE false");
 			}
+			assertThat(flyway(postgres, "6").migrate().migrationsExecuted).isEqualTo(5);
+			try (Connection runtime = DriverManager.getConnection(postgres.getJdbcUrl(), "ziper_app",
+					"test-runtime-password"); Statement statement = runtime.createStatement()) {
+				statement.execute("""
+						INSERT INTO ziper.users (email, nickname, password_hash)
+						VALUES ('legacy-email@example.test', '이메일회원', 'fixture-hash')
+						""");
+				statement.execute("""
+						WITH account AS (
+							INSERT INTO ziper.oauth_users (provider, provider_id)
+							VALUES ('KAKAO', 'legacy-kakao') RETURNING id
+						)
+						INSERT INTO ziper.users (nickname, oauth_connect) SELECT '소셜회원', id FROM account
+						""");
+			}
 			Flyway latest = flyway(postgres, "latest");
-			assertThat(latest.migrate().migrationsExecuted).isEqualTo(6);
+			assertThat(latest.migrate().migrationsExecuted).isPositive();
 			assertThat(latest.migrate().migrationsExecuted).isZero();
 			try (Connection migration = DriverManager.getConnection(postgres.getJdbcUrl(), "ziper_migrator",
 					"test-migration-password"); Statement statement = migration.createStatement()) {
@@ -76,6 +91,20 @@ class SupabaseBootstrapIntegrationTest {
 			}
 			try (Connection runtime = DriverManager.getConnection(postgres.getJdbcUrl(), "ziper_app",
 					"test-runtime-password"); Statement statement = runtime.createStatement()) {
+				try (var rows = statement.executeQuery("""
+						SELECT terms_agreed_at = created_at AND privacy_agreed_at = created_at
+						FROM ziper.users WHERE email = 'legacy-email@example.test'
+						""")) {
+					assertThat(rows.next()).isTrue();
+					assertThat(rows.getObject(1, Boolean.class)).isTrue();
+				}
+				try (var rows = statement.executeQuery("""
+						SELECT terms_agreed_at IS NULL AND privacy_agreed_at IS NULL
+						FROM ziper.users WHERE nickname = '소셜회원'
+						""")) {
+					assertThat(rows.next()).isTrue();
+					assertThat(rows.getBoolean(1)).isTrue();
+				}
 				assertThat(statement.executeUpdate("INSERT INTO ziper.business_fixture(value) VALUES ('first')"))
 						.isOne();
 				assertThat(statement.executeUpdate("UPDATE ziper.business_fixture SET value = 'second'")).isOne();
