@@ -48,4 +48,5 @@
 - [0014 Spring Security RestClient 기반 무상태 OAuth Authorization Code 교환](adr/0014-oauth-authorization-code-grant.md)
 - [0015 상품·보드·해시태그·재발견 스키마 경계](adr/0015-product-card-and-rediscovery-schema.md)
 - [0016 이메일·비밀번호 가입, 인증 흐름 소비와 OAuth 이메일 중복 처리](adr/0016-email-password-signup.md) — 0009의 후속 작업인 가입·코드 소비와 OAuth 자동 연결 금지를 결정
-- [0017 상품 카드 이미지 외부 저장소 도입 및 단일 중해상도 썸네일(B-2) 정책](adr/0017-product-image-storage-and-thumbnail-policy.md) — 제안 상태; 무상태 환경의 외부 Object Storage 도입, B-2 공용 썸네일, 법적 컴플라이언스 퇴각 전략 기록
+- [0017 상품 카드 이미지 외부 저장소 도입 및 단일 중해상도 썸네일(B-2) 정책](adr/0017-product-image-storage-and-thumbnail-policy.md) — 채택; Supabase Storage 확정(S3 호환 추상화 유지), B-2 공용 썸네일, DB 작업 테이블 기반 1회 비동기 미러링 및 `CLIENT_UPLOAD`·법적 퇴각 전략
+- [0019 클라이언트 격리 WebView 상품 추출, URL 정규화 및 링크 상태 경계](adr/0019-client-side-product-extraction-and-url-policy.md)
