@@ -47,7 +47,7 @@ public class ProductCardRegistrationService {
 	// 잠금 순서: board:{userId} -> product-card:{userId} -> link:{uuid} ->
 	// link-id:{id}. 역순으로 잡지 않는다.
 	private static final String BOARD_LOCK_PREFIX = "board:";
-	private static final String PRODUCT_CARD_LOCK_PREFIX = "product-card:";
+	static final String PRODUCT_CARD_LOCK_PREFIX = "product-card:";
 	private static final Pattern SCRIPT_OR_STYLE_BLOCK = Pattern.compile("(?is)<(script|style)\\b[^>]*>.*?</\\1\\s*>");
 	// 실제 태그·주석 형태만 제거한다. "S<M 사이즈 > L"처럼 평문 부등호는 속성 이름이 ASCII가 아니므로 태그로 보지 않는다.
 	private static final Pattern HTML_TAG_PATTERN = Pattern.compile(
