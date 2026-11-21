@@ -9,6 +9,8 @@ import com.ject.ziper.domain.user.entity.User;
 public interface UserRepository extends JpaRepository<User, Long> {
 	Optional<User> findByOauthConnectId(Long oauthConnectId);
 
+	Optional<User> findByEmail(String email);
+
 	boolean existsByNickname(String nickname);
 
 	boolean existsByEmailIgnoreCase(String email);
