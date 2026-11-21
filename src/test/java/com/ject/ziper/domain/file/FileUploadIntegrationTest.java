@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -50,6 +52,9 @@ import com.ject.ziper.global.storage.WebpThumbnailProcessor;
 @AutoConfigureMockMvc
 class FileUploadIntegrationTest extends PostgresTestSupport {
 	@Autowired
+	private JdbcTemplate jdbc;
+
+	@Autowired
 	private MockMvc mvc;
 
 	@Autowired
@@ -74,11 +79,19 @@ class FileUploadIntegrationTest extends PostgresTestSupport {
 		inMemoryStorage = (InMemoryObjectStorageClient) objectStorageClient;
 		inMemoryStorage.clear();
 		fileAssetRepository.deleteAll();
+		jdbc.update("DELETE FROM ziper.users");
+	}
+
+	private Long insertUser(String email, String nickname) {
+		return jdbc.queryForObject(
+				"INSERT INTO ziper.users(email, nickname, status) VALUES (?, ?, 'ACTIVE') RETURNING id", Long.class,
+				email, nickname);
 	}
 
 	@Test
 	void 인증된사용자와유효한JPEG이미지_직접업로드후삭제하면_480x640WebP저장서명URL발급및완전삭제를수행한다() throws Exception {
-		String accessToken = jwtTokenProvider.issueAccessToken(101L);
+		Long uploaderId = insertUser("upload1@ziper.test", "업로더1");
+		String accessToken = jwtTokenProvider.issueAccessToken(uploaderId);
 		byte[] jpegBytes = createImageBytes(1000, 800, "jpg");
 		MockMultipartFile multipartFile = new MockMultipartFile("file", "card-photo.jpg", "image/jpeg", jpegBytes);
 
@@ -96,6 +109,14 @@ class FileUploadIntegrationTest extends PostgresTestSupport {
 		assertThat(asset.getContentType()).isEqualTo("image/webp");
 		assertThat(asset.getStorageKey()).startsWith("thumbnails/").endsWith(".webp");
 		assertThat(asset.getOriginalFilename()).isEqualTo("card-photo.jpg");
+		assertThat(asset.getOwnerUserId()).isEqualTo(uploaderId);
+		Long otherUserId = insertUser("upload-other@ziper.test", "다른사용자");
+		assertThat(fileImageService.isOwnedBy(fileId, uploaderId)).isTrue();
+		assertThat(fileImageService.isOwnedBy(fileId, otherUserId)).isFalse();
+		assertThatThrownBy(() -> fileImageService.requireOwnedFile(fileId, otherUserId))
+				.isInstanceOf(BusinessException.class).extracting(ex -> ((BusinessException) ex).errorCode())
+				.isEqualTo(ErrorCode.FILE_NOT_FOUND);
+		assertThat(fileImageService.findSignedUrls(List.of(fileId, 987654321L))).containsOnlyKeys(fileId);
 
 		var stored = inMemoryStorage.getObject(asset.getStorageKey()).orElseThrow();
 		assertThat(stored.contentType()).isEqualTo("image/webp");
@@ -116,7 +137,7 @@ class FileUploadIntegrationTest extends PostgresTestSupport {
 
 	@Test
 	void 손상된바이트비허용MIME및5MB초과파일_직접업로드를요청하면_400과413으로거부하고저장하지않는다() throws Exception {
-		String accessToken = jwtTokenProvider.issueAccessToken(102L);
+		String accessToken = jwtTokenProvider.issueAccessToken(insertUser("upload2@ziper.test", "업로더2"));
 		MockMultipartFile corrupt = new MockMultipartFile("file", "broken.jpg", "image/jpeg",
 				"corrupt-data".getBytes(StandardCharsets.UTF_8));
 		MockMultipartFile disallowedMime = new MockMultipartFile("file", "anim.gif", "image/gif",

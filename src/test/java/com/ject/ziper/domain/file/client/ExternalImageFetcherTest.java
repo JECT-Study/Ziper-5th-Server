@@ -3,6 +3,10 @@ package com.ject.ziper.domain.file.client;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.InetAddress;
 import java.time.Clock;
 import java.time.Duration;
@@ -22,8 +26,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 import com.ject.ziper.domain.file.client.ExternalImageFetcher.FetchResult;
+import com.ject.ziper.domain.file.client.ExternalImageFetcher.HttpTransport;
 import com.ject.ziper.domain.file.client.ExternalImageFetcher.HttpResponseData;
 import com.ject.ziper.global.storage.StorageProperties;
+import com.sun.net.httpserver.HttpServer;
 
 class ExternalImageFetcherTest {
 	private static final InetAddress PUBLIC_IP = mustParse("93.184.216.34");
@@ -87,7 +93,7 @@ class ExternalImageFetcherTest {
 	@Test
 	void 최대용량초과또는비이미지응답_이미지다운로드를요청하면_안전하게거부한다() {
 		StorageProperties properties = new StorageProperties("memory", "", "", "product-images", 900L, 1024L, true,
-				List.of(), false, 5000L, 5, 5000, 10000, 2, 0L, 3, 300L, 30L);
+				List.of(), false, 5000L, 5, 5000, 10000, 2, 0L, 3, 300L, 30L, null, null, null, null, null, null, null);
 		HostMirrorCircuitBreaker circuitBreaker = new HostMirrorCircuitBreaker(properties);
 
 		ExternalImageFetcher largeBodyFetcher = new ExternalImageFetcher(properties, circuitBreaker,
@@ -152,11 +158,11 @@ class ExternalImageFetcherTest {
 	}
 
 	@Test
-	void 호스트에서403또는429연속3회발생_이미지다운로드를요청하면_서킷브레이커가차단하고쿨다운후복구된다() {
+	void 호스트에서429또는503연속3회발생_이미지다운로드를요청하면_서킷브레이커가차단하고쿨다운후복구된다() {
 		MutableClock clock = new MutableClock(Instant.parse("2026-11-21T00:00:00Z"));
 		StorageProperties properties = new StorageProperties("memory", "", "", "product-images", 900L,
 				StorageProperties.DEFAULT_MAX_FILE_SIZE_BYTES, true, List.of(), false, 5000L, 5, 5000, 10000, 2, 0L, 3,
-				60L, 0L);
+				60L, 0L, null, null, null, null, null, null, null);
 		HostMirrorCircuitBreaker circuitBreaker = new HostMirrorCircuitBreaker(properties, clock);
 		AtomicInteger transportCalls = new AtomicInteger(0);
 		AtomicInteger responseStatus = new AtomicInteger(429);
@@ -171,11 +177,12 @@ class ExternalImageFetcherTest {
 
 		assertThat(fetcher.fetch("https://cf.product-image.s.zigzag.kr/1.jpg", "h1", "지그재그").errorReason())
 				.isEqualTo("HTTP_429");
-		responseStatus.set(403);
+		responseStatus.set(503);
 		assertThat(fetcher.fetch("https://cf.product-image.s.zigzag.kr/2.jpg", "h2", "지그재그").errorReason())
-				.isEqualTo("HTTP_403");
+				.isEqualTo("HTTP_503");
+		responseStatus.set(429);
 		assertThat(fetcher.fetch("https://cf.product-image.s.zigzag.kr/3.jpg", "h3", "지그재그").errorReason())
-				.isEqualTo("HTTP_403");
+				.isEqualTo("HTTP_429");
 		assertThat(transportCalls.get()).isEqualTo(3);
 
 		FetchResult blocked = fetcher.fetch("https://cf.product-image.s.zigzag.kr/4.jpg", "h4", "지그재그");
@@ -188,6 +195,208 @@ class ExternalImageFetcherTest {
 		FetchResult recovered = fetcher.fetch("https://cf.product-image.s.zigzag.kr/5.jpg", "h5", "지그재그");
 		assertThat(recovered.success()).isTrue();
 		assertThat(transportCalls.get()).isEqualTo(4);
+	}
+
+	@Test
+	void 허용호스트가403을반복해서반환_이미지다운로드를요청하면_서킷을열지않고URL단위영구실패로처리한다() {
+		StorageProperties properties = StorageProperties.defaultsForMemory();
+		HostMirrorCircuitBreaker circuitBreaker = new HostMirrorCircuitBreaker(properties);
+		AtomicInteger transportCalls = new AtomicInteger(0);
+		ExternalImageFetcher fetcher = new ExternalImageFetcher(properties, circuitBreaker,
+				host -> new InetAddress[]{PUBLIC_IP}, (uri, timeout) -> {
+					transportCalls.incrementAndGet();
+					return new HttpResponseData(403, "text/html", 0, null, new ByteArrayInputStream(new byte[0]));
+				}, Clock.systemUTC());
+
+		for (int i = 0; i < 6; i++) {
+			FetchResult result = fetcher.fetch("https://image.msscdn.net/missing-" + i + ".jpg", "forbidden-" + i,
+					"무신사");
+			assertThat(result.errorReason()).isEqualTo("HTTP_403");
+			assertThat(result.transientFailure()).isFalse();
+		}
+		assertThat(transportCalls.get()).isEqualTo(6);
+		assertThat(circuitBreaker.isOpen("image.msscdn.net")).isFalse();
+	}
+
+	@Test
+	void 분류대상실패사유_일시적여부를판정하면_일시적오류만재시도대상으로판정한다() {
+		assertThat(FetchResult.failure(null, "HOST_CIRCUIT_OPEN").transientFailure()).isTrue();
+		assertThat(FetchResult.failure(null, "HOST_CONCURRENCY_LIMIT").transientFailure()).isTrue();
+		assertThat(FetchResult.failure(null, "FETCH_TIMEOUT").transientFailure()).isTrue();
+		assertThat(FetchResult.failure(429, "HTTP_429").transientFailure()).isTrue();
+		assertThat(FetchResult.failure(502, "HTTP_502").transientFailure()).isTrue();
+		assertThat(FetchResult.failure(403, "HTTP_403").transientFailure()).isFalse();
+		assertThat(FetchResult.failure(404, "HTTP_404").transientFailure()).isFalse();
+		assertThat(FetchResult.failure(null, "IMAGE_TOO_LARGE").transientFailure()).isFalse();
+		assertThat(FetchResult.failure(null, "DISALLOWED_SHOP_IMAGE_HOST").transientFailure()).isFalse();
+		assertThat(FetchResult.failure(null, "SSRF_BLOCKED_PRIVATE_IP").transientFailure()).isFalse();
+		assertThat(FetchResult.ok(new byte[]{1}, "image/png").transientFailure()).isFalse();
+	}
+
+	@Test
+	void 느리게바이트를흘리는이미지호스트_다운로드하면_읽기타임아웃내에실패하고다음작업이이어진다() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/slow.jpg", exchange -> {
+			exchange.getResponseHeaders().add("Content-Type", "image/jpeg");
+			exchange.sendResponseHeaders(200, 0);
+			try (OutputStream out = exchange.getResponseBody()) {
+				for (int i = 0; i < 40; i++) {
+					out.write(1);
+					out.flush();
+					Thread.sleep(500);
+				}
+			} catch (IOException | InterruptedException expected) {
+				// The client aborts the connection at its deadline.
+				exchange.close();
+			}
+		});
+		server.createContext("/fast.jpg", exchange -> {
+			exchange.getResponseHeaders().add("Content-Type", "image/jpeg");
+			exchange.sendResponseHeaders(200, 4);
+			try (OutputStream out = exchange.getResponseBody()) {
+				out.write(new byte[]{1, 2, 3, 4});
+			}
+		});
+		server.start();
+		try {
+			StorageProperties properties = propertiesWithReadTimeout(1000);
+			HttpTransport rewriting = rewriteToLocal(server, ExternalImageFetcher.createDefaultTransport(properties,
+					InetAddress::getAllByName, address -> false));
+			ExternalImageFetcher fetcher = new ExternalImageFetcher(properties,
+					new HostMirrorCircuitBreaker(properties), host -> new InetAddress[]{PUBLIC_IP}, rewriting,
+					Clock.systemUTC());
+
+			long start = System.nanoTime();
+			FetchResult slow = fetcher.fetch("https://slow.example/slow.jpg", "h-slow", null);
+			long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+			assertThat(slow.success()).isFalse();
+			assertThat(slow.errorReason()).isEqualTo("FETCH_TIMEOUT");
+			assertThat(slow.transientFailure()).isTrue();
+			assertThat(elapsedMs).as("읽기 타임아웃 1000ms 설정, 실제 소요 ms").isLessThan(4000);
+
+			FetchResult next = fetcher.fetch("https://fast.example/fast.jpg", "h-fast", null);
+			assertThat(next.success()).isTrue();
+			assertThat(next.bytes()).containsExactly(1, 2, 3, 4);
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void 검사시점과연결시점사이에DNS가내부주소로바뀌면_다운로드하면_연결하지않고차단한다() throws Exception {
+		AtomicInteger serverHits = new AtomicInteger(0);
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/", exchange -> {
+			serverHits.incrementAndGet();
+			exchange.sendResponseHeaders(200, -1);
+			exchange.close();
+		});
+		server.start();
+		try {
+			StorageProperties properties = StorageProperties.defaultsForMemory();
+			// Pre-flight lookup sees a public address; the lookup used for the actual
+			// connection sees loopback.
+			ExternalImageFetcher.DnsResolver connectTimeResolver = host -> new InetAddress[]{LOOPBACK_IP};
+			HttpTransport rewriting = rewriteToLocalHost(server, "rebind.example", ExternalImageFetcher
+					.createDefaultTransport(properties, connectTimeResolver, ExternalImageFetcher::isForbiddenAddress));
+			ExternalImageFetcher fetcher = new ExternalImageFetcher(properties,
+					new HostMirrorCircuitBreaker(properties), host -> new InetAddress[]{PUBLIC_IP}, rewriting,
+					Clock.systemUTC());
+
+			FetchResult result = fetcher.fetch("https://rebind.example/a.jpg", "h-rebind", null);
+
+			assertThat(result.success()).isFalse();
+			assertThat(result.errorReason()).isEqualTo("SSRF_BLOCKED_PRIVATE_IP");
+			assertThat(serverHits.get()).isZero();
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void 검사를통과한주소가있을때_다운로드하면_리졸버가돌려준주소로만연결한다() throws Exception {
+		AtomicInteger serverHits = new AtomicInteger(0);
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/", exchange -> {
+			serverHits.incrementAndGet();
+			exchange.getResponseHeaders().add("Content-Type", "image/png");
+			exchange.sendResponseHeaders(200, 2);
+			try (OutputStream out = exchange.getResponseBody()) {
+				out.write(new byte[]{7, 8});
+			}
+		});
+		server.start();
+		try {
+			StorageProperties properties = StorageProperties.defaultsForMemory();
+			// "pinned.example" does not exist in real DNS: only the vetted resolver output
+			// can make this connect.
+			HttpTransport transport = ExternalImageFetcher.createDefaultTransport(properties,
+					host -> new InetAddress[]{LOOPBACK_IP}, address -> false);
+			HttpTransport rewriting = rewriteToLocalHost(server, "pinned.example", transport);
+			ExternalImageFetcher fetcher = new ExternalImageFetcher(properties,
+					new HostMirrorCircuitBreaker(properties), host -> new InetAddress[]{PUBLIC_IP}, rewriting,
+					Clock.systemUTC());
+
+			FetchResult result = fetcher.fetch("https://pinned.example/a.png", "h-pinned", null);
+
+			assertThat(result.success()).isTrue();
+			assertThat(serverHits.get()).isEqualTo(1);
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void 다운로드캐시에바이트상한이있을때_큰응답을연속저장하면_총바이트가상한을넘지않는다() {
+		MutableClock clock = new MutableClock(Instant.parse("2026-11-21T00:00:00Z"));
+		StorageProperties properties = StorageProperties.defaultsForMemory().withDedup(30L, 2500L);
+		ExternalImageFetcher fetcher = new ExternalImageFetcher(properties, new HostMirrorCircuitBreaker(properties),
+				host -> new InetAddress[]{PUBLIC_IP}, (uri, timeout) -> new HttpResponseData(200, "image/png", 1000,
+						null, new ByteArrayInputStream(new byte[1000])),
+				clock);
+
+		for (int i = 0; i < 10; i++) {
+			assertThat(fetcher.fetch("https://image.msscdn.net/" + i + ".png", "cap-" + i, "무신사").success()).isTrue();
+			assertThat(fetcher.cachedBytes()).isLessThanOrEqualTo(2500L);
+		}
+		assertThat(fetcher.cachedEntryCount()).isEqualTo(2);
+	}
+
+	@Test
+	void 만료된캐시항목이있을때_다른URL을저장하면_조회없이도만료항목을제거한다() {
+		MutableClock clock = new MutableClock(Instant.parse("2026-11-21T00:00:00Z"));
+		StorageProperties properties = StorageProperties.defaultsForMemory().withDedup(30L, 1_000_000L);
+		ExternalImageFetcher fetcher = new ExternalImageFetcher(properties, new HostMirrorCircuitBreaker(properties),
+				host -> new InetAddress[]{PUBLIC_IP}, (uri, timeout) -> new HttpResponseData(200, "image/png", 100,
+						null, new ByteArrayInputStream(new byte[100])),
+				clock);
+
+		fetcher.fetch("https://image.msscdn.net/a.png", "exp-a", "무신사");
+		fetcher.fetch("https://image.msscdn.net/b.png", "exp-b", "무신사");
+		assertThat(fetcher.cachedEntryCount()).isEqualTo(2);
+
+		clock.advance(Duration.ofSeconds(31));
+		fetcher.fetch("https://image.msscdn.net/c.png", "exp-c", "무신사");
+
+		assertThat(fetcher.cachedEntryCount()).isEqualTo(1);
+		assertThat(fetcher.cachedBytes()).isEqualTo(100L);
+	}
+
+	private static StorageProperties propertiesWithReadTimeout(int readTimeoutMs) {
+		return new StorageProperties("memory", "", "", "product-images", 900L,
+				StorageProperties.DEFAULT_MAX_FILE_SIZE_BYTES, true, List.of(), false, 5000L, 5, 5000, readTimeoutMs, 2,
+				0L, 3, 300L, 30L, null, null, null, null, null, null, null);
+	}
+
+	private static HttpTransport rewriteToLocal(HttpServer server, HttpTransport real) {
+		return (uri, timeout) -> real
+				.get(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + uri.getRawPath()), timeout);
+	}
+
+	private static HttpTransport rewriteToLocalHost(HttpServer server, String host, HttpTransport real) {
+		return (uri, timeout) -> real
+				.get(URI.create("http://" + host + ":" + server.getAddress().getPort() + uri.getRawPath()), timeout);
 	}
 
 	private static InetAddress mustParse(String literal) {

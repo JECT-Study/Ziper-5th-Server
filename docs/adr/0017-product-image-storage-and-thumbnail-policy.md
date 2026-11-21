@@ -64,3 +64,15 @@
     2. **클라이언트 단말 로컬 캐시**: 서버 중앙 복제 없이 모바일 앱(`ziper-mobile`)·브라우저의 사용자 기기 내부 캐시에만 사적 열람용 캐시 유지
     3. **공식 제휴(Affiliate)·파트너스 피드 API 연동**: 약관상 허가된 상품 메타데이터·이미지 URL 사용 (PRD 3차 MVP 제휴 링크와 연계)
     4. **비이미지 메타데이터 카드 + 사용자 직접 이미지 등록 유도**: 브랜드·상품명·가격·메모·해시태그와 카테고리 대체 아이콘 중심으로 표현하고 필요 시 사용자가 직접 업로드
+
+## 구현 보완 결정 (`JEC-76` 리뷰 반영)
+
+- **외부 다운로드 SSRF 고정**: `ExternalImageFetcher`는 Apache HttpClient 5(`httpclient5`)로 전송하며 커스텀 `DnsResolver`가 해석한 모든 주소가 공인일 때만 그 주소 집합으로 연결한다(검사와 연결 사이의 DNS rebinding 차단). TLS 호스트 검증은 클라이언트 기본값을 유지하고 리다이렉트는 수동으로 따라 홉마다 같은 검증을 거친다. JDK `HttpClient`는 연결 주소를 고정할 수 없어 교체했다. 다른 `RestClient`는 `spring.http.client.factory=jdk`로 기존 JDK 클라이언트를 유지한다.
+- **다운로드 기한**: `mirror-read-timeout-ms`는 홉당 헤더·본문을 합친 총 기한이다. 초과하면 연결을 끊고 `FETCH_TIMEOUT`(일시적 오류)으로 반환한다.
+- **작업 상태와 재시도**: 일시적 오류는 지수 백오프로 `next_attempt_at`을 미뤄 `PENDING`으로 되돌리고 `mirror-max-attempts` 초과 시 `FAILED`로 끝낸다. 영구 오류(허용되지 않은 호스트, 크기 초과, 디코딩 실패, `403`/`404` 등)는 즉시 `FAILED`다. 선점은 `locked_at` 만료(`mirror-lock-timeout-seconds`)로 회수하며 회수도 시도 횟수에 포함해 워커를 반복해서 죽이는 작업이 무한 순환하지 않게 한다.
+- **재처리 멱등성**: 저장 키를 `thumbnails/mirror/{jobId}.webp`로 고정하고 업로드는 upsert이며, 이전 시도가 저장한 `files` 행이 있으면 다시 다운로드하지 않고 그 결과로 완료한다. 그래서 쓰기 결과가 불명확해도 자동 재시도가 중복 객체나 중복 행을 만들지 않는다.
+- **서킷 판정**: 서킷은 호스트 전체 과부하 신호인 `429`/`503`만 센다. `403`은 사용자가 고른 경로마다 달라 한 사용자의 잘못된 URL이 모든 사용자의 미러링을 막을 수 있으므로 URL 단위 영구 실패로 처리한다. 서킷 상태는 인스턴스별 메모리의 일시적 계측값이라 영속 상태 금지 규칙의 대상이 아니며, 인스턴스마다 독립적으로 판단하고 재시작하면 초기화된다.
+- **미러링 완료의 조건부 반영**: 카드가 삭제되지 않았고 현재 `image_url`이 작업의 원본 URL과 같고 작업이 아직 `PROCESSING`일 때만 `image_file_id`를 갱신한다. 아니면 작업을 `CANCELED`로 닫고, 이미 저장한 썸네일은 소유자가 기록된 미참조 파일로 남겨 `JEC-10` 고아 정리가 회수한다. 카드 수정·삭제는 `ImageMirrorService.cancelPendingMirrorJobs(cardId)`로 대기·진행 작업을 취소한다.
+- **파일 소유권**: `files.owner_user_id`에 업로더(미러링은 카드 소유자)를 기록하고 `FileImageService.isOwnedBy`/`requireOwnedFile`로 확인한다. 남의 파일은 존재하지 않는 파일과 같이 `404 FILE_NOT_FOUND`다.
+- **업로드 경계**: Supabase 호출은 DB 트랜잭션 밖에서 수행한다. 객체 업로드 뒤 DB 저장이 실패하면 업로드한 객체를 삭제하고(삭제 실패는 로그만 남기고 원래 예외 전파) Supabase 호출에는 연결·읽기 타임아웃을 둔다. 서명 URL은 `POST /object/sign/{bucket}`(`paths`)로 일괄 발급하며 경로별 오류는 결과에서 제외한다.
+- **EXIF 방향**: 의존성 없이 JPEG APP1의 `0x0112`만 읽는 작은 경계 검사 파서로 방향을 적용한 뒤 4:3 크롭한다. 필요한 태그가 하나라서 `metadata-extractor` 의존성 추가보다 공격 면이 작다.

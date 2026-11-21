@@ -41,10 +41,15 @@ CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향
 | `IMAGE_MIRRORING_WORKER_ENABLED` | `true` (`test`: `false`) | `ziper.image_mirror_jobs` 폴링 및 커밋 후 빠른 경로 워커 활성화 |
 | `IMAGE_MIRRORING_POLL_INTERVAL_MS` | `5000` | 스케줄러 `FOR UPDATE SKIP LOCKED` 폴링 주기(ms) |
 | `IMAGE_MIRRORING_BATCH_SIZE` | `5` | 워커 1회 클레임 최대 작업 수 |
-| `IMAGE_MIRRORING_CONNECT_TIMEOUT_MS` / `IMAGE_MIRRORING_READ_TIMEOUT_MS` | `5000` / `10000` | 외부 이미지 다운로드 연결·읽기 타임아웃(ms) |
+| `IMAGE_MIRRORING_CONNECT_TIMEOUT_MS` / `IMAGE_MIRRORING_READ_TIMEOUT_MS` | `5000` / `10000` | 외부 이미지 다운로드 연결 타임아웃과 홉당 전체 기한(ms). 읽기 값은 헤더·본문 수신을 합친 총 기한이며 초과 시 연결을 끊고 일시적 오류로 처리 |
 | `IMAGE_MIRRORING_HOST_MAX_CONCURRENCY` / `IMAGE_MIRRORING_HOST_MIN_INTERVAL_MS` | `2` / `200` | CDN 호스트별 동시 요청 상한 및 최소 요청 간격(ms) |
-| `IMAGE_MIRRORING_CIRCUIT_FAILURE_THRESHOLD` / `IMAGE_MIRRORING_CIRCUIT_OPEN_SECONDS` | `3` / `300` | 연속 `403`/`429` 발생 시 호스트 자동 차단 임계치 및 쿨다운(초) |
+| `IMAGE_MIRRORING_CIRCUIT_FAILURE_THRESHOLD` / `IMAGE_MIRRORING_CIRCUIT_OPEN_SECONDS` | `3` / `300` | 연속 `429`/`503` 발생 시 호스트 자동 차단 임계치 및 쿨다운(초). `403`은 경로별 결과라 서킷에 반영하지 않음. 서킷 상태는 인스턴스별 메모리의 일시적 계측값이며 재시작 시 초기화 |
 | `IMAGE_MIRRORING_DEDUP_TTL_SECONDS` | `30` | 동일 `source_url_hash` 최근 다운로드 중복 제거 TTL(초) |
+| `IMAGE_MIRRORING_DEDUP_MAX_BYTES` | `16777216` | 중복 제거 캐시가 보관하는 원본 바이트 총량 상한(만료 항목은 삽입 시 정리) |
+| `IMAGE_MIRRORING_MAX_ATTEMPTS` | `5` | 작업당 최대 시도 수. 일시적 오류(타임아웃·`5xx`·`429`·서킷 열림·동시성 거부·저장소 오류)는 초과 전까지 백오프 후 `PENDING`으로 복귀 |
+| `IMAGE_MIRRORING_RETRY_BASE_DELAY_SECONDS` / `IMAGE_MIRRORING_RETRY_MAX_DELAY_SECONDS` | `60` / `3600` | 재시도 지수 백오프의 첫 지연과 상한(초). 서킷 열림은 서킷 쿨다운 이상 대기 |
+| `IMAGE_MIRRORING_LOCK_TIMEOUT_SECONDS` | `600` | `PROCESSING` 선점(`locked_at`) 만료 시간(초). 만료된 작업은 다시 선점해 처리 |
+| `STORAGE_SUPABASE_CONNECT_TIMEOUT_MS` / `STORAGE_SUPABASE_READ_TIMEOUT_MS` | `3000` / `15000` | Supabase Storage 호출 연결·읽기 타임아웃(ms) |
 
 ## 상태 점검
 

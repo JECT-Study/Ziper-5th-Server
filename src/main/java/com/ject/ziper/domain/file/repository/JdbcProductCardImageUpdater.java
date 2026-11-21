@@ -12,10 +12,12 @@ public class JdbcProductCardImageUpdater implements ProductCardImageUpdater {
 	}
 
 	@Override
-	public void markMirrorReady(Long cardId, Long fileId) {
-		jdbcTemplate.update(
-				"UPDATE ziper.product_cards SET image_file_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", fileId,
-				cardId);
+	public boolean markMirrorReady(Long cardId, String expectedImageUrl, Long fileId) {
+		return jdbcTemplate.update("""
+				UPDATE ziper.product_cards
+				SET image_file_id = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND is_deleted = FALSE AND image_url = ?
+				""", fileId, cardId, expectedImageUrl) > 0;
 	}
 
 	@Override

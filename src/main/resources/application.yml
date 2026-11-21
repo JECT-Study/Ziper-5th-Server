@@ -1,4 +1,8 @@
 spring:
+  http:
+    client:
+      # httpclient5 is on the classpath only for the SSRF-pinned image fetcher; keep every other RestClient on the JDK client.
+      factory: jdk
   application:
     name: ziper-server
   jmx:
@@ -130,6 +134,13 @@ app:
     mirror-circuit-failure-threshold: ${IMAGE_MIRRORING_CIRCUIT_FAILURE_THRESHOLD:3}
     mirror-circuit-open-seconds: ${IMAGE_MIRRORING_CIRCUIT_OPEN_SECONDS:300}
     mirror-dedup-ttl-seconds: ${IMAGE_MIRRORING_DEDUP_TTL_SECONDS:30}
+    mirror-dedup-max-bytes: ${IMAGE_MIRRORING_DEDUP_MAX_BYTES:16777216}
+    mirror-max-attempts: ${IMAGE_MIRRORING_MAX_ATTEMPTS:5}
+    mirror-retry-base-delay-seconds: ${IMAGE_MIRRORING_RETRY_BASE_DELAY_SECONDS:60}
+    mirror-retry-max-delay-seconds: ${IMAGE_MIRRORING_RETRY_MAX_DELAY_SECONDS:3600}
+    mirror-lock-timeout-seconds: ${IMAGE_MIRRORING_LOCK_TIMEOUT_SECONDS:600}
+    supabase-connect-timeout-ms: ${STORAGE_SUPABASE_CONNECT_TIMEOUT_MS:3000}
+    supabase-read-timeout-ms: ${STORAGE_SUPABASE_READ_TIMEOUT_MS:15000}
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}
