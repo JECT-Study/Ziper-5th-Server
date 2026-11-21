@@ -1,19 +1,20 @@
 # 0017 상품 카드 이미지 외부 저장소 도입 및 단일 중해상도 썸네일(B-2) 정책
 
-- 상태: 제안 — B-2 전략 및 1차 MVP 동시 적용(`JEC-76`)·Supabase Storage 1차 우선 후보 방향 합의, 최종 벤더 확정·구현·법적 컴플라이언스 검토는 후속 작업(`JEC-76`, `JEC-10`)
+- 상태: 채택 — Supabase Storage 확정(S3 호환 추상화 유지), B-2 단일 중해상도 WebP 썸네일, DB 작업 테이블 기반 저장 직후 1회 비동기 미러링 및 `CLIENT_UPLOAD` 퇴각 경로 반영; 버킷 프로비저닝·`JEC-76` 파이프라인 구현·운영 트래픽 검증 및 법적 컴플라이언스 최종 검토는 후속 작업(`JEC-76`, `JEC-10`)
 - 날짜: 2026-11-21
 
 ## 배경
 
 ### 제약 사항
 
-1. **서버 무상태(stateless) 배포 제약**: 백엔드 서버는 홈서버(`read_only: true`)와 Cloud Run 간 무상태 장애 전환 구조로 동작하므로 컨테이너 로컬 디스크에 이미지를 저장할 수 없다([ADR 0004](0004-deployment-and-failover.md), [인프라 연결](../infrastructure.md)).
+1. **서버 무상태(stateless) 배포 제약**: 백엔드 서버는 홈서버(`read_only: true`)와 Cloud Run 간 무상태 장애 전환 구조로 동작하므로 컨테이너 로컬 디스크에 이미지를 저장할 수 없다([ADR 0004](0004-deployment-and-failover.md), [인프라 연결](../infrastructure.md)). 또한 Cloud Run 요청 기반 과금 환경에서는 HTTP 응답 반환 후 CPU가 할당되지 않아 프로세스 메모리 내 비동기 작업(`@Async`)이 중단·유실될 수 있다.
 2. **사용자 직접 업로드 필수(`JEC-76`)**: 파싱 실패·수기 등록 시 사용자가 직접 올린 이미지를 영속 보관하려면 어차피 공유 외부 Object Storage가 필수다.
 3. **클라이언트 렌더링 특성**: `ziper-web`(React / TanStack Start)과 `ziper-mobile`(Expo + `react-native-webview`) 모두 브라우저/WebView 환경에서 홈(`내 보드` 보드당 3장 콜라주 + `최근 저장` 리스트), 보드 상세 리스트, 상품 상세, 재발견 스와이프 카드를 렌더링한다.
-4. **외부 쇼핑몰 CDN 실측 및 장기 만료 리스크**: 2026-11-21 실측 결과 1차 지원몰(무신사 `image.msscdn.net`, 에이블리 `d3ha2047wt6x28.cloudfront.net`, 지그재그 `cf.product-image.s.zigzag.kr`)과 29CM(`img.29cm.co.kr`)의 HTML 페이지는 일부 Cloudflare 403 봇 차단이 존재하지만, 이미지 CDN 자체는 외부 `Referer`·`no-referrer`·서버 `curl` 요청 모두 `200 OK`와 장기 캐시(`max-age=31536000`)를 반환한다. 그러나 다음 리스크가 남는다.
+4. **외부 쇼핑몰 CDN 실측 및 장기 만료 리스크**: 2026-11-21 실측 결과 1차 지원몰(무신사 `image.msscdn.net`, 에이블리 `d3ha2047wt6x28.cloudfront.net`, 지그재그 `cf.product-image.s.zigzag.kr`)과 29CM(`img.29cm.co.kr`)의 HTML 페이지는 일부 Cloudflare 403·자체 캡차 차단이 존재하지만([ADR 0019](0019-client-side-product-extraction-and-url-policy.md)), 이미지 CDN 자체는 외부 `Referer`·`no-referrer`·서버 `curl` 요청 모두 `200 OK`와 장기 캐시(`max-age=31536000`)를 반환한다. 그러나 다음 리스크가 남는다.
    - 상품 판매 종료·삭제·경로 변경 또는 인스타그램(`cdninstagram.com`, `oe=` 만료 토큰 1~4.5일 만료) 등 만료형 Signed URL 유입 시 재발견 주기(14·30·90일) 전에 이미지가 깨진다.
    - 홈 화면 첫 진입 시 보드 콜라주(보드당 3장)와 최근 저장 리스트가 한 번에 10~20개 외부 고해상도 이미지(예: `1200×1200`, 80KB+)를 동시 요청해 모바일 WebView 메모리·초기 로딩 성능에 부담을 준다.
    - `onError` 시점에 단건 재추출 API(`/refresh-image`)를 호출해 화면을 갱신하면 첫 진입 깜빡임(flicker), 동시 요청 폭주, 판매 종료·403 몰에서의 헛로딩으로 UX가 저하된다.
+   - 현재 200을 반환하는 외부 이미지 CDN도 향후 봇 차단·핫링크 방지·속도 제한(`403`/`429`)을 적용할 수 있다.
 5. **저작권·약관 컴플라이언스 리스크**: 외부 쇼핑몰 상품 이미지를 서버 저장소에 복제·보관하는 행위는 저작권법 및 플랫폼 이용약관 검토가 필요하며, 불가 판정 시 즉시 전환할 안전장치가 필요하다.
 
 ### 해결하려는 문제
@@ -22,25 +23,35 @@
 
 1. 홈·보드 목록 첫 진입 시 깜빡임 없는 빠른 로딩과 안정적 메모리 사용
 2. 14·30·90일 재발견 주기 동안 외부 링크 만료·삭제에 따른 이미지 깨짐 방지
-3. MVP 일정에 맞는 단일 파이프라인·단일 저장소 기반의 낮은 운영 복잡도
-4. 법적 컴플라이언스 이슈 발생 시 코드 재설계 없이 즉시 우회할 수 있는 퇴각 경로 확보
+3. MVP 일정과 Cloud Run/홈서버 무상태 제약에 맞는 단일 저장소·유실 없는 비동기 파이프라인
+4. CDN 서버 차단 및 법적 컴플라이언스 이슈 발생 시 코드 재설계 없이 즉시 우회할 수 있는 퇴각 경로 확보
 
 ## 결정
 
-1. **공유 외부 Object Storage 도입 (`Supabase Storage` 1차 우선 후보 · `Cloudflare R2` 대안 후보)**:
-   - 무상태 서버 제약을 준수하고 사용자 직접 업로드와 외부 OG 썸네일 저장을 단일 저장소로 통합하기 위해 외부 Object Storage를 도입한다.
-   - 계획 중인 Supabase PostgreSQL과의 **단일 벤더 통합·운영 편의성**을 우선해 **Supabase Storage**를 1차 우선 후보로 둔다.
-   - 실트래픽(Egress) 비용 최적화 또는 기존 Cloudflare 스택 통합이 더 유리할 경우 전환할 수 있도록 **Cloudflare R2**(무료 10GB·Egress 0원)를 대안 후보로 병기하고, 구현 시 S3 호환/추상화 인터페이스를 유지해 `JEC-76` 구현 단계에서 벤더를 최종 확정한다.
+1. **공유 외부 Object Storage 확정 — `Supabase Storage` (S3 호환 추상화 인터페이스로 `Cloudflare R2` 전환 시임 유지)**:
+   - 무상태 서버 제약을 준수하고 사용자 직접 업로드와 외부 OG 썸네일 저장을 단일 저장소로 통합하기 위해 **Supabase Storage**를 1차 운영 Object Storage로 확정한다.
+   - 초안 단계에서 병기했던 두 후보(Supabase Storage 1차 우선 · Cloudflare R2 대안) 중 계획 중인 Supabase PostgreSQL과의 단일 벤더 통합·운영 단순성을 우선해 Supabase Storage를 채택한다.
+   - Supabase Free Plan의 저장 용량·전송량(Egress) 제약을 고려해 WebP 중해상도 썸네일(장당 25~45KB)과 중복 다운로드 억제 정책을 적용하며, 스토리지 접근 계층은 S3 호환 추상화 인터페이스로 분리해 향후 Egress 비용·한도 부담이 커지면 **Cloudflare R2**(무료 10GB·Egress 0원)로 교체할 수 있는 시임(seam)을 유지한다.
 2. **B-2 전략 채택 — 단일 중해상도 WebP 썸네일 공용 저장 (`JEC-76` 1차 MVP 동시 적용)**:
    - `JEC-76` 구현 단계부터 **사용자 직접 업로드 이미지**와 **외부 OG 이미지 미러링** 모두 카드 표시용 **단일 중해상도 WebP 썸네일(`480~600px`, 4:3 비율 기준 크롭, 장당 약 25~45KB)**로 변환해 Object Storage에 저장하고 `ziper.files` 및 `product_cards.image_file_id`로 연결한다.
    - 홈 콜라주, 보드/최근 저장 리스트, 상품 상세, 재발견 스와이프 전 화면에서 해당 썸네일을 공용으로 서빙하여 리스트·상세 이미지 경로 이원화를 제거하고, 원본 링크 만료 뒤에도 상세·재발견 화면 화질을 유지한다.
    - 원본 외부 `image_url`은 메타데이터·폴백용으로 `product_cards.image_url`에 함께 보존한다.
    - 이에 따라 `JEC-10`은 **비동기 리사이징 워커 고도화(실패 재처리·큐잉·ImageMagick 등 리샘플링 품질 검증) 및 고아 파일 정리 정책**으로 역할을 명확히 축소·정렬한다.
-3. **API 응답 계약 및 폴백 우선순위 고정**:
-   - 상품 카드 및 보드 콜라주 응답(`previewImages`는 `[{ cardId, imageUrl, fallbackIcon }]` 구조)은 `imageFileUrl`(자체 Object Storage) → `imageUrl`(원본 외부 URL) → `fallbackIcon`(카테고리 대체 아이콘 5종) 순으로 우선순위를 둔다.
-   - 클라이언트 `<img>`는 로드 실패(`onError`) 시 재로딩 대기 없이 즉시 `fallbackIcon`을 표시해 깜빡임과 요청 폭주를 차단한다.
-4. **법적 컴플라이언스 가드레일 및 즉시 퇴각(Fallback) 스위치**:
-   - 외부 쇼핑몰 이미지 미러링에는 도메인별/전역 제어 플래그(`image_mirroring_enabled`)를 두어, 저작권·이용약관 검토 결과 특정 몰 또는 전체 미러링이 불가할 경우 코드 구조 변경 없이 즉시 미러링을 비활성화할 수 있게 설계한다.
+3. **저장 직후 1회 비동기 미러링 — `@Async` 미사용, DB 작업 테이블 + 커밋 후 빠른 경로(fast-path) 워커 + 폴링**:
+   - 서버 OG 추출(`lookup`) 폐기([ADR 0019](0019-client-side-product-extraction-and-url-policy.md))에 따라 외부 쇼핑몰 이미지는 **카드 저장 직후 1회만** 미러링하며, 미러링 완료 후에는 자체 저장소에서 서빙하므로 주기적으로 재수집하지 않는다. 저장 전 미리보기는 앱이 추출한 외부 `imageUrl`을 직접 표시한다.
+   - 저장 API 안에서 동기 리사이징을 수행하지 않으며, Cloud Run 요청 기반 과금(응답 후 CPU 미할당)과 홈서버 ↔ Cloud Run 전환 시 작업 유실을 막기 위해 서버 메모리 내 `@Async`도 사용하지 않는다.
+   - 카드 저장 트랜잭션과 **같은 트랜잭션**에서 DB 작업 테이블에 `PENDING` 미러링 작업을 등록하고, 커밋 직후 워커를 즉시 깨우는 **빠른 경로(fast-path)**와 누락·재기동 복구용 스케줄러 **`FOR UPDATE SKIP LOCKED` 폴링**을 결합한다(목표: 저장 후 `READY`까지 p95 5초 이내, 만료형 서명 URL 예: 인스타그램 `oe=` 우선순위 상향).
+   - **미결정: 요청이 없는 상태에서 `PENDING` 작업을 실행할 주체는 `JEC-93`에서 결정한다.** 현재 보장 범위는 홈서버 상시 실행 시 스케줄러 폴링이 작업을 처리하는 것까지이며, Cloud Run 장애 전환 중에는 최소 인스턴스 0·요청 기반 CPU 설정이어서 요청이 있을 때만 폴링·워커가 동작한다. 저장 직후 인스턴스가 종료되고 새 요청이 없으면 남은 작업은 다음 요청이나 홈서버 복귀 전까지 실행되지 않을 수 있다(위 `p95 5초` 목표는 상시 실행 환경 기준이다).
+   - 미러링 다운로드·변환 실패가 카드 저장 실패로 이어지지 않으며, 실패 시 `image_status = 'FAILED'`로 기록하고 원본 `image_url`을 유지한다.
+4. **API 응답 계약(`imageStatus`) 및 폴백 우선순위 고정**:
+   - 상품 카드 응답에 `imageStatus` (`NONE` | `PENDING` | `READY` | `FAILED`)를 포함한다. 외부 `imageUrl` 없이 직접 업로드 파일(`imageFileId`) 또는 대체 아이콘(`fallbackIcon`)으로 등록된 카드는 `NONE`, 외부 `imageUrl` 미러링 대기 중인 카드는 `PENDING`을 반환한다.
+   - 상품 카드 및 보드 콜라주 응답(`previewImages`는 `[{ cardId, imageUrl, fallbackIcon }]` 구조)의 표시 우선순위는 `imageFileUrl`(자체 Object Storage) → `imageUrl`(원본 외부 URL) → `fallbackIcon`(카테고리 대체 아이콘 5종) 순으로 고정한다.
+   - `PENDING` 동안 클라이언트는 외부 `imageUrl`(앱 미리보기 캐시)을 즉시 표시하고, `<img>` 로드 실패(`onError`) 시 재로딩 대기 없이 즉시 `fallbackIcon`을 표시해 깜빡임과 요청 폭주를 차단한다.
+5. **CDN 차단 대비(`CLIENT_UPLOAD` 퇴각 경로) · SSRF 방어 · 법적 컴플라이언스 가드레일**:
+   - 동일 원본 이미지 URL은 해시 기준으로 동시·최근 다운로드를 1회로 묶고(1차는 다운로드 중복 제거까지 수행), CDN 호스트별 동시 요청 수·초당 요청 수 제한과 `403`/`429` 연속 발생 시 해당 호스트 미러링 자동 일시 중단을 적용한다.
+   - 특정 몰 CDN이 서버 IP를 지속적으로 차단하면 `GET /api/v1/products/extraction-rules`([ADR 0019](0019-client-side-product-extraction-and-url-policy.md))의 해당 몰 `imageStrategy`를 `SERVER_MIRROR`에서 **`CLIENT_UPLOAD`**로 전환해, 앱이 이미지를 받아 기존 직접 업로드 API(`POST /api/v1/files/images`)로 올리는 퇴각 경로를 사용한다.
+   - 미러링 다운로드 시 1차 지원몰은 `imageHosts` 허용 목록을 검증하고, 미지원 몰은 `https` 스킴 + DNS 해석 결과 공인 IP만 허용(리다이렉트 hop마다 재검사)·리다이렉트 hop 제한·`Content-Type` 이미지·최대 5MB·타임아웃으로 SSRF를 방어한다.
+   - 외부 쇼핑몰 이미지 미러링에는 도메인별/전역 제어 플래그(`image_mirroring_enabled`)를 두어 저작권·이용약관 검토 결과 특정 몰 또는 전체 미러링이 불가할 경우 코드 변경 없이 즉시 비활성화한다.
    - Object Storage의 미러링 썸네일은 공개 열람이 아닌 **소유자 인증 기반 비공개 접근(단기 Signed URL 또는 인증 프록시)**을 원칙으로 하며, 카드 영구 삭제·회원 탈퇴 시 Object Storage 객체도 즉시 함께 파기한다.
 
 ## 대안 및 트레이드오프
@@ -51,16 +62,17 @@
 | **2. 안 A — 외부 `image_url` 직접 렌더링 + `onError` 단건 `/refresh-image`** | 저장소 없이 외부 CDN URL 직접 표시, 깨질 때만 백엔드 재추출 호출 | 외부 OG용 추가 스토리지·리사이징 불필요, 저작권 복제 리스크 최소화 | 홈 콜라주·리스트 첫 진입 시 깜빡임·동시 요청 폭주, 판매 종료(404)·인스타그램 Signed URL(`oe=`) 만료 시 복구 불가, 고해상도 외부 이미지 동시 로드로 WebView 메모리 부담 | 외부 스토리지 도입이 불가한 초경량 PoC 단계, 또는 **법적 컴플라이언스로 외부 쇼핑몰 이미지 서버 저장이 전면 금지될 때의 1차 퇴각 경로**(즉시 `fallbackIcon` + 상세 진입 시 제한적 재조회) |
 | **3. 안 B-1 — 초소형 썸네일(`240~320px`) + 상세 원본 `image_url` 분리** | 리스트용 초소형 WebP만 Object Storage에 저장하고 상세·재발견은 외부 원본 URL 사용 | 스토리지 용량·전송량 최소(1만 장 ≈ 100~150MB), 상세에서 원본 고해상도 활용 | 리스트/상세 이미지 경로 이원화로 코드·캐시 복잡도 증가, 원본 링크 만료 시 상세·재발견에서 초소형 썸네일을 확대해야 해 화질 열화 발생 | 수백만 장 이상 대규모 카탈로그로 스토리지·Egress 비용 절감이 최우선이고, 상세 화면 원본 고해상도 유지가 핵심 가치인 서비스 |
 | **4. PostgreSQL 분리 테이블(`BYTEA`) + Cloudflare 캐시** | Object Storage 없이 DB 바이너리 컬럼에 초소형 썸네일 저장 + CDN 캐시 | 추가 스토리지 벤더·키 관리 불필요 | `JEC-76` 직접 업로드 때문에 어차피 공유 파일 저장소가 필요하며, 이미지 증가 시 DB 스토리지·백업·복제 부담 급증 | 직접 업로드 요건이 없고 외부 Object Storage 운영 주체를 늘릴 수 없는 초소규모(수만 장 미만) 썸네일 캐시 |
-| **5. 안 B-2 (채택) — 단일 중해상도 WebP(`480~600px`) 공용 저장** | 직접 업로드 + 외부 OG 모두 단일 중해상도 WebP로 Object Storage에 통합 저장 | 리스트·상세·재발견 단일 파이프라인, 링크 만료 후에도 화질 유지, 홈 WebView 로딩 경량화(25~45KB), 직접 업로드 스토리지 재활용 | 안 B-1 대비 저장 용량 약 2~3배(1만 장 ≈ 250~450MB), 원본 초고해상도 확대 미지원, 외부 이미지 복제에 대한 컴플라이언스 가드레일 필수 | **Ziper 현재 단계(MVP~초기 성장기)**: 무상태 서버에서 직접 업로드 스토리지를 공유하면서 14·30·90일 재발견 UX 안정성과 구현 단순성을 함께 확보해야 할 때 |
+| **5. 저장 API 동기 리사이징 또는 스프링 `@Async`** | 카드 저장 요청 안에서 리사이징하거나 메모리 스레드풀 `@Async`로 비동기 처리 | 별도 작업 테이블 불필요 | 동기 처리는 저장 응답 지연·Cloud Run 시간/메모리 부담이 크고, `@Async`는 Cloud Run 응답 후 CPU 미할당과 장애 전환 시 작업 유실 유발 | 단일 상시 실행 서버에서 유실을 허용할 수 있는 임시 프로토타입 |
+| **6. 안 B-2 (채택) — Supabase Storage + 단일 중해상도 WebP(`480~600px`) + DB 작업 테이블 비동기 미러링** | 직접 업로드 + 외부 OG 모두 단일 중해상도 WebP로 Object Storage에 통합 저장, DB 작업 테이블로 1회 비동기 미러링 | 리스트·상세·재발견 단일 파이프라인, 링크 만료 후에도 화질 유지, 홈 WebView 로딩 경량화(25~45KB), 무상태·Cloud Run 전환 시 작업 유실 방지, `CLIENT_UPLOAD` 퇴각 가능 | 안 B-1 대비 저장 용량 약 2~3배(1만 장 ≈ 250~450MB), Supabase Free Plan 용량·Egress 모니터링 필요, 외부 이미지 복제에 대한 컴플라이언스 가드레일 필수 | **Ziper 현재 단계(MVP~초기 성장기)**: 무상태 서버에서 직접 업로드 스토리지를 공유하면서 14·30·90일 재발견 UX 안정성과 구현 단순성을 함께 확보해야 할 때 |
 
 ## 영향과 한계
 
-- **스키마·인프라 영향**: `ziper.files`와 `product_cards.image_file_id`는 이미 `V6` 스키마에 정의되어 있으나([ADR 0015](0015-product-card-and-rediscovery-schema.md)), 실제 Object Storage 버킷 프로비저닝(Supabase Storage 1차 후보 / Cloudflare R2 대안), 비밀 키 관리([ADR 0013](0013-secret-manager-single-source.md)), 1차 통합 업로드·미러링 파이프라인(`JEC-76`), 비동기 리사이징 워커 고도화 및 고아 파일 정리(`JEC-10`)는 후속 구현 대상이다.
-- **비용·용량 추정**: `480~600px` WebP(장당 25~45KB) 기준 1만 장 ≈ 250~450MB, 10만 장 ≈ 2.5~4.5GB 수준이다. 무료/저비용 한도 초과 및 Egress 트래픽 추이를 모니터링하며, Egress 비용 부담이 커질 경우 대안 후보인 Cloudflare R2(Egress 0원)로 전환을 검토한다.
+- **스키마·인프라 영향**: `ziper.files`와 `product_cards.image_file_id`는 이미 `V6` 스키마에 정의되어 있으며([ADR 0015](0015-product-card-and-rediscovery-schema.md)), `product_cards.image_status`(`JEC-54`), DB 이미지 미러링 작업 테이블·Supabase Storage 버킷 프로비저닝·비밀 키 관리([ADR 0013](0013-secret-manager-single-source.md))·1차 통합 업로드/미러링 파이프라인(`JEC-76`), 비동기 워커 고도화 및 고아 파일 정리(`JEC-10`)는 후속 구현 대상이다.
+- **비용·용량 추정 및 전환 기준**: `480~600px` WebP(장당 25~45KB) 기준 1만 장 ≈ 250~450MB, 10만 장 ≈ 2.5~4.5GB 수준이다. Supabase Storage Free Plan 저장 용량·Egress 한도 추이를 모니터링하며, 한도·비용 부담이 커질 경우 유지해 둔 S3 호환 추상화 시임을 통해 Cloudflare R2(Egress 0원)로 전환한다.
 - **법적 컴플라이언스 한계와 합법적 우회(전환) 경로**:
   - 외부 쇼핑몰 상품 이미지를 서버 Object Storage에 복제·저장하는 행위는 저작권법(복제권·공중송신권) 및 각 플랫폼 이용약관(무단 복제·수집 금지) 검토가 필요하다.
   - 법적 컴플라이언스로 외부 쇼핑몰 이미지의 서버 저장이 불가능하다고 판정될 경우, **사용자 직접 업로드(`JEC-76`)만 Object Storage에 유지**하고 외부 쇼핑몰 상품 카드는 다음 합법적 경로로 전환한다.
-    1. **미러링 플래그 OFF → 안 A 퇴각(원본 CDN URL 단순 참조 + 즉시 `fallbackIcon` 폴백)**: 서버 복제 없이 참조 링크만 유지하며 만료 카드(`is_link_valid = FALSE`)는 재발견 큐에서 제외
+    1. **미러링 플래그 OFF → 안 A 퇴각(원본 CDN URL 단순 참조 + 즉시 `fallbackIcon` 폴백)**: 서버 복제 없이 참조 링크만 유지하며 접근 불가/품절 카드(`link_status IN ('REMOVED', 'SOLD_OUT')`, [ADR 0019](0019-client-side-product-extraction-and-url-policy.md))는 재발견 큐에서 제외
     2. **클라이언트 단말 로컬 캐시**: 서버 중앙 복제 없이 모바일 앱(`ziper-mobile`)·브라우저의 사용자 기기 내부 캐시에만 사적 열람용 캐시 유지
     3. **공식 제휴(Affiliate)·파트너스 피드 API 연동**: 약관상 허가된 상품 메타데이터·이미지 URL 사용 (PRD 3차 MVP 제휴 링크와 연계)
     4. **비이미지 메타데이터 카드 + 사용자 직접 이미지 등록 유도**: 브랜드·상품명·가격·메모·해시태그와 카테고리 대체 아이콘 중심으로 표현하고 필요 시 사용자가 직접 업로드

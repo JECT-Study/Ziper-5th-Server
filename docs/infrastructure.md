@@ -4,6 +4,8 @@
 
 ## 책임과 연결 위치
 
+웹 인증 쿠키 기능의 배포에는 `https://api.ziper.cc` API 호스트와 `CORS_ALLOWED_ORIGINS`에 등록된 `https://app.ziper.cc`가 필요합니다. API 도메인과 Secret Manager 버전 고정은 Infra 저장소에서 관리합니다. [인증 운영 설정](operations.md#jwt-인증)을 따릅니다.
+
 | 대상 | 기준 |
 | --- | --- |
 | 분 단위 health 표본·슬라이딩 윈도우·FSM | [Infra ADR 0001](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/adr/0001-home-circuit-breaker.md) |
