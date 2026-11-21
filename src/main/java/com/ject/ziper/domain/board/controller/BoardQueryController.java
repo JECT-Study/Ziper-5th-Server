@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ject.ziper.domain.board.dto.BoardListResponse;
 import com.ject.ziper.domain.board.dto.BoardProductListResponse;
-import com.ject.ziper.domain.board.service.BoardQueryService;
+import com.ject.ziper.domain.board.service.BoardQueryFacade;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
 
@@ -27,16 +27,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class BoardQueryController {
 	private static final String MAX_LONG_TEXT = String.valueOf(Long.MAX_VALUE);
 
-	private final BoardQueryService boardQueryService;
+	private final BoardQueryFacade boardQueryFacade;
 
-	public BoardQueryController(BoardQueryService boardQueryService) {
-		this.boardQueryService = boardQueryService;
+	public BoardQueryController(BoardQueryFacade boardQueryFacade) {
+		this.boardQueryFacade = boardQueryFacade;
 	}
 
 	@GetMapping
 	@Operation(summary = "보드 목록 조회", description = "로그인 사용자의 활성 보드 목록을 순수 최신 생성순(createdAt DESC, id DESC)으로 조회합니다. 각 보드의 활성 구매 예정(PLANNED) 상품 개수와 최신 대표 썸네일 최대 3장, 구매 완료 목록 요약(purchasedSummary)을 함께 반환합니다.")
 	public ResponseEntity<BoardListResponse> getBoards(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
-		return ResponseEntity.ok(boardQueryService.getBoards(extractUserId(jwt)));
+		return ResponseEntity.ok(boardQueryFacade.getBoards(extractUserId(jwt)));
 	}
 
 	@GetMapping("/{boardId}/products")
@@ -46,10 +46,10 @@ public class BoardQueryController {
 			@Parameter(description = "조회할 보드 ID", example = "1") @PathVariable Long boardId,
 			@Parameter(description = "정렬 기준 (RECENT | OLDEST | PRICE_ASC | PRICE_DESC, 기본값 RECENT)", example = "RECENT") @RequestParam(required = false) String sort,
 			@Parameter(description = "해시태그 ID 필터 목록 (지정한 태그 중 하나 이상 포함된 상품만 조회)", example = "[1, 2]") @RequestParam(required = false) List<Long> tagIds,
-			@Parameter(description = "다음 페이지 조회용 커서 (직전 응답의 nextCursor 값)", example = "20") @RequestParam(required = false) String cursor,
+			@Parameter(description = "같은 보드와 정렬에서 직전 응답의 nextCursor 값을 그대로 전달합니다. 생략이나 빈 값은 첫 페이지입니다.") @RequestParam(required = false) String cursor,
 			@Parameter(description = "페이지 크기 (1~100, 기본값 20)", example = "20") @RequestParam(required = false) Integer size) {
 		return ResponseEntity
-				.ok(boardQueryService.getBoardProducts(extractUserId(jwt), boardId, sort, tagIds, cursor, size));
+				.ok(boardQueryFacade.getBoardProducts(extractUserId(jwt), boardId, sort, tagIds, cursor, size));
 	}
 
 	private static Long extractUserId(Jwt jwt) {

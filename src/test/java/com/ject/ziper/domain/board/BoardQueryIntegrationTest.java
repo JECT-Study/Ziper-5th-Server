@@ -1,6 +1,10 @@
 package com.ject.ziper.domain.board;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,7 +14,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,14 +28,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ject.ziper.domain.board.entity.ProductBoard;
 import com.ject.ziper.global.persistence.PostgresTestSupport;
 import com.ject.ziper.global.security.JwtTokenProvider;
+import com.ject.ziper.global.storage.ObjectStorageClient;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -48,6 +57,9 @@ class BoardQueryIntegrationTest extends PostgresTestSupport {
 
 	@Autowired
 	private JwtTokenProvider jwtTokenProvider;
+
+	@MockitoSpyBean
+	private ObjectStorageClient objectStorageClient;
 
 	private Long userId;
 	private Long otherUserId;
@@ -224,12 +236,12 @@ class BoardQueryIntegrationTest extends PostgresTestSupport {
 
 		linkCardToBoard(defaultBoardId, cardA, base.plusSeconds(1));
 		linkCardToBoard(defaultBoardId, cardB, base.plusSeconds(2));
-		linkCardToBoard(defaultBoardId, cardC, base.plusSeconds(3));
+		linkCardToBoard(defaultBoardId, cardC, base.plusSeconds(1));
 		linkCardToBoard(defaultBoardId, cardD, base.plusSeconds(4));
 
-		assertThat(fetchCardIds(defaultBoardId, null)).containsExactly(cardD, cardC, cardB, cardA);
-		assertThat(fetchCardIds(defaultBoardId, "RECENT")).containsExactly(cardD, cardC, cardB, cardA);
-		assertThat(fetchCardIds(defaultBoardId, "OLDEST")).containsExactly(cardA, cardB, cardC, cardD);
+		assertThat(fetchCardIds(defaultBoardId, null)).containsExactly(cardD, cardB, cardC, cardA);
+		assertThat(fetchCardIds(defaultBoardId, "RECENT")).containsExactly(cardD, cardB, cardC, cardA);
+		assertThat(fetchCardIds(defaultBoardId, "OLDEST")).containsExactly(cardA, cardC, cardB, cardD);
 		assertThat(fetchCardIds(defaultBoardId, "PRICE_ASC")).containsExactly(cardB, cardC, cardA, cardD);
 		assertThat(fetchCardIds(defaultBoardId, "price_asc")).containsExactly(cardB, cardC, cardA, cardD);
 		assertThat(fetchCardIds(defaultBoardId, "PRICE_DESC")).containsExactly(cardD, cardC, cardA, cardB);
@@ -303,20 +315,36 @@ class BoardQueryIntegrationTest extends PostgresTestSupport {
 				.perform(get(BOARDS_PATH + "/" + defaultBoardId + "/products")
 						.header(HttpHeaders.AUTHORIZATION, bearer(accessToken)).param("size", "2"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.productCount").value(5))
-				.andExpect(jsonPath("$.hasNext").value(true)).andExpect(jsonPath("$.nextCursor").value("2"))
+				.andExpect(jsonPath("$.hasNext").value(true)).andExpect(jsonPath("$.nextCursor").isNotEmpty())
 				.andReturn();
 		JsonNode page1 = objectMapper.readTree(page1Result.getResponse().getContentAsString());
 		assertThat(extractCardIds(page1.path("items"))).containsExactlyElementsOf(insertedNewestFirst.subList(0, 2));
 
+		Long newest = insertCard(userId, "https://shop.example/page-new", "새 상품", 10000L, null, null, "TOP", "PLANNED",
+				"NONE", false, null, base);
+		linkCardToBoard(defaultBoardId, newest, base.plusSeconds(6));
+
+		String cursor = page1.path("nextCursor").asText();
+		Long otherBoard = insertBoard(userId, "다른 보드", true, false, null, base);
+		mvc.perform(get(BOARDS_PATH + "/" + otherBoard + "/products")
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken)).param("cursor", cursor))
+				.andExpect(status().isBadRequest());
+		mvc.perform(get(BOARDS_PATH + "/" + defaultBoardId + "/products")
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken)).param("cursor", cursor).param("sort", "OLDEST"))
+				.andExpect(status().isBadRequest());
+
 		MvcResult page2Result = mvc
 				.perform(get(BOARDS_PATH + "/" + defaultBoardId + "/products")
 						.header(HttpHeaders.AUTHORIZATION, bearer(accessToken)).param("size", "2")
-						.param("cursor", page1.path("nextCursor").asText()))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.productCount").value(5))
-				.andExpect(jsonPath("$.hasNext").value(true)).andExpect(jsonPath("$.nextCursor").value("4"))
+						.param("cursor", cursor))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.productCount").value(6))
+				.andExpect(jsonPath("$.hasNext").value(true)).andExpect(jsonPath("$.nextCursor").isNotEmpty())
 				.andReturn();
 		JsonNode page2 = objectMapper.readTree(page2Result.getResponse().getContentAsString());
 		assertThat(extractCardIds(page2.path("items"))).containsExactlyElementsOf(insertedNewestFirst.subList(2, 4));
+
+		jdbc.update("DELETE FROM ziper.product_board_card WHERE board_id = ? AND card_id = ?", defaultBoardId,
+				insertedNewestFirst.get(3));
 
 		MvcResult page3Result = mvc
 				.perform(get(BOARDS_PATH + "/" + defaultBoardId + "/products")
@@ -331,6 +359,39 @@ class BoardQueryIntegrationTest extends PostgresTestSupport {
 		mvc.perform(get(BOARDS_PATH + "/" + defaultBoardId + "/products")
 				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken)).param("size", "5")).andExpect(status().isOk())
 				.andExpect(jsonPath("$.hasNext").value(false)).andExpect(jsonPath("$.nextCursor").doesNotExist());
+	}
+
+	@Test
+	void 여러미리보기파일중하나의서명이누락되면_보드를조회하면_한번에발급하고해당이미지만폴백한다() throws Exception {
+		Instant base = Instant.parse("2026-11-20T17:00:00Z");
+		String signedKey = "thumbnails/board-signed.webp";
+		String missingKey = "thumbnails/board-missing.webp";
+		String signedUrl = "https://storage.local/board-signed.webp";
+		String originalUrl = "https://shop.example/board-original.webp";
+		Long signed = insertCard(userId, "https://shop.example/signed", "서명 성공", 1000L, null, insertFile(signedKey),
+				"TOP", "PLANNED", "READY", false, null, base);
+		Long missing = insertCard(userId, "https://shop.example/missing", "서명 누락", 1000L, originalUrl,
+				insertFile(missingKey), "TOP", "PLANNED", "READY", false, null, base);
+		linkCardToBoard(defaultBoardId, missing, base);
+		linkCardToBoard(defaultBoardId, signed, base.plusSeconds(1));
+
+		doAnswer(invocation -> {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			assertThat(invocation.<Collection<String>>getArgument(0)).containsExactlyInAnyOrder(signedKey, missingKey);
+			return Map.of(signedKey, signedUrl);
+		}).when(objectStorageClient).createSignedUrls(any(), any());
+
+		mvc.perform(get(BOARDS_PATH).header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.boards[0].previewImages[0].imageUrl").value(signedUrl))
+				.andExpect(jsonPath("$.boards[0].previewImages[1].imageUrl").value(originalUrl));
+		verify(objectStorageClient, times(1)).createSignedUrls(any(), any());
+
+		mvc.perform(get(BOARDS_PATH + "/" + defaultBoardId + "/products").header(HttpHeaders.AUTHORIZATION,
+				bearer(accessToken))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[0].imageFileUrl").value(signedUrl))
+				.andExpect(jsonPath("$.items[1].imageFileUrl").doesNotExist())
+				.andExpect(jsonPath("$.items[1].imageUrl").value(originalUrl));
+		verify(objectStorageClient, times(2)).createSignedUrls(any(), any());
 	}
 
 	@Test
@@ -445,13 +506,23 @@ class BoardQueryIntegrationTest extends PostgresTestSupport {
 	}
 
 	private List<Long> fetchCardIds(Long boardId, String sort) throws Exception {
-		var request = get(BOARDS_PATH + "/" + boardId + "/products").header(HttpHeaders.AUTHORIZATION,
-				bearer(accessToken));
-		if (sort != null) {
-			request.param("sort", sort);
+		List<Long> ids = new ArrayList<>();
+		String cursor = "";
+		for (int page = 0; page < 4; page++) {
+			var request = get(BOARDS_PATH + "/" + boardId + "/products")
+					.header(HttpHeaders.AUTHORIZATION, bearer(accessToken)).param("size", "1").param("cursor", cursor);
+			if (sort != null) {
+				request.param("sort", sort);
+			}
+			MvcResult result = mvc.perform(request).andExpect(status().isOk()).andReturn();
+			JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+			ids.addAll(extractCardIds(body.path("items")));
+			if (!body.path("hasNext").asBoolean()) {
+				return ids;
+			}
+			cursor = body.path("nextCursor").asText();
 		}
-		MvcResult result = mvc.perform(request).andExpect(status().isOk()).andReturn();
-		return extractCardIds(objectMapper.readTree(result.getResponse().getContentAsString()).path("items"));
+		throw new AssertionError("4개의 상품을 조회한 뒤에도 다음 페이지가 남아 있습니다.");
 	}
 
 	private static List<Long> extractCardIds(JsonNode items) {

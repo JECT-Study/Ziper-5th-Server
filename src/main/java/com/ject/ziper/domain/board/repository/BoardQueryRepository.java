@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,6 +16,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.ject.ziper.domain.board.dto.BoardProductCursor;
 import com.ject.ziper.domain.board.dto.BoardProductSort;
 import com.ject.ziper.domain.product.entity.FallbackIcon;
 import com.ject.ziper.domain.product.entity.ProductImageStatus;
@@ -162,11 +164,12 @@ public class BoardQueryRepository {
 	}
 
 	public List<BoardProductRow> findBoardProducts(Long userId, Long boardId, List<Long> tagIds, BoardProductSort sort,
-			int offset, int limit) {
+			BoardProductCursor cursor, int limit) {
 		MapSqlParameterSource params = new MapSqlParameterSource().addValue("userId", userId)
-				.addValue("boardId", boardId).addValue("offset", offset).addValue("limit", limit);
+				.addValue("boardId", boardId).addValue("limit", limit);
 		StringBuilder sql = new StringBuilder("""
 				SELECT pc.id AS card_id,
+				       pbc.id AS board_card_id,
 				       pc.shop,
 				       pc.product_title,
 				       pc.price,
@@ -197,7 +200,12 @@ public class BoardQueryRepository {
 					  )
 					""");
 		}
-		sql.append("ORDER BY ").append(orderByClause(sort)).append("\nLIMIT :limit OFFSET :offset");
+		if (cursor != null) {
+			params.addValue("addedAt", cursor.addedAt().atOffset(ZoneOffset.UTC))
+					.addValue("boardCardId", cursor.boardCardId()).addValue("price", cursor.price());
+			sql.append("  AND ").append(seekClause(sort)).append('\n');
+		}
+		sql.append("ORDER BY ").append(orderByClause(sort)).append("\nLIMIT :limit");
 		return namedJdbc.query(sql.toString(), params, BoardQueryRepository::mapBoardProductRow);
 	}
 
@@ -224,6 +232,16 @@ public class BoardQueryRepository {
 		return tagsByCardId;
 	}
 
+	private static String seekClause(BoardProductSort sort) {
+		String older = "(pbc.created_at, pbc.id) < (:addedAt, :boardCardId)";
+		return switch (sort) {
+			case RECENT -> older;
+			case OLDEST -> "(pbc.created_at, pbc.id) > (:addedAt, :boardCardId)";
+			case PRICE_ASC -> "(pc.price > :price OR (pc.price = :price AND " + older + "))";
+			case PRICE_DESC -> "(pc.price < :price OR (pc.price = :price AND " + older + "))";
+		};
+	}
+
 	private static String orderByClause(BoardProductSort sort) {
 		return switch (sort) {
 			case RECENT -> "pbc.created_at DESC, pbc.id DESC";
@@ -236,8 +254,8 @@ public class BoardQueryRepository {
 	private static BoardProductRow mapBoardProductRow(ResultSet rs, int rowNum) throws SQLException {
 		OffsetDateTime linkCheckedAt = rs.getObject("link_checked_at", OffsetDateTime.class);
 		OffsetDateTime addedAt = rs.getObject("added_at", OffsetDateTime.class);
-		return new BoardProductRow(rs.getLong("card_id"), rs.getString("shop"), rs.getString("product_title"),
-				rs.getLong("price"), rs.getString("memo"), rs.getString("image_url"),
+		return new BoardProductRow(rs.getLong("card_id"), rs.getLong("board_card_id"), rs.getString("shop"),
+				rs.getString("product_title"), rs.getLong("price"), rs.getString("memo"), rs.getString("image_url"),
 				rs.getObject("image_file_id", Long.class),
 				FallbackIcon.fromValue(rs.getString("fallback_icon")).orElse(null),
 				ProductImageStatus.fromValue(rs.getString("image_status")).orElse(ProductImageStatus.NONE),
@@ -261,8 +279,8 @@ public class BoardQueryRepository {
 	public record ActiveBoardRow(Long boardId, String name, boolean modifiable) {
 	}
 
-	public record BoardProductRow(Long cardId, String shop, String productTitle, Long price, String memo,
-			String imageUrl, Long imageFileId, FallbackIcon fallbackIcon, ProductImageStatus imageStatus,
+	public record BoardProductRow(Long cardId, long boardCardId, String shop, String productTitle, Long price,
+			String memo, String imageUrl, Long imageFileId, FallbackIcon fallbackIcon, ProductImageStatus imageStatus,
 			ProductLinkStatus linkStatus, Instant linkCheckedAt, ProductLinkCheckSource linkCheckSource,
 			Instant addedAt) {
 	}
