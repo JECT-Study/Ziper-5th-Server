@@ -62,7 +62,7 @@ public class HostMirrorCircuitBreaker {
 		}
 	}
 
-	public boolean recordRateLimitOrForbidden(String host) {
+	public boolean recordRateLimited(String host) {
 		HostState state = stateFor(host);
 		int failures = state.consecutiveRateLimitErrors.incrementAndGet();
 		if (failures >= properties.mirrorCircuitFailureThreshold()) {

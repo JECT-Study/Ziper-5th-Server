@@ -35,14 +35,25 @@ class ProductCardV12MigrationIntegrationTest {
 			long userId;
 			long nullLegacyCardId;
 			long fileBackedCardId;
+			long mirroredCardId;
+			long fileBackedFileId;
 			try (Connection conn = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(),
 					postgres.getPassword())) {
 				userId = insertUser(conn);
-				long fileId = insertFile(conn);
+				long fileId = insertFile(conn, "thumbnails/v12.webp");
+				fileBackedFileId = fileId;
+				long mirroredFileId = insertFile(conn, "thumbnails/v12-mirrored.webp");
 				nullLegacyCardId = insertV11Card(conn, userId, "https://shop.example/items/legacy", "레거시 상품", null,
 						null);
 				fileBackedCardId = insertV11Card(conn, userId, "https://shop.example/items/file", "파일 상품", 25000L,
 						fileId);
+				mirroredCardId = insertV11Card(conn, userId, "https://shop.example/items/mirrored", "미러링 상품", 1000L,
+						mirroredFileId);
+				try (PreparedStatement ps = conn.prepareStatement(
+						"UPDATE ziper.product_cards SET image_url = 'https://cdn.shop.example/m.jpg' WHERE id = ?")) {
+					ps.setLong(1, mirroredCardId);
+					ps.executeUpdate();
+				}
 			}
 
 			Flyway v12 = Flyway.configure()
@@ -70,9 +81,21 @@ class ProductCardV12MigrationIntegrationTest {
 					try (ResultSet rs = ps.executeQuery()) {
 						assertThat(rs.next()).isTrue();
 						assertThat(rs.getLong("price")).isEqualTo(25000L);
+						assertThat(rs.getString("image_status")).isEqualTo("NONE");
+					}
+				}
+
+				try (PreparedStatement ps = conn
+						.prepareStatement("SELECT image_status FROM ziper.product_cards WHERE id = ?")) {
+					ps.setLong(1, mirroredCardId);
+					try (ResultSet rs = ps.executeQuery()) {
+						assertThat(rs.next()).isTrue();
 						assertThat(rs.getString("image_status")).isEqualTo("READY");
 					}
 				}
+
+				assertThatThrownBy(() -> stmt.executeUpdate("DELETE FROM ziper.files WHERE id = " + fileBackedFileId))
+						.isInstanceOf(SQLException.class).hasMessageContaining("fk_product_cards_image_file_id");
 
 				assertThatThrownBy(() -> stmt.executeUpdate(
 						"INSERT INTO ziper.product_cards(user_id, product_url, product_title, price, fallback_icon) "
@@ -109,10 +132,11 @@ class ProductCardV12MigrationIntegrationTest {
 		}
 	}
 
-	private long insertFile(Connection conn) throws Exception {
+	private long insertFile(Connection conn, String storageKey) throws Exception {
 		try (PreparedStatement ps = conn
 				.prepareStatement("INSERT INTO ziper.files(storage_key, original_filename, content_type, file_size) "
-						+ "VALUES ('thumbnails/v12.webp', 'v12.webp', 'image/webp', 512) RETURNING id")) {
+						+ "VALUES (?, 'v12.webp', 'image/webp', 512) RETURNING id")) {
+			ps.setString(1, storageKey);
 			try (ResultSet rs = ps.executeQuery()) {
 				rs.next();
 				return rs.getLong(1);

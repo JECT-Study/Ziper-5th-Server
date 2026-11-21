@@ -103,6 +103,26 @@ public class ImageMirrorJob {
 	public void markFailed(String errorReason, Instant now) {
 		this.status = ImageMirrorJobStatus.FAILED;
 		this.lastError = truncateError(errorReason);
+		this.lockedAt = null;
+		this.updatedAt = now;
+	}
+
+	/**
+	 * Returns the job to the queue; the poller skips it until
+	 * {@code nextAttemptAt}.
+	 */
+	public void scheduleRetry(String errorReason, Instant nextAttemptAt, Instant now) {
+		this.status = ImageMirrorJobStatus.PENDING;
+		this.lastError = truncateError(errorReason);
+		this.lockedAt = null;
+		this.nextAttemptAt = nextAttemptAt;
+		this.updatedAt = now;
+	}
+
+	public void markCanceled(String reason, Instant now) {
+		this.status = ImageMirrorJobStatus.CANCELED;
+		this.lastError = truncateError(reason);
+		this.lockedAt = null;
 		this.updatedAt = now;
 	}
 

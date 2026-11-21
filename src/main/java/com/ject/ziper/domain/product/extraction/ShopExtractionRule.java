@@ -69,11 +69,8 @@ public final class ShopExtractionRule {
 			return Optional.empty();
 		}
 		Matcher matcher = compiledCanonicalPattern.matcher(rawPath);
-		if (!matcher.find() || matcher.start() != 0) {
-			return Optional.empty();
-		}
-		int matchEnd = matcher.end();
-		if (matchEnd < rawPath.length() && rawPath.charAt(matchEnd) != '/') {
+		// 경로 시작과 상품 번호 끝 경계는 배포 패턴(canonicalPattern)에 포함되어 있다.
+		if (!matcher.find()) {
 			return Optional.empty();
 		}
 		String result = canonicalTemplate;

@@ -2,6 +2,9 @@ package com.ject.ziper.global.storage;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -27,6 +30,15 @@ public class InMemoryObjectStorageClient implements ObjectStorageClient {
 		}
 		long seconds = expiresIn == null ? 900L : Math.max(1L, expiresIn.toSeconds());
 		return "https://storage.local/signed/" + storageKey + "?expiresIn=" + seconds;
+	}
+
+	@Override
+	public Map<String, String> createSignedUrls(Collection<String> storageKeys, Duration expiresIn) {
+		Map<String, String> result = new LinkedHashMap<>();
+		for (String storageKey : storageKeys) {
+			result.put(storageKey, createSignedUrl(storageKey, expiresIn));
+		}
+		return result;
 	}
 
 	@Override
