@@ -3,6 +3,7 @@ package com.ject.ziper.domain.product.extraction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -58,14 +59,88 @@ class ProductUrlNormalizerTest {
 						"https://zigzag.kr/catalog/products/777888", "지그재그"));
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = {"https://www.musinsa.com:8443/products/1234567", "https://www.musinsa.com/categories/001",
+			"https://WWW.MUSINSA.COM:443/categories/item/001?page=2", "https://www.musinsa.com/products/abc",
+			"https://www.musinsa.com/products/123abc", "https://www.musinsa.com/products/123/../../x",
+			"https://www.musinsa.com/shop/products/1234567", "https://m.a-bly.com/goods/12x",
+			"https://zigzag.kr/catalog/products/"})
+	void 지원몰호스트지만상품ID패턴이불일치하면_정규화를실행하면_지원하지않는몰로판정한다(String url) {
+		NormalizedProductUrl result = normalizer.normalize(url);
+
+		assertThat(result.supported()).isFalse();
+		assertThat(result.shop()).isNull();
+	}
+
 	@Test
-	void 지원쇼핑몰의비상품경로가주어지면_정규화를실행하면_지원몰로판정하고추적파라미터만제거한다() {
+	void 지원몰호스트의비상품경로에추적파라미터가있으면_정규화를실행하면_미지원으로추적파라미터만제거한다() {
 		NormalizedProductUrl result = normalizer
 				.normalize("https://WWW.MUSINSA.COM:443/categories/item/001?page=2&utm_source=ig&sort=new#list");
 
 		assertThat(result.canonicalUrl()).isEqualTo("https://www.musinsa.com/categories/item/001?page=2&sort=new");
-		assertThat(result.shop()).isEqualTo("무신사");
-		assertThat(result.supported()).isTrue();
+		assertThat(result.shop()).isNull();
+		assertThat(result.supported()).isFalse();
+	}
+
+	@Test
+	void 퍼센트인코딩된비예약문자상품ID가주어지면_정규화를실행하면_디코딩후패턴으로판정한다() {
+		NormalizedProductUrl encoded = normalizer.normalize("https://www.musinsa.com/products/%31234567");
+		NormalizedProductUrl dotted = normalizer.normalize("https://www.musinsa.com/products/%2e%2e/products/1234567");
+
+		assertThat(encoded.canonicalUrl()).isEqualTo("https://www.musinsa.com/products/1234567");
+		assertThat(encoded.shop()).isEqualTo("무신사");
+		assertThat(encoded.supported()).isTrue();
+		assertThat(dotted.supported()).isTrue();
+		assertThat(dotted.canonicalUrl()).isEqualTo("https://www.musinsa.com/products/1234567");
+	}
+
+	@Test
+	void 미지원몰의퍼센트인코딩변형이주어지면_정규화를실행하면_의미를바꾸지않는범위에서통일한다() {
+		assertThat(normalizer.normalize("https://shop.example.com/a%2fb/%7euser/%41").canonicalUrl())
+				.isEqualTo(normalizer.normalize("https://shop.example.com/a%2Fb/~user/A").canonicalUrl())
+				.isEqualTo("https://shop.example.com/a%2Fb/~user/A");
+		assertThat(normalizer.normalize("https://shop.example.com/i?q=%2f&utm%5Fsource=x").canonicalUrl())
+				.isEqualTo("https://shop.example.com/i?q=%2F");
+	}
+
+	@Test
+	void 미지원몰의http와www링크가주어지면_정규화를실행하면_스킴과호스트를바꾸지않는다() {
+		assertThat(normalizer.normalize("http://www.shop.example.com/item/1").canonicalUrl())
+				.isEqualTo("http://www.shop.example.com/item/1");
+		assertThat(normalizer.normalize("https://shop.example.com/item/1").canonicalUrl())
+				.isEqualTo("https://shop.example.com/item/1");
+	}
+
+	@Test
+	void 같은키의값순서가다른링크가주어지면_정규화를실행하면_값순서를유지해서구분한다() {
+		String first = normalizer.normalize("https://shop.example.com/p?id=2&id=1&utm_source=x").canonicalUrl();
+		String second = normalizer.normalize("https://shop.example.com/p?id=1&id=2").canonicalUrl();
+		String reordered = normalizer.normalize("https://shop.example.com/p?z=1&id=2&a=0&id=1").canonicalUrl();
+
+		assertThat(first).isEqualTo("https://shop.example.com/p?id=2&id=1");
+		assertThat(second).isEqualTo("https://shop.example.com/p?id=1&id=2");
+		assertThat(first).isNotEqualTo(second);
+		assertThat(reordered).isEqualTo("https://shop.example.com/p?a=0&id=2&id=1&z=1");
+	}
+
+	@Test
+	void 배포된상품경로패턴이주어지면_같은입력으로URL확인을하면_패턴판정과서버판정이일치한다() {
+		String[] paths = {"/products/1234567", "/products/1234567/", "/products/1234567/review", "/products/1234567a",
+				"/products/a1234567", "/shop/products/1234567", "/products/", "/app/goods/987/0", "/app/goods/987x",
+				"/goods/123", "/goods/12x", "/catalog/products/777", "/catalog/products/777x",
+				"/x/catalog/products/777", "/products/1234567?x"};
+		for (ShopExtractionRule rule : registry.shops()) {
+			Pattern distributed = Pattern.compile(rule.canonicalPattern());
+			String host = rule.hosts().get(0);
+			for (String path : paths) {
+				String pathOnly = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
+				boolean clientMatches = distributed.matcher(pathOnly).find();
+				NormalizedProductUrl result = normalizer.normalize("https://" + host + path);
+
+				assertThat(result.supported()).as("%s %s", host, path).isEqualTo(clientMatches);
+				assertThat(result.shop()).as("%s %s", host, path).isEqualTo(clientMatches ? rule.shop() : null);
+			}
+		}
 	}
 
 	@Test
@@ -159,5 +234,18 @@ class ProductUrlNormalizerTest {
 		assertThat(registry.matchesEtag("\"different\"")).isFalse();
 		assertThat(registry.matchesEtag(null)).isFalse();
 		assertThat(registry.matchesEtag("  ")).isFalse();
+	}
+
+	@Test
+	void 인용된ETag내부에쉼표와별표가있으면_ETag를비교하면_와일드카드로오인하지않는다() {
+		String etag = registry.etag();
+
+		assertThat(registry.matchesEtag("\"a,*\"")).isFalse();
+		assertThat(registry.matchesEtag("\"x,*\", \"y\"")).isFalse();
+		assertThat(registry.matchesEtag("\"a,b\", W/" + etag)).isTrue();
+		assertThat(registry.matchesEtag("\"a,\"," + etag)).isTrue();
+		assertThat(registry.matchesEtag("  *  ")).isTrue();
+		assertThat(registry.matchesEtag("\"a\" , *")).isTrue();
+		assertThat(registry.matchesEtag(etag.substring(1, etag.length() - 1))).isFalse();
 	}
 }
