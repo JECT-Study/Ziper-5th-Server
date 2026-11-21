@@ -188,7 +188,7 @@
    - 매핑 고유성: `UNIQUE (board_id, card_id)`.
    - **매핑 보존 원칙**: 상품 전체 삭제(`is_deleted = TRUE`)나 구매 완료(`status = 'PURCHASED'`) 전환 시 `product_board_card` 행을 물리 삭제하지 않고 유지한다. 일반 보드 상품 조회 쿼리에서 반드시 `pc.is_deleted = FALSE AND pc.status = 'PLANNED'` 조건을 결합해 필터링한다. (휴지통 목록에서 전체 삭제 카드의 활성 `previousBoardIds` 힌트 제공 및 예비 서버 Undo 확장에 활용)
 5. **`ziper.tags` & `ziper.product_card_tags`**
-   - `tags.title`: `#` 기호를 제거하고 앞뒤 공백을 제거(`btrim`)한 비공백 문자열(커스텀 태그 권장 최대 6자).
+   - `tags.title`: 유니코드 NFC로 정규화하고 선행 공백·`#` 접두부를 반복 제거한 뒤 앞뒤 공백을 제거하고 내부 연속 공백을 한 칸으로 줄인 비공백 문자열(제어·서식 문자 포함 시 `INVALID_TAG_TITLE`, 커스텀 태그 권장 최대 6자). 대소문자는 구분한다.
    - 기본 시드: `('봄', TRUE), ('여름', TRUE), ('가을', TRUE), ('겨울', TRUE)` (`user_id IS NULL`, 삭제 불가).
    - **유저별 커스텀 태그 소유권** (후속 Flyway 마이그레이션 확장): `tags.user_id` (nullable, 기본 4종 `NULL` / 커스텀 태그는 소유 `user_id` 보유, 기본 태그 `title` 전역 고유 + 커스텀 태그 `(user_id, title)` 고유)로 유저별 커스텀 태그 목록 조회·생성·삭제를 지원한다.
    - **커스텀 태그 삭제 불변식**: 커스텀 태그 삭제 시 다른 상품 카드에서도 사용 중이면 현재 카드와의 관계(`product_card_tags`)만 해제하고, 해당 카드에서만 유일하게 사용 중인 태그는 `ON DELETE CASCADE`로 태그 행 삭제를 허용한다.
