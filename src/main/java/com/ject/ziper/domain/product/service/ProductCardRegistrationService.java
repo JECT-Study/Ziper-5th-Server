@@ -113,8 +113,8 @@ public class ProductCardRegistrationService {
 		List<Long> boardIds = deduplicateBoardIds(request.boardIds());
 		validateTagInputs(request.tags());
 
-		if (imageFileId != null && !fileImageService.exists(imageFileId)) {
-			throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+		if (imageFileId != null) {
+			fileImageService.requireOwnedFile(imageFileId, userId);
 		}
 		verifyActiveOwnedBoards(userId, boardIds);
 

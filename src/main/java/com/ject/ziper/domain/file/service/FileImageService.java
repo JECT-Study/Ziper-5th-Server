@@ -5,12 +5,16 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.ject.ziper.domain.file.dto.ImageUploadResponse;
 import com.ject.ziper.domain.file.entity.FileAsset;
@@ -49,49 +53,102 @@ public class FileImageService {
 		this.clock = clock;
 	}
 
-	@Transactional
-	public ImageUploadResponse uploadDirectImage(byte[] rawBytes, String originalFilename, String contentType,
-			long declaredSize) {
+	/**
+	 * Not transactional on purpose: the Supabase calls must not hold a DB
+	 * connection. If persisting the metadata fails after the object upload, the
+	 * freshly uploaded object is deleted again.
+	 */
+	public ImageUploadResponse uploadDirectImage(long ownerUserId, byte[] rawBytes, String originalFilename,
+			String contentType, long declaredSize) {
 		if (declaredSize > properties.maxFileSizeBytes()) {
 			throw new BusinessException(ErrorCode.IMAGE_FILE_TOO_LARGE);
 		}
 		if (rawBytes == null || rawBytes.length == 0) {
 			throw new BusinessException(ErrorCode.INVALID_IMAGE_FILE);
 		}
-		FileAsset saved = transcodeAndStore(rawBytes, contentType, originalFilename);
+		Instant now = clock.instant();
+		FileAsset saved = transcodeAndStore(generateStorageKey(now), ownerUserId, rawBytes, contentType,
+				originalFilename, now, true);
 		String signedUrl = createSignedUrl(saved.getStorageKey());
 		return new ImageUploadResponse(saved.getId(), signedUrl, saved.getContentType(), saved.getFileSize());
 	}
 
-	@Transactional
-	public FileAsset storeMirroredThumbnail(byte[] rawBytes, String contentType, String originalFilename) {
-		return transcodeAndStore(rawBytes, contentType, originalFilename);
+	/**
+	 * Stores the thumbnail of a mirror job under a key derived from the job id, so
+	 * re-processing a job (lease expiry, crash before completion) overwrites the
+	 * same object and reuses the same file row instead of leaking another one.
+	 * Because that key is shared by retries, a failed DB save does not delete the
+	 * object: a retry reuses it.
+	 */
+	public FileAsset storeMirroredThumbnail(long jobId, long ownerUserId, byte[] rawBytes, String contentType,
+			String originalFilename) {
+		return transcodeAndStore(mirrorStorageKey(jobId), ownerUserId, rawBytes, contentType, originalFilename,
+				clock.instant(), false);
 	}
 
-	@Transactional(readOnly = true)
+	/** The file a previous attempt of this mirror job already stored, if any. */
+	public Optional<FileAsset> findMirroredFile(long jobId) {
+		return fileAssetRepository.findByStorageKey(mirrorStorageKey(jobId));
+	}
+
 	public String resolveSignedUrl(Long fileId) {
-		if (fileId == null) {
-			throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
-		}
-		FileAsset asset = fileAssetRepository.findById(fileId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.FILE_NOT_FOUND));
-		return createSignedUrl(asset.getStorageKey());
+		return findSignedUrl(fileId).orElseThrow(() -> new BusinessException(ErrorCode.FILE_NOT_FOUND));
 	}
 
-	@Transactional(readOnly = true)
 	public Optional<String> findSignedUrl(Long fileId) {
 		if (fileId == null) {
 			return Optional.empty();
 		}
-		return fileAssetRepository.findById(fileId).map(asset -> createSignedUrl(asset.getStorageKey()));
+		return Optional.ofNullable(findSignedUrls(List.of(fileId)).get(fileId));
 	}
 
-	@Transactional(readOnly = true)
-	public boolean exists(Long fileId) {
-		return fileId != null && fileAssetRepository.existsById(fileId);
+	/**
+	 * Signs many files with one DB read and one storage call (no per-file queries
+	 * or HTTP calls). Files that do not exist, or that storage could not sign, are
+	 * absent from the result. Not transactional: the DB read finishes before the
+	 * HTTP call starts.
+	 */
+	public Map<Long, String> findSignedUrls(Collection<Long> fileIds) {
+		if (fileIds == null) {
+			return Map.of();
+		}
+		List<Long> ids = fileIds.stream().filter(Objects::nonNull).distinct().toList();
+		if (ids.isEmpty()) {
+			return Map.of();
+		}
+		Map<String, Long> fileIdByKey = new LinkedHashMap<>();
+		for (FileAsset asset : fileAssetRepository.findAllById(ids)) {
+			fileIdByKey.put(asset.getStorageKey(), asset.getId());
+		}
+		if (fileIdByKey.isEmpty()) {
+			return Map.of();
+		}
+		Map<String, String> urlByKey = objectStorageClient.createSignedUrls(fileIdByKey.keySet(),
+				Duration.ofSeconds(properties.signedUrlExpirationSeconds()));
+		Map<Long, String> result = new LinkedHashMap<>();
+		for (Map.Entry<String, Long> entry : fileIdByKey.entrySet()) {
+			String url = urlByKey.get(entry.getKey());
+			if (url != null) {
+				result.put(entry.getValue(), url);
+			}
+		}
+		return result;
 	}
 
-	@Transactional
+	public boolean isOwnedBy(long fileId, long userId) {
+		return fileAssetRepository.existsByIdAndOwnerUserId(fileId, userId);
+	}
+
+	/**
+	 * Throws {@code FILE_NOT_FOUND} (404) for a missing file and for another user's
+	 * file alike.
+	 */
+	public void requireOwnedFile(long fileId, long userId) {
+		if (!isOwnedBy(fileId, userId)) {
+			throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+		}
+	}
+
 	public void deleteFile(Long fileId) {
 		if (fileId == null) {
 			throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
@@ -102,21 +159,33 @@ public class FileImageService {
 		fileAssetRepository.delete(asset);
 	}
 
-	private FileAsset transcodeAndStore(byte[] rawBytes, String contentType, String originalFilename) {
+	private FileAsset transcodeAndStore(String storageKey, long ownerUserId, byte[] rawBytes, String contentType,
+			String originalFilename, Instant now, boolean deleteObjectIfNotPersisted) {
 		ProcessedThumbnail thumbnail = thumbnailProcessor.process(rawBytes, contentType, properties.maxFileSizeBytes());
-		Instant now = clock.instant();
-		String storageKey = generateStorageKey(now);
 		String sanitizedName = sanitizeFilename(originalFilename);
 
 		objectStorageClient.putObject(storageKey, thumbnail.bytes(), thumbnail.contentType());
-		FileAsset asset = FileAsset.create(storageKey, sanitizedName, thumbnail.contentType(), thumbnail.bytes().length,
-				now);
-		return fileAssetRepository.save(asset);
+		FileAsset asset = FileAsset.create(storageKey, ownerUserId, sanitizedName, thumbnail.contentType(),
+				thumbnail.bytes().length, now);
+		boolean persisted = false;
+		try {
+			FileAsset saved = fileAssetRepository.save(asset);
+			persisted = true;
+			return saved;
+		} finally {
+			if (!persisted && deleteObjectIfNotPersisted) {
+				objectStorageClient.deleteQuietly(storageKey);
+			}
+		}
 	}
 
 	private String createSignedUrl(String storageKey) {
 		return objectStorageClient.createSignedUrl(storageKey,
 				Duration.ofSeconds(properties.signedUrlExpirationSeconds()));
+	}
+
+	private static String mirrorStorageKey(long jobId) {
+		return "thumbnails/mirror/" + jobId + ".webp";
 	}
 
 	private static String generateStorageKey(Instant now) {

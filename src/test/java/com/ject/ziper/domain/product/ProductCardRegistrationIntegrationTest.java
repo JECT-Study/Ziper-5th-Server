@@ -276,8 +276,8 @@ class ProductCardRegistrationIntegrationTest extends PostgresTestSupport {
 	@Test
 	void 직접업로드한이미지파일ID로_상품카드를등록하면_READY상태와서명URL을반환하고미러링작업을생성하지않는다() throws Exception {
 		byte[] jpeg = createJpeg(600, 600);
-		ImageUploadResponse uploaded = fileImageService.uploadDirectImage(jpeg, "direct.jpg", "image/jpeg",
-				jpeg.length);
+		ImageUploadResponse uploaded = fileImageService.uploadDirectImage(user.getId(), jpeg, "direct.jpg",
+				"image/jpeg", jpeg.length);
 
 		Map<String, Object> payload = basePayload("https://www.musinsa.com/products/11111", "직접 업로드 상품", 45000,
 				"MANUAL");
@@ -369,7 +369,7 @@ class ProductCardRegistrationIntegrationTest extends PostgresTestSupport {
 	void 미러링킬스위치가꺼져있을때_외부이미지URL로카드를등록하면_이미지상태가NONE이고미러링작업이생성되지않는다() {
 		StorageProperties killSwitchOff = new StorageProperties("memory", "", "", "product-images", 900L,
 				StorageProperties.DEFAULT_MAX_FILE_SIZE_BYTES, false, List.of(), false, 5000L, 5, 5000, 10000, 2, 0L, 3,
-				300L, 30L);
+				300L, 30L, null, null, null, null, null, null, null);
 		ImageMirrorService disabledMirrorService = new ImageMirrorService(imageMirrorJobRepository, killSwitchOff,
 				imageMirrorWorker);
 		ProductCardRegistrationService serviceWithKillSwitchOff = new ProductCardRegistrationService(

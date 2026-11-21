@@ -2,8 +2,11 @@ package com.ject.ziper.domain.file.worker;
 
 import java.net.URI;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,6 +24,7 @@ import com.ject.ziper.domain.file.client.ExternalImageFetcher;
 import com.ject.ziper.domain.file.client.ExternalImageFetcher.FetchResult;
 import com.ject.ziper.domain.file.entity.FileAsset;
 import com.ject.ziper.domain.file.entity.ImageMirrorJob;
+import com.ject.ziper.domain.file.entity.ImageMirrorJobStatus;
 import com.ject.ziper.domain.file.repository.ImageMirrorJobRepository;
 import com.ject.ziper.domain.file.repository.ProductCardImageUpdater;
 import com.ject.ziper.domain.file.service.FileImageService;
@@ -30,6 +34,7 @@ import com.ject.ziper.global.storage.StorageProperties;
 @Component
 public class ImageMirrorWorker {
 	private static final Logger log = LoggerFactory.getLogger(ImageMirrorWorker.class);
+	private static final String MAX_ATTEMPTS_EXCEEDED = "MAX_ATTEMPTS_EXCEEDED";
 
 	private final ImageMirrorJobRepository jobRepository;
 	private final ExternalImageFetcher imageFetcher;
@@ -93,11 +98,11 @@ public class ImageMirrorWorker {
 		if (!properties.mirroringEnabled()) {
 			return 0;
 		}
-		List<ImageMirrorJob> claimed = claimBatch();
-		for (ImageMirrorJob job : claimed) {
+		ClaimResult claim = claimBatch();
+		for (ImageMirrorJob job : claim.jobs()) {
 			processSingleJob(job);
 		}
-		return claimed.size();
+		return claim.totalClaimed();
 	}
 
 	private void drainLoop() {
@@ -118,62 +123,138 @@ public class ImageMirrorWorker {
 		}
 	}
 
-	private List<ImageMirrorJob> claimBatch() {
-		List<ImageMirrorJob> claimed = transactionTemplate.execute(status -> {
+	/**
+	 * Claims due PENDING jobs and PROCESSING jobs whose lease expired (the worker
+	 * died after claiming them). A reclaimed job counts as another attempt, so a
+	 * job that keeps killing its worker ends in FAILED instead of looping forever.
+	 */
+	private ClaimResult claimBatch() {
+		ClaimResult claimed = transactionTemplate.execute(status -> {
 			Instant now = clock.instant();
-			List<ImageMirrorJob> pending = jobRepository.findPendingForUpdateSkipLocked(now,
+			Instant lockExpiredBefore = now.minusSeconds(properties.mirrorLockTimeoutSeconds());
+			List<ImageMirrorJob> due = jobRepository.findClaimableForUpdateSkipLocked(now, lockExpiredBefore,
 					properties.mirrorBatchSize());
-			for (ImageMirrorJob job : pending) {
-				job.markProcessing(now);
+			List<ImageMirrorJob> toProcess = new ArrayList<>();
+			for (ImageMirrorJob job : due) {
+				if (job.getAttemptCount() >= properties.mirrorMaxAttempts()) {
+					job.markFailed(MAX_ATTEMPTS_EXCEEDED, now);
+					productCardImageUpdater.markMirrorFailed(job.getCardId());
+				} else {
+					job.markProcessing(now);
+					toProcess.add(job);
+				}
 			}
-			return jobRepository.saveAll(pending);
+			jobRepository.saveAll(due);
+			return new ClaimResult(toProcess, due.size());
 		});
-		return claimed == null ? List.of() : claimed;
+		return claimed == null ? new ClaimResult(List.of(), 0) : claimed;
 	}
 
 	private void processSingleJob(ImageMirrorJob job) {
 		try {
+			// A batch is claimed at once, so renew the lease right before starting this
+			// job. 0 rows: the job was
+			// canceled or finished by someone else, nothing to do.
+			Integer renewed = transactionTemplate
+					.execute(status -> jobRepository.refreshLease(job.getId(), clock.instant()));
+			if (renewed == null || renewed == 0) {
+				return;
+			}
 			if (properties.isHostDisabled(job.getHost())) {
-				completeFailed(job.getId(), job.getCardId(), "HOST_MIRRORING_DISABLED");
+				finishFailed(job, "HOST_MIRRORING_DISABLED", false);
+				return;
+			}
+			// A previous attempt may have stored the thumbnail and died before completing
+			// the job: confirm the
+			// stored result instead of downloading again.
+			Optional<FileAsset> previous = fileImageService.findMirroredFile(job.getId());
+			if (previous.isPresent()) {
+				completeReady(job, previous.get().getId());
 				return;
 			}
 			FetchResult fetched = imageFetcher.fetch(job.getSourceUrl(), job.getSourceUrlHash(), job.getShop());
 			if (!fetched.success()) {
-				completeFailed(job.getId(), job.getCardId(), fetched.errorReason());
+				finishFailed(job, fetched.errorReason(), fetched.transientFailure());
 				return;
 			}
-			FileAsset asset = fileImageService.storeMirroredThumbnail(fetched.bytes(), fetched.contentType(),
-					deriveFilename(job.getSourceUrl()));
-			completeReady(job.getId(), job.getCardId(), asset.getId());
+			FileAsset asset = fileImageService.storeMirroredThumbnail(job.getId(), job.getUserId(), fetched.bytes(),
+					fetched.contentType(), deriveFilename(job.getSourceUrl()));
+			completeReady(job, asset.getId());
 		} catch (BusinessException exception) {
 			log.warn("Image mirror job failed validation jobId={} cardId={} code={}", job.getId(), job.getCardId(),
 					exception.errorCode().name());
-			completeFailed(job.getId(), job.getCardId(), exception.errorCode().name());
+			finishFailed(job, exception.errorCode().name(), false);
 		} catch (RuntimeException exception) {
+			// Storage or DB trouble. Re-processing is idempotent (deterministic key, stored
+			// result is reused), so
+			// it is retried with backoff up to the attempt limit.
 			log.warn("Image mirror job failed unexpectedly jobId={} cardId={}", job.getId(), job.getCardId(),
 					exception);
-			completeFailed(job.getId(), job.getCardId(), "MIRROR_PROCESSING_ERROR");
+			finishFailed(job, "MIRROR_PROCESSING_ERROR", true);
 		}
 	}
 
-	private void completeReady(Long jobId, Long cardId, Long fileId) {
+	/**
+	 * Attaches the file to the card only if the job is still ours (PROCESSING, not
+	 * canceled or reclaimed) and the card still shows the image this job was
+	 * created for. Otherwise the job is closed as CANCELED and the stored thumbnail
+	 * stays as an unreferenced, owner-tagged file for the orphan cleanup (JEC-10).
+	 */
+	private void completeReady(ImageMirrorJob job, Long fileId) {
 		transactionTemplate.executeWithoutResult(status -> {
-			productCardImageUpdater.markMirrorReady(cardId, fileId);
-			jobRepository.findById(jobId).ifPresent(job -> {
-				job.markReady(clock.instant());
-				jobRepository.save(job);
-			});
+			Optional<ImageMirrorJob> locked = jobRepository.findByIdForUpdate(job.getId());
+			if (locked.isEmpty() || locked.get().getStatus() != ImageMirrorJobStatus.PROCESSING) {
+				log.info("Image mirror job no longer active; leaving card untouched jobId={}", job.getId());
+				return;
+			}
+			ImageMirrorJob current = locked.get();
+			Instant now = clock.instant();
+			if (productCardImageUpdater.markMirrorReady(current.getCardId(), current.getSourceUrl(), fileId)) {
+				current.markReady(now);
+			} else {
+				current.markCanceled("CARD_IMAGE_CHANGED", now);
+			}
+			jobRepository.save(current);
 		});
 	}
 
-	private void completeFailed(Long jobId, Long cardId, String errorReason) {
+	/**
+	 * Transient failures return to PENDING with exponential backoff until the
+	 * attempt limit; permanent ones (and exhausted retries) end as FAILED. An open
+	 * host circuit also waits at least the circuit cooldown.
+	 */
+	private void finishFailed(ImageMirrorJob job, String errorReason, boolean transientFailure) {
 		transactionTemplate.executeWithoutResult(status -> {
-			productCardImageUpdater.markMirrorFailed(cardId);
-			jobRepository.findById(jobId).ifPresent(job -> {
-				job.markFailed(errorReason, clock.instant());
-				jobRepository.save(job);
-			});
+			Optional<ImageMirrorJob> locked = jobRepository.findByIdForUpdate(job.getId());
+			if (locked.isEmpty() || locked.get().getStatus() != ImageMirrorJobStatus.PROCESSING) {
+				return;
+			}
+			ImageMirrorJob current = locked.get();
+			Instant now = clock.instant();
+			if (transientFailure && current.getAttemptCount() < properties.mirrorMaxAttempts()) {
+				current.scheduleRetry(errorReason, now.plus(retryDelay(current.getAttemptCount(), errorReason)), now);
+			} else {
+				current.markFailed(errorReason, now);
+				productCardImageUpdater.markMirrorFailed(current.getCardId());
+			}
+			jobRepository.save(current);
 		});
+	}
+
+	private Duration retryDelay(int attemptCount, String errorReason) {
+		long base = properties.mirrorRetryBaseDelaySeconds();
+		long max = properties.mirrorRetryMaxDelaySeconds();
+		long delay = base;
+		for (int i = 1; i < attemptCount && delay < max; i++) {
+			delay = Math.min(max, delay * 2);
+		}
+		if ("HOST_CIRCUIT_OPEN".equals(errorReason)) {
+			delay = Math.max(delay, properties.mirrorCircuitOpenSeconds());
+		}
+		return Duration.ofSeconds(delay);
+	}
+
+	private record ClaimResult(List<ImageMirrorJob> jobs, int totalClaimed) {
 	}
 
 	private static String deriveFilename(String sourceUrl) {
