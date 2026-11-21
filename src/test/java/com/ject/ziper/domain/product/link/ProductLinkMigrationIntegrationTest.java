@@ -50,7 +50,9 @@ class ProductLinkMigrationIntegrationTest {
 			Flyway v11 = Flyway.configure()
 					.dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword()).schemas("ziper")
 					.defaultSchema("ziper").createSchemas(false).target("11").load();
-			assertThat(v11.migrate().migrationsExecuted).isEqualTo(1);
+			var migrationResult = v11.migrate();
+			assertThat(migrationResult.migrationsExecuted).isGreaterThanOrEqualTo(1);
+			assertThat(migrationResult.targetSchemaVersion).isEqualTo("11");
 
 			try (Connection conn = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(),
 					postgres.getPassword()); Statement stmt = conn.createStatement()) {

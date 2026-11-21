@@ -122,8 +122,8 @@ class ProductExtractionIntegrationTest extends PostgresTestSupport {
 	@Test
 	void 이미저장된상품과미저장상품이있을때_URL확인을요청하면_정규화결과와본인기존카드ID만반환한다() throws Exception {
 		Long savedCardId = jdbcTemplate.queryForObject(
-				"INSERT INTO ziper.product_cards (user_id, product_url, product_title, price) "
-						+ "VALUES (?, ?, ?, ?) RETURNING id",
+				"INSERT INTO ziper.product_cards (user_id, product_url, product_title, price, fallback_icon) "
+						+ "VALUES (?, ?, ?, ?, 'TOP') RETURNING id",
 				Long.class, user.getId(), "https://www.musinsa.com/products/1234567", "무신사 티셔츠", 29000L);
 
 		mvc.perform(post("/api/v1/products/url-check").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)

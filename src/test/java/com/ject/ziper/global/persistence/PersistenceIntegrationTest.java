@@ -99,8 +99,9 @@ class PersistenceIntegrationTest extends PostgresTestSupport {
 						+ "VALUES (?, 'https://store.example/items/1', '봄 가디건', 39000, ?, 'TOP') RETURNING id",
 				Long.class, userId, fileId);
 
-		assertThatThrownBy(() -> jdbc.update("INSERT INTO ziper.product_cards(user_id, product_url, product_title) "
-				+ "VALUES (?, 'https://store.example/items/1', '중복 상품')", userId))
+		assertThatThrownBy(() -> jdbc
+				.update("INSERT INTO ziper.product_cards(user_id, product_url, product_title, price, fallback_icon) "
+						+ "VALUES (?, 'https://store.example/items/1', '중복 상품', 39000, 'TOP')", userId))
 				.hasRootCauseInstanceOf(SQLException.class);
 
 		Long tagId = jdbc.queryForObject("SELECT id FROM ziper.tags WHERE title = '봄'", Long.class);

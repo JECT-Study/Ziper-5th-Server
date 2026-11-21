@@ -14,14 +14,15 @@ public class JdbcProductCardImageUpdater implements ProductCardImageUpdater {
 	@Override
 	public void markMirrorReady(Long cardId, Long fileId) {
 		jdbcTemplate.update(
-				"UPDATE ziper.product_cards SET image_file_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", fileId,
-				cardId);
+				"UPDATE ziper.product_cards SET image_file_id = ?, image_status = 'READY', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+				fileId, cardId);
 	}
 
 	@Override
 	public void markMirrorFailed(Long cardId) {
-		// Original image_url is intentionally preserved for fallback rendering;
-		// Wave 2 (JEC-54) may extend this updater to also record image_status =
-		// 'FAILED'.
+		// Original image_url is intentionally preserved for fallback rendering.
+		jdbcTemplate.update(
+				"UPDATE ziper.product_cards SET image_status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+				cardId);
 	}
 }

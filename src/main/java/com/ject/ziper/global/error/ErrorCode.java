@@ -26,22 +26,49 @@ public enum ErrorCode {
 																													HttpStatus.CONFLICT,
 																													"이미 가입된 이메일입니다."), INVALID_PASSWORD(
 																															HttpStatus.BAD_REQUEST,
-	"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."),
-	INVALID_PRODUCT_URL(HttpStatus.BAD_REQUEST, "올바른 상품 URL 형식이 아닙니다."),
-	INVALID_TAG_TITLE(HttpStatus.BAD_REQUEST, "해시태그는 1~6자로 입력해 주세요."),
-	DUPLICATE_TAG(HttpStatus.CONFLICT, "이미 존재하는 해시태그입니다."),
-	DEFAULT_TAG_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "기본 해시태그는 삭제할 수 없습니다."),
-	TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "해시태그를 찾을 수 없습니다."),
-	INVALID_BOARD_NAME(HttpStatus.BAD_REQUEST, "보드 이름은 공백 포함 1~10자로 입력해 주세요."),
-	DUPLICATE_BOARD_NAME(HttpStatus.CONFLICT, "이미 존재하는 보드 이름입니다."),
-	DEFAULT_BOARD_NOT_MODIFIABLE(HttpStatus.FORBIDDEN, "기본 보드는 수정하거나 삭제할 수 없습니다."),
-	BOARD_NOT_FOUND(HttpStatus.NOT_FOUND, "보드를 찾을 수 없습니다."),
-	INVALID_IMAGE_FILE(HttpStatus.BAD_REQUEST, "지원하지 않거나 손상된 이미지 파일입니다."),
-	IMAGE_FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "이미지 파일 크기는 최대 5MB까지 허용됩니다."),
-	FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "파일을 찾을 수 없습니다."),
-	PRODUCT_CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "상품 카드를 찾을 수 없습니다."),
-	INVALID_LINK_STATUS_REPORT(HttpStatus.BAD_REQUEST, "올바르지 않은 링크 상태 보고입니다."),
-	LINK_STATUS_REPORT_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 보고해 주세요.");
+																															"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."), INVALID_PRODUCT_URL(
+																																	HttpStatus.BAD_REQUEST,
+																																	"올바른 상품 URL 형식이 아닙니다."), INVALID_TAG_TITLE(
+																																			HttpStatus.BAD_REQUEST,
+																																			"해시태그는 1~6자로 입력해 주세요."), DUPLICATE_TAG(
+																																					HttpStatus.CONFLICT,
+																																					"이미 존재하는 해시태그입니다."), DEFAULT_TAG_DELETE_FORBIDDEN(
+																																							HttpStatus.FORBIDDEN,
+																																							"기본 해시태그는 삭제할 수 없습니다."), TAG_NOT_FOUND(
+																																									HttpStatus.NOT_FOUND,
+																																									"해시태그를 찾을 수 없습니다."), INVALID_BOARD_NAME(
+																																											HttpStatus.BAD_REQUEST,
+																																											"보드 이름은 공백 포함 1~10자로 입력해 주세요."), DUPLICATE_BOARD_NAME(
+																																													HttpStatus.CONFLICT,
+																																													"이미 존재하는 보드 이름입니다."), DEFAULT_BOARD_NOT_MODIFIABLE(
+																																															HttpStatus.FORBIDDEN,
+																																															"기본 보드는 수정하거나 삭제할 수 없습니다."), BOARD_NOT_FOUND(
+																																																	HttpStatus.NOT_FOUND,
+																																																	"보드를 찾을 수 없습니다."), INVALID_IMAGE_FILE(
+																																																			HttpStatus.BAD_REQUEST,
+																																																			"지원하지 않거나 손상된 이미지 파일입니다."), IMAGE_FILE_TOO_LARGE(
+																																																					HttpStatus.PAYLOAD_TOO_LARGE,
+																																																					"이미지 파일 크기는 최대 5MB까지 허용됩니다."), FILE_NOT_FOUND(
+																																																							HttpStatus.NOT_FOUND,
+																																																							"파일을 찾을 수 없습니다."), PRODUCT_CARD_NOT_FOUND(
+																																																									HttpStatus.NOT_FOUND,
+																																																									"상품 카드를 찾을 수 없습니다."), INVALID_LINK_STATUS_REPORT(
+																																																											HttpStatus.BAD_REQUEST,
+																																																											"올바르지 않은 링크 상태 보고입니다."), LINK_STATUS_REPORT_RATE_LIMITED(
+																																																													HttpStatus.TOO_MANY_REQUESTS,
+																																																													"잠시 후 다시 보고해 주세요."), DUPLICATE_PRODUCT_URL(
+																																																															HttpStatus.CONFLICT,
+																																																															"이미 저장된 상품 URL입니다."), INVALID_PRODUCT_CARD_INPUT(
+																																																																	HttpStatus.BAD_REQUEST,
+																																																																	"상품 카드 입력값이 올바르지 않습니다."), INVALID_PRODUCT_IMAGE_URL(
+																																																																			HttpStatus.BAD_REQUEST,
+																																																																			"허용되지 않거나 올바르지 않은 상품 이미지 URL입니다."), INVALID_FALLBACK_ICON(
+																																																																					HttpStatus.BAD_REQUEST,
+																																																																					"지원하지 않는 대체 아이콘입니다."), INVALID_METADATA_SOURCE(
+																																																																							HttpStatus.BAD_REQUEST,
+																																																																							"올바르지 않은 메타데이터 출처입니다."), INVALID_BOARD_SELECTION(
+																																																																									HttpStatus.BAD_REQUEST,
+																																																																									"상품을 저장할 보드를 1개 이상 선택해 주세요.");
 
 	private final HttpStatus status;
 	private final String detail;
