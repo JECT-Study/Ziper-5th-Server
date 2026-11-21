@@ -36,7 +36,15 @@ public enum ErrorCode {
 																																							HttpStatus.FORBIDDEN,
 																																							"기본 해시태그는 삭제할 수 없습니다."), TAG_NOT_FOUND(
 																																									HttpStatus.NOT_FOUND,
-																																									"해시태그를 찾을 수 없습니다.");
+																																									"해시태그를 찾을 수 없습니다."), INVALID_BOARD_NAME(
+																																											HttpStatus.BAD_REQUEST,
+																																											"보드 이름은 공백 포함 1~10자로 입력해 주세요."), DUPLICATE_BOARD_NAME(
+																																													HttpStatus.CONFLICT,
+																																													"이미 존재하는 보드 이름입니다."), DEFAULT_BOARD_NOT_MODIFIABLE(
+																																															HttpStatus.FORBIDDEN,
+																																															"기본 보드는 수정하거나 삭제할 수 없습니다."), BOARD_NOT_FOUND(
+																																																	HttpStatus.NOT_FOUND,
+																																																	"보드를 찾을 수 없습니다.");
 
 	private final HttpStatus status;
 	private final String detail;
