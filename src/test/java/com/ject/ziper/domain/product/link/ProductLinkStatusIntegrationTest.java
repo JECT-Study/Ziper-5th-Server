@@ -506,8 +506,8 @@ class ProductLinkStatusIntegrationTest extends PostgresTestSupport {
 	private long insertCard(Long userId, String productUrl, Long linkId, boolean deleted) {
 		Instant deletedAt = deleted ? Instant.now() : null;
 		return jdbc.queryForObject(
-				"INSERT INTO ziper.product_cards(user_id, product_url, product_title, link_id, is_deleted, deleted_at) "
-						+ "VALUES (?, ?, '테스트 상품', ?, ?, ?) RETURNING id",
+				"INSERT INTO ziper.product_cards(user_id, product_url, product_title, price, fallback_icon, link_id, is_deleted, deleted_at) "
+						+ "VALUES (?, ?, '테스트 상품', 29000, 'TOP', ?, ?, ?) RETURNING id",
 				Long.class, userId, productUrl, linkId, deleted, deletedAt == null ? null : Timestamp.from(deletedAt));
 	}
 

@@ -359,7 +359,7 @@ class TagIntegrationTest extends PostgresTestSupport {
 
 	private Long insertCard(Long userId, String productUrl, String productTitle) {
 		return jdbc.queryForObject(
-				"INSERT INTO ziper.product_cards(user_id, product_url, product_title, price) VALUES (?, ?, ?, 19900) RETURNING id",
+				"INSERT INTO ziper.product_cards(user_id, product_url, product_title, price, fallback_icon) VALUES (?, ?, ?, 19900, 'TOP') RETURNING id",
 				Long.class, userId, productUrl, productTitle);
 	}
 
