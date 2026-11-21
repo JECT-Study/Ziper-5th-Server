@@ -76,7 +76,8 @@ public class SecurityConfiguration {
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper mapper, ProblemFactory problems,
-			OpenApiConfiguration docs, CorsConfigurationSource corsConfigurationSource) throws Exception {
+			OpenApiConfiguration docs, CorsConfigurationSource corsConfigurationSource, ActiveUserChecker activeUsers)
+			throws Exception {
 		var corsFilter = new CorsFilter(corsConfigurationSource);
 		corsFilter.setCorsProcessor(new DefaultCorsProcessor() {
 			@Override
@@ -112,12 +113,12 @@ public class SecurityConfiguration {
 								(request, response, exception) -> problems.write(mapper, request, response, 401))
 						.accessDeniedHandler(
 								(request, response, exception) -> problems.write(mapper, request, response, 403)))
-				.oauth2ResourceServer(
-						resource -> resource.bearerTokenResolver(new DefaultBearerTokenResolver()).jwt(jwt -> {
-						}).authenticationEntryPoint(
+				.oauth2ResourceServer(resource -> resource.bearerTokenResolver(new DefaultBearerTokenResolver()).jwt(
+						jwt -> jwt.jwtAuthenticationConverter(new ActiveUserJwtAuthenticationConverter(activeUsers)))
+						.authenticationEntryPoint(
 								(request, response, exception) -> problems.write(mapper, request, response, 401))
-								.accessDeniedHandler((request, response, exception) -> problems.write(mapper, request,
-										response, 403)));
+						.accessDeniedHandler(
+								(request, response, exception) -> problems.write(mapper, request, response, 403)));
 		return http.build();
 	}
 
