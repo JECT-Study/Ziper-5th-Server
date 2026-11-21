@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -19,7 +20,6 @@ import com.ject.ziper.domain.file.service.FileImageService;
 import com.ject.ziper.domain.file.service.ImageMirrorService;
 import com.ject.ziper.domain.product.dto.OpenOriginalResponse;
 import com.ject.ziper.domain.product.dto.ProductCardBoardSummary;
-import com.ject.ziper.domain.product.dto.ProductCardDetailResponse;
 import com.ject.ziper.domain.product.dto.UpdateProductCardRequest;
 import com.ject.ziper.domain.product.entity.FallbackIcon;
 import com.ject.ziper.domain.product.entity.ProductBoardCard;
@@ -40,6 +40,7 @@ import com.ject.ziper.domain.tag.repository.TagRepository;
 import com.ject.ziper.domain.tag.service.TagService;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
+import com.ject.ziper.global.persistence.AdvisoryLockRepository;
 
 @Service
 public class ProductCardDetailService {
@@ -54,6 +55,7 @@ public class ProductCardDetailService {
 	private final TagService tagService;
 	private final FileImageService fileImageService;
 	private final ImageMirrorService imageMirrorService;
+	private final AdvisoryLockRepository advisoryLockRepository;
 	private final Clock clock;
 
 	@Autowired
@@ -62,10 +64,10 @@ public class ProductCardDetailService {
 			ProductBoardRepository productBoardRepository, TagRepository tagRepository,
 			UserCardEventRepository userCardEventRepository, ProductCardRegistrationService registrationService,
 			ProductUrlNormalizer urlNormalizer, TagService tagService, FileImageService fileImageService,
-			ImageMirrorService imageMirrorService) {
+			ImageMirrorService imageMirrorService, AdvisoryLockRepository advisoryLockRepository) {
 		this(productCardRepository, productBoardCardRepository, productCardTagRepository, productBoardRepository,
 				tagRepository, userCardEventRepository, registrationService, urlNormalizer, tagService,
-				fileImageService, imageMirrorService, Clock.systemUTC());
+				fileImageService, imageMirrorService, advisoryLockRepository, Clock.systemUTC());
 	}
 
 	public ProductCardDetailService(ProductCardRepository productCardRepository,
@@ -73,7 +75,7 @@ public class ProductCardDetailService {
 			ProductBoardRepository productBoardRepository, TagRepository tagRepository,
 			UserCardEventRepository userCardEventRepository, ProductCardRegistrationService registrationService,
 			ProductUrlNormalizer urlNormalizer, TagService tagService, FileImageService fileImageService,
-			ImageMirrorService imageMirrorService, Clock clock) {
+			ImageMirrorService imageMirrorService, AdvisoryLockRepository advisoryLockRepository, Clock clock) {
 		this.productCardRepository = productCardRepository;
 		this.productBoardCardRepository = productBoardCardRepository;
 		this.productCardTagRepository = productCardTagRepository;
@@ -85,12 +87,16 @@ public class ProductCardDetailService {
 		this.tagService = tagService;
 		this.fileImageService = fileImageService;
 		this.imageMirrorService = imageMirrorService;
+		this.advisoryLockRepository = advisoryLockRepository;
 		this.clock = clock;
 	}
 
+	/**
+	 * 상세 조회 트랜잭션. 서명 URL 같은 스토리지 호출은 커밋 뒤 {@link ProductCardDetailFacade}가 한다.
+	 */
 	@Transactional
-	public ProductCardDetailResponse getProductCardDetail(Long userId, Long cardId) {
-		ProductCard card = findActiveOwnedCard(userId, cardId);
+	public ProductCardDetailView getProductCardDetail(Long userId, Long cardId) {
+		ProductCard card = lockAndFindActiveOwnedCard(userId, cardId);
 		Instant now = clock.instant();
 		card.resetRediscoveryCycle(now);
 		productCardRepository.saveAndFlush(card);
@@ -100,14 +106,13 @@ public class ProductCardDetailService {
 		Set<Long> linkedBoardIds = productBoardCardRepository.findAllByCardIdOrderByIdAsc(card.getId()).stream()
 				.map(ProductBoardCard::getBoardId).collect(Collectors.toSet());
 		List<ProductCardBoardSummary> boards = loadActiveOwnedBoards(userId, linkedBoardIds);
-		String imageFileUrl = fileImageService.findSignedUrl(card.getImageFileId()).orElse(null);
 
-		return ProductCardDetailResponse.of(card, imageFileUrl, tags, boards);
+		return new ProductCardDetailView(card, tags, boards);
 	}
 
 	@Transactional
 	public OpenOriginalResponse openOriginalUrl(Long userId, Long cardId) {
-		ProductCard card = findActiveOwnedCard(userId, cardId);
+		ProductCard card = lockAndFindActiveOwnedCard(userId, cardId);
 		Instant now = clock.instant();
 		card.resetRediscoveryCycle(now);
 		productCardRepository.saveAndFlush(card);
@@ -117,14 +122,21 @@ public class ProductCardDetailService {
 		return OpenOriginalResponse.from(card);
 	}
 
+	/**
+	 * 수정 트랜잭션. 서명 URL 조립은 커밋 뒤 {@link ProductCardDetailFacade}가 하므로 서명이 실패해도 수정은
+	 * 롤백되지 않는다. 잠금 순서는 보드, 사용자 상품, 미러링 작업 행, 카드 행이다.
+	 */
 	@Transactional
-	public ProductCardDetailResponse updateProductCard(Long userId, Long cardId, UpdateProductCardRequest request) {
+	public ProductCardDetailView updateProductCard(Long userId, Long cardId, UpdateProductCardRequest request) {
 		if (request == null) {
 			throw new BusinessException(ErrorCode.INVALID_PRODUCT_CARD_INPUT);
 		}
-		ProductCard card = findActiveOwnedCard(userId, cardId);
+		validateCardId(cardId);
+		// 카드 URL은 불변이므로 잠금 전에 URL만 읽어 입력 검증에 쓴다. 카드 엔티티는 잠금 뒤에 처음 읽는다.
+		String productUrl = productCardRepository.findActiveProductUrl(cardId, userId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND));
 
-		NormalizedProductUrl normalized = urlNormalizer.normalize(card.getProductUrl());
+		NormalizedProductUrl normalized = urlNormalizer.normalize(productUrl);
 		String finalShop = ProductCardRegistrationService.resolveShop(normalized, request.shop());
 		String productTitle = ProductCardRegistrationService.sanitizeAndValidateTitle(request.productTitle());
 		long price = ProductCardRegistrationService.validatePrice(request.price());
@@ -137,14 +149,14 @@ public class ProductCardDetailService {
 		List<Long> deduplicatedBoardIds = ProductCardRegistrationService.deduplicateBoardIds(request.boardIds());
 		validateTagInputs(request.tags());
 
-		if (imageFileId != null && !fileImageService.exists(imageFileId)) {
-			throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+		if (imageFileId != null) {
+			fileImageService.requireOwnedFile(imageFileId, userId);
 		}
 		List<Long> boardIds = registrationService.validateActiveOwnedBoardIds(userId, deduplicatedBoardIds);
+		ProductCard card = lockForMutation(userId, cardId);
 
 		Instant now = clock.instant();
-		ProductImageStatus nextImageStatus = resolveUpdatedImageStatus(card.getId(), userId, finalShop, imageUrl,
-				imageFileId, card.getImageUrl(), card.getImageFileId(), card.getImageStatus());
+		ProductImageStatus nextImageStatus = resolveUpdatedImageStatus(card, userId, finalShop, imageUrl, imageFileId);
 
 		card.updateDetails(productTitle, price, memo, finalShop, imageUrl, imageFileId, fallbackIcon, nextImageStatus,
 				now);
@@ -154,44 +166,62 @@ public class ProductCardDetailService {
 		List<Tag> resolvedTags = tagService.resolveOrCreateForCard(userId, request.tags());
 		syncTagMappings(card.getId(), resolvedTags, now);
 
-		String imageFileUrl = fileImageService.findSignedUrl(card.getImageFileId()).orElse(null);
 		List<TagResponse> tags = sortTags(resolvedTags);
 		List<ProductCardBoardSummary> boards = loadActiveOwnedBoards(userId, new LinkedHashSet<>(boardIds));
 
-		return ProductCardDetailResponse.of(card, imageFileUrl, tags, boards);
+		return new ProductCardDetailView(card, tags, boards);
 	}
 
 	@Transactional
 	public void deleteProductCard(Long userId, Long cardId) {
-		ProductCard card = findActiveOwnedCard(userId, cardId);
+		validateCardId(cardId);
+		productCardRepository.findActiveProductUrl(cardId, userId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND));
+		ProductCard card = lockForMutation(userId, cardId);
 		Instant now = clock.instant();
+		imageMirrorService.cancelPendingMirrorJobs(card.getId());
 		card.softDelete(now);
 		productCardRepository.saveAndFlush(card);
 	}
 
-	private ProductCard findActiveOwnedCard(Long userId, Long cardId) {
-		if (cardId == null || cardId <= 0L) {
-			throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
-		}
-		return productCardRepository.findByIdAndUserIdAndDeletedFalse(cardId, userId)
+	private ProductCard lockForMutation(Long userId, Long cardId) {
+		// 작업 행을 잠그기 전에 다른 카드 수정 요청의 새 미러링 작업 등록을 막는다.
+		advisoryLockRepository.lock(ProductCardRegistrationService.PRODUCT_CARD_LOCK_PREFIX + userId);
+		imageMirrorService.lockActiveJobsForCard(cardId);
+		return lockAndFindActiveOwnedCard(userId, cardId);
+	}
+
+	private ProductCard lockAndFindActiveOwnedCard(Long userId, Long cardId) {
+		validateCardId(cardId);
+		return productCardRepository.findLockedByIdAndUserIdAndDeletedFalse(cardId, userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND));
 	}
 
-	private ProductImageStatus resolveUpdatedImageStatus(Long cardId, Long userId, String resolvedShop, String imageUrl,
-			Long imageFileId, String previousImageUrl, Long previousImageFileId,
-			ProductImageStatus previousImageStatus) {
-		if (imageFileId != null) {
-			return ProductImageStatus.READY;
+	private static void validateCardId(Long cardId) {
+		if (cardId == null || cardId <= 0L) {
+			throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
 		}
-		if (imageUrl == null) {
+	}
+
+	/**
+	 * 이미지가 바뀌면 기존 PENDING·PROCESSING 미러링 작업을 같은 트랜잭션에서 취소한다. 그래야 늦게 끝난 이전 작업이 수정한
+	 * 이미지를 덮어쓰지 못한다. 상태 규칙은 등록 API와 같다. 직접 업로드·아이콘만 있으면 NONE, 외부 URL 미러링 대기는
+	 * PENDING이다.
+	 */
+	private ProductImageStatus resolveUpdatedImageStatus(ProductCard card, Long userId, String resolvedShop,
+			String imageUrl, Long imageFileId) {
+		boolean imageChanged = !Objects.equals(imageUrl, card.getImageUrl())
+				|| !Objects.equals(imageFileId, card.getImageFileId());
+		boolean retryMirror = !imageChanged && imageFileId == null && imageUrl != null
+				&& card.getImageStatus() == ProductImageStatus.NONE;
+		if (!imageChanged && !retryMirror) {
+			return card.getImageStatus();
+		}
+		imageMirrorService.cancelPendingMirrorJobs(card.getId());
+		if (imageFileId != null || imageUrl == null) {
 			return ProductImageStatus.NONE;
 		}
-		boolean needsMirror = !imageUrl.equals(previousImageUrl) || previousImageFileId != null
-				|| previousImageStatus == ProductImageStatus.NONE;
-		if (!needsMirror) {
-			return previousImageStatus;
-		}
-		boolean enqueued = imageMirrorService.enqueueMirrorJob(cardId, userId, imageUrl, resolvedShop);
+		boolean enqueued = imageMirrorService.enqueueMirrorJob(card.getId(), userId, imageUrl, resolvedShop);
 		return enqueued ? ProductImageStatus.PENDING : ProductImageStatus.NONE;
 	}
 

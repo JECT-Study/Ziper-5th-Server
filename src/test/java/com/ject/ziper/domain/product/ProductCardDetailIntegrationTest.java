@@ -1,7 +1,11 @@
 package com.ject.ziper.domain.product;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -22,6 +26,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.imageio.ImageIO;
 
@@ -35,6 +45,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -42,12 +53,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ject.ziper.domain.board.entity.ProductBoard;
 import com.ject.ziper.domain.board.repository.ProductBoardRepository;
 import com.ject.ziper.domain.file.client.ExternalImageFetcher;
+import com.ject.ziper.domain.file.client.ExternalImageFetcher.FetchResult;
 import com.ject.ziper.domain.file.dto.ImageUploadResponse;
 import com.ject.ziper.domain.file.entity.ImageMirrorJob;
 import com.ject.ziper.domain.file.entity.ImageMirrorJobStatus;
 import com.ject.ziper.domain.file.repository.FileAssetRepository;
 import com.ject.ziper.domain.file.repository.ImageMirrorJobRepository;
 import com.ject.ziper.domain.file.service.FileImageService;
+import com.ject.ziper.domain.file.worker.ImageMirrorWorker;
 import com.ject.ziper.domain.product.entity.ProductBoardCard;
 import com.ject.ziper.domain.product.entity.ProductCard;
 import com.ject.ziper.domain.product.entity.ProductCardStatus;
@@ -101,8 +114,11 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 	@Autowired
 	private FileImageService fileImageService;
 
-	@Autowired
+	@MockitoSpyBean
 	private ObjectStorageClient objectStorageClient;
+
+	@Autowired
+	private ImageMirrorWorker imageMirrorWorker;
 
 	@Autowired
 	private JwtTokenProvider jwtTokenProvider;
@@ -119,7 +135,7 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 
 	@BeforeEach
 	void setUp() {
-		reset(externalImageFetcher);
+		reset(externalImageFetcher, objectStorageClient);
 		if (objectStorageClient instanceof InMemoryObjectStorageClient memoryStorage) {
 			memoryStorage.clear();
 		}
@@ -155,8 +171,8 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 
 	@Test
 	void 재발견2단계카드가있을때_상세조회를호출하면_전체필드반환과14일리셋및VIEW이벤트가저장된다() throws Exception {
-		ImageUploadResponse uploaded = fileImageService.uploadDirectImage(createJpeg(400, 400), "thumb.jpg",
-				"image/jpeg", 4096);
+		ImageUploadResponse uploaded = fileImageService.uploadDirectImage(owner.getId(), createJpeg(400, 400),
+				"thumb.jpg", "image/jpeg", 4096);
 		String longTitle = "오버핏 코튼 스트라이프 셔츠 ".repeat(8).trim();
 		String longMemo = "세일 기간에 사이즈 확인 후 꼭 구매할 예정인 아이템";
 
@@ -180,7 +196,7 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 				.andExpect(jsonPath("$.shop").value("무신사")).andExpect(jsonPath("$.productTitle").value(longTitle))
 				.andExpect(jsonPath("$.price").value(59000)).andExpect(jsonPath("$.memo").value(longMemo))
 				.andExpect(jsonPath("$.imageFileId").value(uploaded.fileId()))
-				.andExpect(jsonPath("$.imageFileUrl").isNotEmpty()).andExpect(jsonPath("$.imageStatus").value("READY"))
+				.andExpect(jsonPath("$.imageFileUrl").isNotEmpty()).andExpect(jsonPath("$.imageStatus").value("NONE"))
 				.andExpect(jsonPath("$.metadataSource").value("CLIENT"))
 				.andExpect(jsonPath("$.status").value("PLANNED")).andExpect(jsonPath("$.link.status").value("UNKNOWN"))
 				.andExpect(jsonPath("$.rediscoveryStage").value(0)).andExpect(jsonPath("$.tags.length()").value(3))
@@ -351,10 +367,10 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 						"price", 15000, "fallbackIcon", "TOP", "boardIds", List.of(defaultBoard.getId()), "tags",
 						List.of("봄"), "metadataSource", "MANUAL"));
 
-		ImageUploadResponse uploaded = fileImageService.uploadDirectImage(createJpeg(300, 300), "custom.jpg",
-				"image/jpeg", 2048);
+		ImageUploadResponse uploaded = fileImageService.uploadDirectImage(owner.getId(), createJpeg(300, 300),
+				"custom.jpg", "image/jpeg", 2048);
 
-		// 1. Direct upload file + custom shop update -> READY
+		// 1. Direct upload file + custom shop update -> NONE (등록 API와 같은 규칙)
 		Map<String, Object> toFilePayload = new LinkedHashMap<>();
 		toFilePayload.put("productTitle", "직접 업로드 전환 상품");
 		toFilePayload.put("shop", "커스텀 편집샵");
@@ -367,7 +383,7 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 				.contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(toFilePayload)))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.shop").value("커스텀 편집샵"))
 				.andExpect(jsonPath("$.imageFileId").value(uploaded.fileId()))
-				.andExpect(jsonPath("$.imageFileUrl").isNotEmpty()).andExpect(jsonPath("$.imageStatus").value("READY"));
+				.andExpect(jsonPath("$.imageFileUrl").isNotEmpty()).andExpect(jsonPath("$.imageStatus").value("NONE"));
 
 		// 2. Switch to fallbackIcon only -> NONE
 		Map<String, Object> toFallbackPayload = new LinkedHashMap<>();
@@ -569,6 +585,212 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 				.andExpect(jsonPath("$.code").value("PRODUCT_CARD_NOT_FOUND"));
 		mvc.perform(delete("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(otherToken)))
 				.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("PRODUCT_CARD_NOT_FOUND"));
+	}
+
+	@Test
+	void 타인이업로드한파일ID가주어지면_상품수정을호출하면_404이고카드는변하지않는다() throws Exception {
+		long cardId = registerCard(ownerToken,
+				Map.of("productUrl", "https://www.musinsa.com/products/1200001", "productTitle", "원래 상품", "price", 1000,
+						"fallbackIcon", "TOP", "boardIds", List.of(defaultBoard.getId()), "tags", List.of("봄"),
+						"metadataSource", "MANUAL"));
+		ImageUploadResponse others = fileImageService.uploadDirectImage(otherUser.getId(), createJpeg(300, 300),
+				"others.jpg", "image/jpeg", 2048);
+
+		mvc.perform(patch("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(validUpdatePayload("탈취 시도", 2000, null, null, others.fileId(),
+						null, List.of("봄"), List.of(defaultBoard.getId())))))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("FILE_NOT_FOUND"))
+				.andExpect(jsonPath("$.imageFileUrl").doesNotExist());
+
+		ProductCard reloaded = productCardRepository.findById(cardId).orElseThrow();
+		assertThat(reloaded.getProductTitle()).isEqualTo("원래 상품");
+		assertThat(reloaded.getImageFileId()).isNull();
+		assertThat(fileImageService.isOwnedBy(others.fileId(), owner.getId())).isFalse();
+	}
+
+	@Test
+	void 활성카드에_삭제와수정을동시에요청하면_삭제204후에는카드가삭제상태로남는다() throws Exception {
+		int rounds = 20;
+		AtomicInteger resurrected = new AtomicInteger();
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			for (int i = 0; i < rounds; i++) {
+				long cardId = registerCard(ownerToken,
+						Map.of("productUrl", "https://www.musinsa.com/products/" + (1300000 + i), "productTitle",
+								"경합 상품", "price", 1000, "fallbackIcon", "TOP", "boardIds",
+								List.of(defaultBoard.getId()), "tags", List.of("봄"), "metadataSource", "MANUAL"));
+				String body = objectMapper.writeValueAsString(validUpdatePayload("경합 수정", 2000, null, null, null, "TOP",
+						List.of("봄"), List.of(defaultBoard.getId())));
+				CountDownLatch go = new CountDownLatch(1);
+				Future<Integer> deleteFuture = executor.submit(() -> {
+					go.await();
+					return mvc.perform(delete("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION,
+							bearer(ownerToken))).andReturn().getResponse().getStatus();
+				});
+				Future<Integer> patchFuture = executor.submit(() -> {
+					go.await();
+					return mvc
+							.perform(patch("/api/v1/products/{cardId}", cardId)
+									.header(HttpHeaders.AUTHORIZATION, bearer(ownerToken))
+									.contentType(MediaType.APPLICATION_JSON).content(body))
+							.andReturn().getResponse().getStatus();
+				});
+				go.countDown();
+				int deleteStatus = deleteFuture.get(10, TimeUnit.SECONDS);
+				int patchStatus = patchFuture.get(10, TimeUnit.SECONDS);
+				Boolean deleted = jdbc.queryForObject("SELECT is_deleted FROM ziper.product_cards WHERE id = ?",
+						Boolean.class, cardId);
+				assertThat(deleteStatus).isEqualTo(204);
+				assertThat(patchStatus).isIn(200, 404);
+				if (Boolean.FALSE.equals(deleted)) {
+					resurrected.incrementAndGet();
+				}
+			}
+		} finally {
+			executor.shutdownNow();
+		}
+		assertThat(resurrected.get()).as("삭제 204 뒤 부활한 카드 수").isZero();
+	}
+
+	@Test
+	void 활성카드에_삭제와상세조회를동시에요청하면_삭제204후에는카드가삭제상태로남는다() throws Exception {
+		int rounds = 20;
+		AtomicInteger resurrected = new AtomicInteger();
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			for (int i = 0; i < rounds; i++) {
+				long cardId = registerCard(ownerToken,
+						Map.of("productUrl", "https://www.musinsa.com/products/" + (1400000 + i), "productTitle",
+								"조회 경합", "price", 1000, "fallbackIcon", "TOP", "boardIds",
+								List.of(defaultBoard.getId()), "tags", List.of("봄"), "metadataSource", "MANUAL"));
+				CountDownLatch go = new CountDownLatch(1);
+				Future<Integer> deleteFuture = executor.submit(() -> {
+					go.await();
+					return mvc.perform(delete("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION,
+							bearer(ownerToken))).andReturn().getResponse().getStatus();
+				});
+				Future<Integer> getFuture = executor.submit(() -> {
+					go.await();
+					return mvc.perform(get("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION,
+							bearer(ownerToken))).andReturn().getResponse().getStatus();
+				});
+				go.countDown();
+				assertThat(deleteFuture.get(10, TimeUnit.SECONDS)).isEqualTo(204);
+				assertThat(getFuture.get(10, TimeUnit.SECONDS)).isIn(200, 404);
+				Boolean deleted = jdbc.queryForObject("SELECT is_deleted FROM ziper.product_cards WHERE id = ?",
+						Boolean.class, cardId);
+				if (Boolean.FALSE.equals(deleted)) {
+					resurrected.incrementAndGet();
+				}
+			}
+		} finally {
+			executor.shutdownNow();
+		}
+		assertThat(resurrected.get()).as("삭제 204 뒤 부활한 카드 수").isZero();
+	}
+
+	@Test
+	void 미러링워커가이미지를가져오는중에_직접업로드파일로교체하면_이전작업이새이미지를덮어쓰지않는다() throws Exception {
+		long cardId = registerCard(ownerToken,
+				Map.of("productUrl", "https://www.musinsa.com/products/1500001", "productTitle", "미러링 대기", "price",
+						1000, "imageUrl", "https://image.msscdn.net/images/goods/a.jpg", "boardIds",
+						List.of(defaultBoard.getId()), "tags", List.of("봄"), "metadataSource", "CLIENT"));
+		assertThat(productCardRepository.findById(cardId).orElseThrow().getImageStatus())
+				.isEqualTo(ProductImageStatus.PENDING);
+		ImageUploadResponse mine = fileImageService.uploadDirectImage(owner.getId(), createJpeg(300, 300), "mine.jpg",
+				"image/jpeg", 2048);
+
+		CountDownLatch fetching = new CountDownLatch(1);
+		CountDownLatch resume = new CountDownLatch(1);
+		when(externalImageFetcher.fetch(any(), any(), any())).thenAnswer(invocation -> {
+			fetching.countDown();
+			assertThat(resume.await(10, TimeUnit.SECONDS)).isTrue();
+			return FetchResult.ok(createJpeg(300, 300), "image/jpeg");
+		});
+		try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+			Future<Integer> worker = executor.submit(imageMirrorWorker::processPendingJobs);
+			try {
+				assertThat(fetching.await(10, TimeUnit.SECONDS)).isTrue();
+				mvc.perform(patch("/api/v1/products/{cardId}", cardId)
+						.header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)).contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(validUpdatePayload("직접 업로드로 교체", 1000, null, null,
+								mine.fileId(), null, List.of("봄"), List.of(defaultBoard.getId())))))
+						.andExpect(status().isOk()).andExpect(jsonPath("$.imageStatus").value("NONE"));
+
+				assertThat(imageMirrorJobRepository.findByCardIdOrderByIdDesc(cardId))
+						.extracting(ImageMirrorJob::getStatus).containsExactly(ImageMirrorJobStatus.CANCELED);
+			} finally {
+				resume.countDown();
+			}
+			assertThat(worker.get(10, TimeUnit.SECONDS)).isEqualTo(1);
+		}
+
+		ProductCard reloaded = productCardRepository.findById(cardId).orElseThrow();
+		assertThat(reloaded.getImageFileId()).isEqualTo(mine.fileId());
+		assertThat(reloaded.getImageStatus()).isEqualTo(ProductImageStatus.NONE);
+	}
+
+	@Test
+	void 미러링대기중카드를_삭제하면_미러링작업이취소되고카드이미지가변하지않는다() throws Exception {
+		long cardId = registerCard(ownerToken,
+				Map.of("productUrl", "https://www.musinsa.com/products/1500002", "productTitle", "삭제될 미러링 카드", "price",
+						1000, "imageUrl", "https://image.msscdn.net/images/goods/b.jpg", "boardIds",
+						List.of(defaultBoard.getId()), "tags", List.of("봄"), "metadataSource", "CLIENT"));
+
+		mvc.perform(delete("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))
+				.andExpect(status().isNoContent());
+
+		assertThat(imageMirrorJobRepository.findByCardIdOrderByIdDesc(cardId))
+				.allSatisfy(job -> assertThat(job.getStatus()).isEqualTo(ImageMirrorJobStatus.CANCELED));
+		when(externalImageFetcher.fetch(any(), any(), any()))
+				.thenReturn(FetchResult.ok(createJpeg(300, 300), "image/jpeg"));
+		imageMirrorWorker.processPendingJobs();
+		assertThat(productCardRepository.findById(cardId).orElseThrow().getImageFileId()).isNull();
+	}
+
+	@Test
+	void 서명URL발급이전체실패하는상황에서_조회와수정을호출하면_서버오류이지만수정은커밋된채남는다() throws Exception {
+		ImageUploadResponse mine = fileImageService.uploadDirectImage(owner.getId(), createJpeg(300, 300), "mine.jpg",
+				"image/jpeg", 2048);
+		long cardId = registerCard(ownerToken,
+				Map.of("productUrl", "https://www.musinsa.com/products/1600001", "productTitle", "서명 실패", "price", 1000,
+						"imageFileId", mine.fileId(), "boardIds", List.of(defaultBoard.getId()), "tags", List.of("봄"),
+						"metadataSource", "MANUAL"));
+		doThrow(new IllegalStateException("storage down")).when(objectStorageClient).createSignedUrls(any(), any());
+
+		mvc.perform(get("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))
+				.andExpect(status().is5xxServerError());
+		mvc.perform(patch("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(validUpdatePayload("서명 실패 중 수정", 5555, null, null,
+						mine.fileId(), null, List.of("봄"), List.of(defaultBoard.getId())))))
+				.andExpect(status().is5xxServerError());
+
+		ProductCard reloaded = productCardRepository.findById(cardId).orElseThrow();
+		assertThat(reloaded.getPrice()).isEqualTo(5555L);
+		assertThat(reloaded.getProductTitle()).isEqualTo("서명 실패 중 수정");
+	}
+
+	@Test
+	void 일괄서명응답에서파일경로가빠진상황에서_조회와수정을호출하면_imageFileUrl이null인200이다() throws Exception {
+		ImageUploadResponse mine = fileImageService.uploadDirectImage(owner.getId(), createJpeg(300, 300), "mine.jpg",
+				"image/jpeg", 2048);
+		long cardId = registerCard(ownerToken,
+				Map.of("productUrl", "https://www.musinsa.com/products/1600002", "productTitle", "부분 서명 실패", "price",
+						1000, "imageFileId", mine.fileId(), "boardIds", List.of(defaultBoard.getId()), "tags",
+						List.of("봄"), "metadataSource", "MANUAL"));
+		doReturn(Map.of()).when(objectStorageClient).createSignedUrls(any(), any());
+
+		mvc.perform(get("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.imageFileId").value(mine.fileId()))
+				.andExpect(jsonPath("$.imageFileUrl").doesNotExist());
+		mvc.perform(patch("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(validUpdatePayload("부분 서명 수정", 7777, null, null, mine.fileId(),
+						null, List.of("봄"), List.of(defaultBoard.getId())))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.price").value(7777))
+				.andExpect(jsonPath("$.imageFileUrl").doesNotExist());
 	}
 
 	private long registerCard(String token, Map<String, Object> payload) throws Exception {

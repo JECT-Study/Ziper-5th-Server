@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ject.ziper.domain.product.dto.OpenOriginalResponse;
 import com.ject.ziper.domain.product.dto.ProductCardDetailResponse;
 import com.ject.ziper.domain.product.dto.UpdateProductCardRequest;
-import com.ject.ziper.domain.product.service.ProductCardDetailService;
+import com.ject.ziper.domain.product.service.ProductCardDetailFacade;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
 
@@ -29,9 +29,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class ProductCardDetailController {
 	private static final String MAX_LONG_TEXT = String.valueOf(Long.MAX_VALUE);
 
-	private final ProductCardDetailService detailService;
+	private final ProductCardDetailFacade detailService;
 
-	public ProductCardDetailController(ProductCardDetailService detailService) {
+	public ProductCardDetailController(ProductCardDetailFacade detailService) {
 		this.detailService = detailService;
 	}
 

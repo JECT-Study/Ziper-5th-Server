@@ -46,7 +46,15 @@ public interface ImageMirrorJobRepository extends JpaRepository<ImageMirrorJob, 
 			""", nativeQuery = true)
 	int refreshLease(@Param("id") Long id, @Param("now") Instant now);
 
-	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query(value = """
+			SELECT id FROM ziper.image_mirror_jobs
+			WHERE card_id = :cardId AND status IN ('PENDING', 'PROCESSING')
+			ORDER BY id
+			FOR UPDATE
+			""", nativeQuery = true)
+	List<Long> lockActiveIdsByCardId(@Param("cardId") Long cardId);
+
+	@Modifying(flushAutomatically = true)
 	@Query(value = """
 			UPDATE ziper.image_mirror_jobs
 			SET status = 'CANCELED', last_error = 'CARD_CHANGED', locked_at = NULL, updated_at = :now

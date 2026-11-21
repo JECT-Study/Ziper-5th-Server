@@ -70,6 +70,11 @@ public class ImageMirrorService {
 		return true;
 	}
 
+	/** 카드 행보다 작업 행을 먼저 잠가 완료 워커와 같은 잠금 순서를 지킨다. */
+	public void lockActiveJobsForCard(long cardId) {
+		jobRepository.lockActiveIdsByCardId(cardId);
+	}
+
 	/**
 	 * Cancels the card's PENDING and PROCESSING jobs. Call it in the same
 	 * transaction that edits the card's image or deletes the card, so a
