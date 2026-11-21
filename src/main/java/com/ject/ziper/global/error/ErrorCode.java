@@ -26,9 +26,18 @@ public enum ErrorCode {
 																													HttpStatus.CONFLICT,
 																													"이미 가입된 이메일입니다."), INVALID_PASSWORD(
 																															HttpStatus.BAD_REQUEST,
-																															"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."), INVALID_PRODUCT_URL(
+"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."), INVALID_PRODUCT_URL(
 																																	HttpStatus.BAD_REQUEST,
-																																	"올바른 상품 URL 형식이 아닙니다.");
+																																	"올바른 상품 URL 형식이 아닙니다."),
+	"비밀번호는 영문, 숫자, 특수문자를 조합해 8~64자로 입력해 주세요."), INVALID_TAG_TITLE(
+																																	HttpStatus.BAD_REQUEST,
+																																	"해시태그는 1~6자로 입력해 주세요."), DUPLICATE_TAG(
+																																			HttpStatus.CONFLICT,
+																																			"이미 존재하는 해시태그입니다."), DEFAULT_TAG_DELETE_FORBIDDEN(
+																																					HttpStatus.FORBIDDEN,
+																																					"기본 해시태그는 삭제할 수 없습니다."), TAG_NOT_FOUND(
+																																							HttpStatus.NOT_FOUND,
+																																							"해시태그를 찾을 수 없습니다.");
 
 	private final HttpStatus status;
 	private final String detail;
