@@ -50,7 +50,13 @@ public enum ErrorCode {
 																																																					HttpStatus.PAYLOAD_TOO_LARGE,
 																																																					"이미지 파일 크기는 최대 5MB까지 허용됩니다."), FILE_NOT_FOUND(
 																																																							HttpStatus.NOT_FOUND,
-																																																							"파일을 찾을 수 없습니다.");
+																																																							"파일을 찾을 수 없습니다."), PRODUCT_CARD_NOT_FOUND(
+																																																									HttpStatus.NOT_FOUND,
+																																																									"상품 카드를 찾을 수 없습니다."), INVALID_LINK_STATUS_REPORT(
+																																																											HttpStatus.BAD_REQUEST,
+																																																											"올바르지 않은 링크 상태 보고입니다."), LINK_STATUS_REPORT_RATE_LIMITED(
+																																																													HttpStatus.TOO_MANY_REQUESTS,
+																																																													"잠시 후 다시 보고해 주세요.");
 
 	private final HttpStatus status;
 	private final String detail;
