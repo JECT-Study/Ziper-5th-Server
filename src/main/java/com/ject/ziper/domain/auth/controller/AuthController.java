@@ -1,5 +1,6 @@
 package com.ject.ziper.domain.auth.controller;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpHeaders;
@@ -94,13 +95,14 @@ public class AuthController {
 	}
 
 	@PostMapping("/logout")
-	@Operation(summary = "로그아웃 및 세션 폐기", description = "Refresh Token에 해당하는 세션을 삭제하고 쿠키 모드에서는 쿠키를 만료시킵니다.")
+	@Operation(summary = "로그아웃 및 세션 폐기", description = "Refresh Token에 해당하는 세션을 삭제하고 쿠키 모드에서는 성공·실패와 무관하게 쿠키를 만료시킵니다.")
 	public ResponseEntity<Void> logout(@RequestBody(required = false) LogoutRequest request,
 			@CookieValue(name = SessionTokenTransport.COOKIE_NAME, required = false) String cookieToken,
-			@RequestHeader HttpHeaders headers) {
+			@RequestHeader HttpHeaders headers, HttpServletResponse response) {
 		boolean useCookie = transport.useCookie(headers);
+		transport.expireCookie(useCookie, response);
 		authService.logout(
 				transport.refreshToken(useCookie, request == null ? null : request.refreshToken(), cookieToken));
-		return transport.loggedOut(useCookie);
+		return transport.loggedOut();
 	}
 }

@@ -1,5 +1,7 @@
 package com.ject.ziper.domain.auth.controller;
 
+import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -76,12 +78,15 @@ public class SessionTokenTransport {
 				.body(login.withoutRefreshToken());
 	}
 
-	ResponseEntity<Void> loggedOut(boolean useCookie) {
-		var response = ResponseEntity.noContent().cacheControl(CacheControl.noStore());
+	/** 쿠키 모드에서는 로그아웃 처리 결과와 무관하게 만료 쿠키를 먼저 응답에 싣는다. */
+	void expireCookie(boolean useCookie, HttpServletResponse response) {
 		if (useCookie) {
-			response.header(HttpHeaders.SET_COOKIE, cookie("", 0));
+			response.addHeader(HttpHeaders.SET_COOKIE, cookie("", 0));
 		}
-		return response.build();
+	}
+
+	ResponseEntity<Void> loggedOut() {
+		return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
 	}
 
 	private static String cookie(String value, long maxAge) {

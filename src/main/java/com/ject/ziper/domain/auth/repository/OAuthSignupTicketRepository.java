@@ -12,6 +12,8 @@ import com.ject.ziper.global.security.oauth.OAuthUserPrincipal;
 
 @Repository
 public class OAuthSignupTicketRepository {
+	public static final int DELETE_BATCH_SIZE = 100;
+
 	private final JdbcTemplate jdbc;
 
 	public OAuthSignupTicketRepository(JdbcTemplate jdbc) {
@@ -36,13 +38,13 @@ public class OAuthSignupTicketRepository {
 				tokenHash, Timestamp.from(now)).stream().findFirst();
 	}
 
-	public void deleteExpired(Instant now) {
-		jdbc.update("""
+	public int deleteExpired(Instant now) {
+		return jdbc.update("""
 				DELETE FROM ziper.oauth_signup_tickets WHERE token_hash IN (
 				    SELECT token_hash FROM ziper.oauth_signup_tickets WHERE expires_at <= ?
-				    ORDER BY expires_at LIMIT 100 FOR UPDATE SKIP LOCKED
+				    ORDER BY expires_at LIMIT ? FOR UPDATE SKIP LOCKED
 				)
-				""", Timestamp.from(now));
+				""", Timestamp.from(now), DELETE_BATCH_SIZE);
 	}
 
 }

@@ -24,7 +24,9 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import jakarta.servlet.http.Cookie;
 
@@ -51,11 +53,15 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ject.ziper.domain.auth.entity.Session;
+import com.ject.ziper.domain.auth.repository.OAuthSignupTicketRepository;
 import com.ject.ziper.domain.auth.repository.SessionRepository;
+import com.ject.ziper.domain.auth.service.AuthService;
+import com.ject.ziper.domain.auth.service.OAuthSignupTicketCleaner;
 import com.ject.ziper.domain.board.entity.ProductBoard;
 import com.ject.ziper.domain.board.repository.ProductBoardRepository;
 import com.ject.ziper.domain.user.entity.User;
@@ -111,6 +117,15 @@ class AuthIntegrationTest extends PostgresTestSupport {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private AuthService authService;
+
+	@Autowired
+	private OAuthSignupTicketCleaner ticketCleaner;
+
+	@Autowired
+	private TransactionTemplate transactionTemplate;
 
 	@Autowired
 	private PasswordEncoder passwordEncoder;
@@ -431,6 +446,145 @@ class AuthIntegrationTest extends PostgresTestSupport {
 		assertThat(loggedOut.getResponse().getHeader(HttpHeaders.SET_COOKIE)).contains("Max-Age=0",
 				"Path=/api/v1/auth");
 		assertThat(sessionRepository.count()).isZero();
+	}
+
+	@Test
+	void 세션행이없는쿠키로_쿠키모드로그아웃하면_401과함께만료쿠키를내려준다() throws Exception {
+		Cookie refresh = cookieModeSignup();
+		jdbc.update("DELETE FROM ziper.sessions");
+
+		MvcResult result = mvc.perform(cookieLogout(refresh)).andExpect(status().isUnauthorized()).andReturn();
+
+		assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE))
+				.contains(COOKIE_NAME + "=;", "Max-Age=0", "Path=/api/v1/auth", "HttpOnly", "Secure", "SameSite=Lax")
+				.doesNotContain("Domain=");
+	}
+
+	@Test
+	void 변조된쿠키로_쿠키모드로그아웃하면_401과함께만료쿠키를내려준다() throws Exception {
+		MvcResult result = mvc.perform(cookieLogout(new Cookie(COOKIE_NAME, "invalid.refresh.token")))
+				.andExpect(status().isUnauthorized()).andReturn();
+
+		assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).contains("Max-Age=0");
+	}
+
+	@Test
+	void 쿠키없이_쿠키모드로그아웃하면_401과함께만료쿠키를내려준다() throws Exception {
+		MvcResult result = mvc.perform(
+				post("/api/v1/auth/logout").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie"))
+				.andExpect(status().isUnauthorized()).andReturn();
+
+		assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).contains("Max-Age=0");
+	}
+
+	@Test
+	void 본문모드로_세션없는토큰을로그아웃하면_401만반환하고쿠키를내리지않는다() throws Exception {
+		Cookie refresh = cookieModeSignup();
+		jdbc.update("DELETE FROM ziper.sessions");
+
+		MvcResult result = mvc
+				.perform(post("/api/v1/auth/logout").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"refreshToken\":\"" + refresh.getValue() + "\"}"))
+				.andExpect(status().isUnauthorized()).andReturn();
+
+		assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).isNull();
+	}
+
+	@Test
+	void 재발급이먼저끝난뒤_이전쿠키로로그아웃하면_회전된세션을폐기하고쿠키를만료시킨다() throws Exception {
+		Cookie original = cookieModeSignup();
+		mvc.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie")
+				.cookie(original)).andExpect(status().isOk());
+		assertThat(sessionRepository.count()).isOne();
+
+		MvcResult result = mvc.perform(cookieLogout(original)).andExpect(status().isNoContent()).andReturn();
+
+		assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).contains("Max-Age=0");
+		assertThat(sessionRepository.count()).isZero();
+	}
+
+	@Test
+	void 회전된세션의이전토큰_재발급을요청하면_거부하고세션은유지한다() throws Exception {
+		Cookie original = cookieModeSignup();
+		MvcResult rotated = mvc.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN)
+				.header(COOKIE_MODE, "cookie").cookie(original)).andExpect(status().isOk()).andReturn();
+
+		mvc.perform(post("/api/v1/auth/reissue").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie")
+				.cookie(original)).andExpect(status().isUnauthorized());
+
+		assertThat(sessionRepository.count()).isOne();
+		mvc.perform(cookieLogout(rotated.getResponse().getCookie(COOKIE_NAME))).andExpect(status().isNoContent());
+	}
+
+	@Test
+	void 재발급트랜잭션이커밋되기전에_같은쿠키로로그아웃하면_커밋후회전된세션을폐기한다() throws Exception {
+		Cookie original = cookieModeSignup();
+		CountDownLatch reissued = new CountDownLatch(1);
+		CountDownLatch commit = new CountDownLatch(1);
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			Future<?> reissue = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+				authService.reissue(original.getValue(), "test");
+				reissued.countDown();
+				awaitLatch(commit);
+			}));
+			assertThat(reissued.await(10, TimeUnit.SECONDS)).isTrue();
+			Future<?> logout = executor.submit(() -> authService.logout(original.getValue()));
+			assertThat(logout.isDone()).isFalse();
+			commit.countDown();
+			reissue.get(10, TimeUnit.SECONDS);
+			logout.get(10, TimeUnit.SECONDS);
+		} finally {
+			commit.countDown();
+			executor.shutdownNow();
+		}
+
+		assertThat(sessionRepository.count()).isZero();
+	}
+
+	@Test
+	void 만료된소셜가입티켓만남았을때_정리작업을실행하면_추가가입없이만료행만삭제한다() throws Exception {
+		pendingSignup(mvc.perform(post("/api/v1/auth/oauth/kakao").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"kakao-token-no-email-1\"}")).andReturn());
+		for (int i = 0; i < OAuthSignupTicketRepository.DELETE_BATCH_SIZE * 2 + 5; i++) {
+			jdbc.update("""
+					INSERT INTO ziper.oauth_signup_tickets (token_hash, provider, provider_id, email, expires_at)
+					VALUES (?, 'KAKAO', ?, 'stale@example.com', CURRENT_TIMESTAMP - INTERVAL '1 minute')
+					""", "stale-" + i, "provider-" + i);
+		}
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM ziper.oauth_signup_tickets", Long.class))
+				.isEqualTo(OAuthSignupTicketRepository.DELETE_BATCH_SIZE * 2 + 6L);
+
+		ticketCleaner.deleteExpiredTickets();
+
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM ziper.oauth_signup_tickets", Long.class)).isOne();
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM ziper.oauth_signup_tickets WHERE email IS NOT NULL",
+				Long.class)).isZero();
+	}
+
+	private Cookie cookieModeSignup() throws Exception {
+		String ticket = pendingSignup(mvc.perform(
+				post("/api/v1/auth/oauth/kakao").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie")
+						.contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"kakao-token-no-email-1\"}"))
+				.andReturn());
+		Cookie refresh = mvc.perform(
+				signupRequest(ticket, true, true).header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie"))
+				.andExpect(status().isCreated()).andReturn().getResponse().getCookie(COOKIE_NAME);
+		assertThat(refresh).isNotNull();
+		return refresh;
+	}
+
+	private static MockHttpServletRequestBuilder cookieLogout(Cookie refresh) {
+		return post("/api/v1/auth/logout").header(HttpHeaders.ORIGIN, WEB_ORIGIN).header(COOKIE_MODE, "cookie")
+				.cookie(refresh);
+	}
+
+	private static void awaitLatch(CountDownLatch latch) {
+		try {
+			latch.await(10, TimeUnit.SECONDS);
+		} catch (InterruptedException exception) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	@Test

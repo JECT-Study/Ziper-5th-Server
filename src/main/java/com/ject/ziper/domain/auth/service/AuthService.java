@@ -140,7 +140,7 @@ public class AuthService {
 
 	@Transactional
 	public TokenResponse reissue(String refreshToken, String userAgent) {
-		Session session = lockedSession(refreshToken);
+		Session session = lockedSession(refreshToken, false);
 		Long userId = session.getUserId();
 		User user = userRepository.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
 		if (user.getStatus() != UserStatus.ACTIVE) {
@@ -155,15 +155,17 @@ public class AuthService {
 
 	@Transactional
 	public void logout(String refreshToken) {
-		sessionRepository.delete(lockedSession(refreshToken));
+		sessionRepository.delete(lockedSession(refreshToken, true));
 	}
 
-	private Session lockedSession(String refreshToken) {
+	private Session lockedSession(String refreshToken, boolean allowPreviousToken) {
 		Long userId = jwtTokenProvider.parseRefreshTokenUserId(refreshToken);
 		String currentHash = jwtTokenProvider.hashToken(refreshToken);
 		locks.lock("refresh:" + currentHash);
-		Session session = sessionRepository.findByTokenHash(currentHash)
-				.orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+		Optional<Session> found = allowPreviousToken
+				? sessionRepository.lockByCurrentOrPreviousTokenHash(currentHash)
+				: sessionRepository.lockByTokenHash(currentHash);
+		Session session = found.orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
 		if (!session.getUserId().equals(userId)) {
 			throw new BusinessException(ErrorCode.UNAUTHORIZED);
 		}
