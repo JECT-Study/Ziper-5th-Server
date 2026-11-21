@@ -265,6 +265,62 @@ class TagIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
+	void 연결된적없는커스텀태그_cardId로삭제하면_204를반환하고태그는유지된다() throws Exception {
+		Long userId = insertUser("unlinked@ziper.test", "미연결유저");
+		String token = bearerToken(userId);
+		Long tagId = createCustomTagViaApi(token, "미연결");
+		Long linkedCard = insertCard(userId, "https://store.example/items/unlinked-1", "상의");
+		Long otherCard = insertCard(userId, "https://store.example/items/unlinked-2", "하의");
+		linkCardTag(linkedCard, tagId);
+
+		mvc.perform(delete("/api/v1/tags/{tagId}", tagId).param("cardId", String.valueOf(otherCard))
+				.header(HttpHeaders.AUTHORIZATION, token)).andExpect(status().isNoContent());
+
+		assertThat(tagRepository.findById(tagId)).isPresent();
+		assertThat(countCardTagLink(linkedCard, tagId)).isOne();
+	}
+
+	@Test
+	void 휴지통카드ID로_태그삭제를요청하면_404를반환하고태그는유지된다() throws Exception {
+		Long userId = insertUser("trash-card@ziper.test", "휴지통유저");
+		String token = bearerToken(userId);
+		Long tagId = createCustomTagViaApi(token, "휴지통태그");
+		Long cardId = insertCard(userId, "https://store.example/items/trash-1", "휴지통 상품");
+		linkCardTag(cardId, tagId);
+		jdbc.update("UPDATE ziper.product_cards SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+				cardId);
+
+		mvc.perform(delete("/api/v1/tags/{tagId}", tagId).param("cardId", String.valueOf(cardId))
+				.header(HttpHeaders.AUTHORIZATION, token)).andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+
+		assertThat(tagRepository.findById(tagId)).isPresent();
+		assertThat(countCardTagLink(cardId, tagId)).isOne();
+	}
+
+	@Test
+	void 선행공백과샵이섞인입력과분해형한글_태그를생성하면_정리후중복은409로판정한다() throws Exception {
+		Long userId = insertUser("normalize@ziper.test", "정규화유저");
+		String token = bearerToken(userId);
+
+		mvc.perform(post("/api/v1/tags").header(HttpHeaders.AUTHORIZATION, token)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"  # #\uBD04x\"}"))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.title").value("\uBD04x"));
+		mvc.perform(post("/api/v1/tags").header(HttpHeaders.AUTHORIZATION, token)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"title\":\" #  \uC5EC\uB984\"}"))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_TAG"));
+		mvc.perform(post("/api/v1/tags").header(HttpHeaders.AUTHORIZATION, token)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"\u1112\u1161\u11AB\"}"))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.title").value("\uD55C"));
+		mvc.perform(post("/api/v1/tags").header(HttpHeaders.AUTHORIZATION, token)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"\uD55C\"}"))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_TAG"));
+		mvc.perform(post("/api/v1/tags").header(HttpHeaders.AUTHORIZATION, token)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"\u200B\"}"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_TAG_TITLE"));
+	}
+
+	@Test
 	void 카드저장용태그목록_resolveOrCreateForCard를호출하면_정규화중복제거후기존태그재사용및신규커스텀태그를순서대로반환한다() {
 		Long userA = insertUser("resolve-a@ziper.test", "헬퍼유저A");
 		Long userB = insertUser("resolve-b@ziper.test", "헬퍼유저B");
