@@ -4,15 +4,21 @@
 
 ## JWT 인증
 
-인증은 `Authorization: Bearer <token>` 헤더만 받는 무상태 방식입니다. 쿠키와 서버 세션은 사용하지 않습니다. HS256 키는 Base64로 인코딩한 최소 32바이트 값이며 `JWT_SECRET_BASE64`로 전달합니다. `iss=ziper-server`, `aud=ziper-api`, 비어 있지 않은 `sub`, 유효한 `exp`를 검증합니다. 발급자와 대상은 환경 변수로 변경할 수 있습니다.
+일반 API의 인증은 `Authorization: Bearer <token>` 헤더를 사용하는 무상태 방식입니다. Refresh Token 쿠키는 세션 재발급과 로그아웃에만 사용합니다. HS256 키는 Base64로 인코딩한 최소 32바이트 값이며 `JWT_SECRET_BASE64`로 전달합니다. `iss=ziper-server`, `aud=ziper-api`, 비어 있지 않은 `sub`, 유효한 `exp`를 검증합니다. 발급자와 대상은 환경 변수로 변경할 수 있습니다.
 
-CSRF 보호는 이 헤더 인증 전제를 바탕으로 꺼져 있습니다. 향후 인증을 쿠키로 옮기면 CSRF 설정도 다시 설계해야 합니다. CORS 허용 출처는 `CORS_ALLOWED_ORIGINS`에 명시하며 웹·모바일 배포 환경에 맞춰 관리합니다.
+브라우저가 Refresh Token 쿠키를 받으려면 로그인·가입·재발급·로그아웃에 `X-Refresh-Token-Mode: cookie`와 `credentials: "include"`를 사용합니다. 서버는 쿠키 모드에서 `Origin`이 `CORS_ALLOWED_ORIGINS`에 명시된 출처와 정확히 일치할 때만 처리합니다. 일반 API는 Bearer 헤더를 사용하며 쿠키 인증용 CSRF 검사는 인증 경로의 쿠키 요청에 적용합니다. 인증 경로에 한해 CORS 자격 증명을 허용합니다.
+
+운영 웹의 Origin은 `https://app.ziper.cc`를 런타임 `CORS_ALLOWED_ORIGINS`에 등록하고, 웹은 같은 사이트인 `https://api.ziper.cc`로 API를 요청합니다. Cookie 속성은 `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth`이며 API 호스트에 한정합니다. 웹은 재발급과 로그아웃에 Refresh Token 본문을 보내지 않습니다. 모바일은 opt-in 헤더 없이 기존 JSON 본문으로 Refresh Token을 보내고 받습니다. [ADR 0018](adr/0018-web-refresh-and-signup-consent.md)을 따릅니다.
 
 자체 토큰은 `type` 클레임으로 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 구분하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. 만료 시간은 `JWT_ACCESS_EXPIRATION_SECONDS`(기본 3600초)와 `JWT_REFRESH_EXPIRATION_SECONDS`(기본 1209600초)로 설정합니다.
 
 Bearer API 인증은 서명·만료·클레임 검증 뒤 `sub`의 회원이 `users`에 존재하고 `status=ACTIVE`인지 요청마다 PK 조회 한 번으로 확인합니다(`ActiveUserJwtAuthenticationConverter`와 `ActiveUserChecker`). 숫자가 아닌 `sub`, 삭제된 회원, `WITHDRAWN` 회원의 만료 전 Access Token은 기존 JWT 401과 같은 `ProblemFactory` 응답(`UNAUTHORIZED`)으로 거부합니다. 업무 코드는 FK 위반을 잡지 않습니다. 프로세스 메모리 캐시는 두지 않으므로 탈퇴는 즉시 반영되며 보호 API 요청마다 쿼리 한 번이 추가됩니다. 조회 중 DB 장애는 인증 필터에서 5xx 경로로 처리되어 인증을 통과시키지 않습니다.
 
-소셜 로그인(`POST /api/v1/auth/oauth/{provider}`)은 프로바이더별 전략(`OAuthProviderStrategy`)으로 토큰을 검증합니다. 인가 코드 교환(`POST /api/v1/auth/oauth/{provider}/code`)은 본문 `{"code":"...","redirectUri":"...","state":"..."}`(`redirectUri`·`state` 선택)을 받아 `RestClientAuthorizationCodeTokenResponseClient` 기반 `OAuthAuthorizationCodeExchanger`로 프로바이더 토큰 엔드포인트와 통신한 뒤 동일한 검증 전략으로 연결합니다. Apple 코드 교환은 `APPLE_AUTH_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`(PKCS#8 EC P-256 개인키)로 단기 ES256 `client_secret` JWT를 서명해 `APPLE_TOKEN_URI`에서 `id_token`을 획득하고, Naver는 `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`·`state`로 `NAVER_TOKEN_URI`에서 `access_token`을, Kakao는 `KAKAO_CLIENT_ID`·선택 `KAKAO_CLIENT_SECRET`·`redirectUri`로 `KAKAO_TOKEN_URI`에서 `access_token`을 획득합니다. Apple 로그인은 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID와 `APPLE_ISSUER`, `APPLE_JWKS_URI`를 기준으로 ID Token을 검증하고, Naver 로그인은 클라이언트가 전달한 Access Token으로 `NAVER_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v1/nid/me`)를 호출해 `resultcode=00`, 사용자 식별자(`response.id`)와 선택 이메일(`response.email`)을 검증·추출하며, Kakao 로그인은 클라이언트가 전달한 Access Token으로 `KAKAO_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v2/user/me`)를 호출해 사용자 식별자(`id`)와 선택 이메일(`kakao_account.email`)을 검증·추출합니다. 미가입 사용자는 이메일이 없더라도 소셜 식별자(`oauth_connect`)만으로 `Ziper`+5자리 난수 닉네임과 기본 보드를 생성해 자동 가입시킵니다. 프로바이더 이메일은 소문자로 정규화해 저장하며, 같은 이메일(대소문자 무시)의 회원이 이미 있으면 자동 연결하지 않고 `EMAIL_ALREADY_REGISTERED`(`409`)로 거부합니다. 같은 소셜 계정의 동시 첫 로그인은 advisory lock으로 직렬화해 한 회원만 만들고 둘 다 로그인시킵니다([ADR 0016](adr/0016-email-password-signup.md)). 자체 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 발급하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. Refresh Token은 SHA-256 해시만 `ziper.sessions` 테이블에 저장하고 재발급(`POST /api/v1/auth/reissue`) 시 회전하며 로그아웃(`POST /api/v1/auth/logout`) 시 삭제합니다. 가입 전 화면에서 사용하는 닉네임 중복 검사 `GET /api/v1/users/nickname/availability`도 인증 없이 허용합니다. 이 경로는 닉네임 사용 여부만 응답하며 요청 횟수 제한은 아직 없습니다. 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다. 로컬 리뷰어가 `http://localhost:5173`(`scripts/oauth-e2e-demo.py --mode env`)에서 실제 OAuth 콘솔과 연동해 테스트할 때는 Kakao·Naver 개발자 콘솔에 `http://localhost:5173` Web 도메인과 `http://localhost:5173/callback/{kakao|naver}` Redirect URI를 등록하며, HTTPS 실도메인만 허용하는 Apple 콘솔은 등록된 HTTPS Return URL 또는 `--mode mock` 로컬 IdP로 검증합니다.
+소셜 로그인(`POST /api/v1/auth/oauth/{provider}`)은 프로바이더별 전략(`OAuthProviderStrategy`)으로 토큰을 검증합니다. 인가 코드 교환(`POST /api/v1/auth/oauth/{provider}/code`)은 본문 `{"code":"...","redirectUri":"...","state":"..."}`(`redirectUri`·`state` 선택)을 받아 `RestClientAuthorizationCodeTokenResponseClient` 기반 `OAuthAuthorizationCodeExchanger`로 프로바이더 토큰 엔드포인트와 통신한 뒤 동일한 검증 전략으로 연결합니다. Apple 코드 교환은 `APPLE_AUTH_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`(PKCS#8 EC P-256 개인키)로 단기 ES256 `client_secret` JWT를 서명해 `APPLE_TOKEN_URI`에서 `id_token`을 획득하고, Naver는 `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`·`state`로 `NAVER_TOKEN_URI`에서 `access_token`을, Kakao는 `KAKAO_CLIENT_ID`·선택 `KAKAO_CLIENT_SECRET`·`redirectUri`로 `KAKAO_TOKEN_URI`에서 `access_token`을 획득합니다. Apple 로그인은 `APPLE_CLIENT_IDS`에 등록된 iOS·웹 클라이언트 ID와 `APPLE_ISSUER`, `APPLE_JWKS_URI`를 기준으로 ID Token을 검증하고, Naver 로그인은 클라이언트가 전달한 Access Token으로 `NAVER_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v1/nid/me`)를 호출해 `resultcode=00`, 사용자 식별자(`response.id`)와 선택 이메일(`response.email`)을 검증·추출하며, Kakao 로그인은 클라이언트가 전달한 Access Token으로 `KAKAO_USER_INFO_URI` 사용자 정보 엔드포인트(`GET /v2/user/me`)를 호출해 사용자 식별자(`id`)와 선택 이메일(`kakao_account.email`)을 검증·추출합니다. 프로바이더 이메일은 소문자로 정규화해 저장하며, 같은 이메일(대소문자 무시)의 회원이 이미 있으면 `EMAIL_ALREADY_REGISTERED`(`409`)로 거부합니다. 자체 Access Token(`type=access`)과 Refresh Token(`type=refresh`)을 발급하며, Bearer API 인증은 `type=refresh` 토큰을 거부합니다. Refresh Token은 SHA-256 해시만 `ziper.sessions` 테이블에 저장하고 재발급(`POST /api/v1/auth/reissue`) 시 회전하며 로그아웃(`POST /api/v1/auth/logout`) 시 삭제합니다. 세션 행은 `SELECT ... FOR UPDATE`로 잠가 회전과 폐기를 직렬화하며, 로그아웃은 현재 해시뿐 아니라 회전 직전 해시로도 같은 세션을 찾아 폐기합니다. 재발급은 현재 해시만 허용합니다. 쿠키 모드 로그아웃은 세션이 없거나 쿠키가 무효여서 401을 반환해도 항상 만료 쿠키(`Max-Age=0`, 같은 속성)를 응답에 포함하고, 본문 모드는 쿠키를 내리지 않습니다. 가입 전 화면에서 사용하는 닉네임 중복 검사 `GET /api/v1/users/nickname/availability`도 인증 없이 허용합니다. 이 경로는 닉네임 사용 여부만 응답하며 요청 횟수 제한은 아직 없습니다. 프로세스 메모리를 영속 저장소처럼 사용하지 않습니다. 로컬 리뷰어가 `http://localhost:5173`(`scripts/oauth-e2e-demo.py --mode env`)에서 실제 OAuth 콘솔과 연동해 테스트할 때는 Kakao·Naver 개발자 콘솔에 `http://localhost:5173` Web 도메인과 `http://localhost:5173/callback/{kakao|naver}` Redirect URI를 등록하며, HTTPS 실도메인만 허용하는 Apple 콘솔은 등록된 HTTPS Return URL 또는 `--mode mock` 로컬 IdP로 검증합니다.
+
+미가입 소셜 계정 확인 시 `SIGNUP_REQUIRED`와 10분 유효한 `signupToken`을 반환합니다. 클라이언트는 `POST /api/v1/auth/oauth/signup`에 가입 토큰과 동의 값을 제출합니다. 서비스 약관과 개인정보 수집·이용 동의가 확인된 뒤에만 이메일 유무와 관계없이 회원과 세션을 만들고 `authType: LOGIN`을 반환합니다.
+
+이메일 로그인 `POST /api/v1/auth/email/login`은 이메일과 비밀번호로 인증하고 세션을 생성합니다. 메일 발송 기능을 꺼도 로그인할 수 있습니다. 이메일·소셜 로그인 성공, 가입 완료, 토큰 재발급 응답은 `agreements`에 기록된 동의 여부와 시각을 포함합니다.
 
 ## 이메일 인증번호
 
@@ -22,9 +28,36 @@ Bearer API 인증은 서명·만료·클레임 검증 뒤 `sub`의 회원이 `us
 
 잘못된 번호는 `EMAIL_CODE_INVALID`(`400`), 만료는 `EMAIL_CODE_EXPIRED`(`410`)입니다. 오입력은 흐름과 관계없이 이메일 단위로 합산합니다. 다섯 번째 오입력에서 해당 이메일을 30분 동안 잠그고 `EMAIL_CODE_ATTEMPTS_EXCEEDED`(`429`, `인증을 완료하지 못했어요.`)를 반환합니다. 잠금 동안 같은 이메일의 발급·재전송·확인도 같은 오류로 거부합니다. 30분이 지나면 횟수가 초기화되며, 잠기지 않은 실패도 마지막 실패 후 30분이 지나면 초기화됩니다. 인증에 성공하면 실패 기록을 지웁니다. 클라이언트는 이 오류 코드로 모달을 표시하고 다른 방법 또는 다른 이메일 인증으로 이동합니다. 검증 성공은 DB의 `verified_at`만 기록하며 회원 가입이나 로그인 토큰을 발급하지 않습니다. 이미 가입된 이메일(OAuth 가입 포함, 대소문자 무시)은 발급·재전송에서 `EMAIL_ALREADY_REGISTERED`(`409`)로 거부하며 발급 행과 메일을 만들지 않습니다.
 
-이메일 회원 가입 `POST /api/v1/auth/email/signup`은 본문 `{"flowId":"...","password":"...","nickname":"...","agreements":{"termsOfService":true,"privacyPolicy":true,"marketing":false}}`를 받아 성공 시 `201`과 `{"accessToken":"...","refreshToken":"..."}`를 `Cache-Control: no-store`로 반환합니다. 인증을 마친 뒤 30분 안의 흐름만 한 번 사용할 수 있고, 미인증·소비·만료 흐름은 `EMAIL_FLOW_INVALID`(`400`)입니다. 비밀번호는 영문·숫자·특수문자를 각각 포함한 공백 없는 ASCII 8~64자이며 위반 시 `INVALID_PASSWORD`(`400`)입니다. 닉네임은 중복 검사 API와 같은 규칙(`INVALID_NICKNAME`·`DUPLICATE_NICKNAME`)을 적용하고, 필수 약관 미동의는 `INVALID_REQUEST`(`400`)입니다. 비밀번호는 `DelegatingPasswordEncoder`의 BCrypt 해시로만 저장하며 회원·기본 보드·세션 생성과 흐름 소비를 한 트랜잭션에서 처리합니다([ADR 0016](adr/0016-email-password-signup.md)). 이메일 기능과 같이 `EMAIL_MAIL_ENABLED=true`일 때만 노출됩니다.
+이메일 회원 가입 `POST /api/v1/auth/email/signup`은 본문 `{"flowId":"...","password":"...","nickname":"...","agreements":{"termsOfService":true,"privacyPolicy":true,"marketing":false}}`를 받아 성공 시 `201`과 세션 토큰 및 약관 상태를 `Cache-Control: no-store`로 반환합니다. 인증을 마친 뒤 30분 안의 흐름만 한 번 사용할 수 있고, 미인증·소비·만료 흐름은 `EMAIL_FLOW_INVALID`(`400`)입니다. 비밀번호는 영문·숫자·특수문자를 각각 포함한 공백 없는 ASCII 8~64자이며 위반 시 `INVALID_PASSWORD`(`400`)입니다. 닉네임은 중복 검사 API와 같은 규칙(`INVALID_NICKNAME`·`DUPLICATE_NICKNAME`)을 적용하고, 필수 약관 미동의는 `INVALID_REQUEST`(`400`)입니다. 비밀번호는 `DelegatingPasswordEncoder`의 BCrypt 해시로만 저장하며 회원·기본 보드·세션 생성과 흐름 소비를 한 트랜잭션에서 처리합니다([ADR 0016](adr/0016-email-password-signup.md)). 이메일 기능과 같이 `EMAIL_MAIL_ENABLED=true`일 때만 노출됩니다.
 
 발급 기록은 DB에 먼저 커밋한 뒤 메일을 보냅니다. SMTP 실패는 전역 `5xx` 오류로 전달하고 자동 재발송하지 않으며, 남은 기록에도 발송 제한을 적용합니다. 로컬 Gmail 발송·수신의 검증 범위는 [2026-11-14 검증 이력](verification.md#2026-11-14-jec-43-이메일-인증번호-발송확인)에, Mailgun(`smtp.mailgun.org`, `noreply@joonamin.dev`) 로컬 발송·수신 및 Secret Manager 등록 기록은 [2026-11-16 Mailgun 검증 이력](verification.md#2026-11-16-mailgun-smtp-이메일-인증-발송수신)에 기록합니다. [ADR 0009](adr/0009-email-verification-delivery.md)에 이 일관성 경계를, [ADR 0012](adr/0012-email-verification-lockout.md)에 이메일 단위 잠금과 한도 변경을 기록했습니다.
+
+## 상품 카드 이미지 저장소와 비동기 B-2 미러링
+
+상품 카드 직접 업로드(`POST /api/v1/files/images`, JWT 인증 필수)와 외부 OG 이미지 비동기 미러링은 모두 4:3 세로 비율(최대 `480×640`) WebP 썸네일로 정규화해 비공개 Object Storage에 저장하고 단기 서명 URL로 서빙합니다([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)). 로컬(`local`)과 테스트(`test`) 프로필은 기본으로 인메모리 어댑터(`memory`)를 사용하며, 운영 환경은 `STORAGE_PROVIDER=supabase`와 비공개 버킷 자격 증명을 사용합니다.
+
+| 환경 변수 | 기본값 | 역할 |
+| --- | --- | --- |
+| `STORAGE_PROVIDER` | `supabase` (`local`/`test`: `memory`) | Object Storage 어댑터 선택 (`supabase` \| `memory`) |
+| `STORAGE_SUPABASE_URL` | 없음 | Supabase 프로젝트 HTTPS URL |
+| `STORAGE_SUPABASE_SERVICE_ROLE_KEY` | 없음 | Supabase Storage 접근용 Service Role 키(로그·응답 노출 금지) |
+| `STORAGE_BUCKET` | `product-images` | 비공개 이미지 버킷 이름 |
+| `STORAGE_SIGNED_URL_EXPIRATION_SECONDS` | `900` | 단기 서명 URL 유효 시간(초) |
+| `STORAGE_MAX_FILE_SIZE_BYTES` | `5242880` | 업로드·다운로드 최대 파일 크기(5MB) |
+| `IMAGE_MIRRORING_ENABLED` | `true` | 외부 OG 이미지 미러링 전역 킬 스위치(`false` 시 작업 미등록, 원본 `image_url` 유지) |
+| `IMAGE_MIRRORING_DISABLED_HOSTS` | 없음 | 쉼표 구분 호스트별 미러링 중단 목록 |
+| `IMAGE_MIRRORING_WORKER_ENABLED` | `true` (`test`: `false`) | `ziper.image_mirror_jobs` 폴링 및 커밋 후 빠른 경로 워커 활성화 |
+| `IMAGE_MIRRORING_POLL_INTERVAL_MS` | `5000` | 스케줄러 `FOR UPDATE SKIP LOCKED` 폴링 주기(ms) |
+| `IMAGE_MIRRORING_BATCH_SIZE` | `5` | 워커 1회 클레임 최대 작업 수 |
+| `IMAGE_MIRRORING_CONNECT_TIMEOUT_MS` / `IMAGE_MIRRORING_READ_TIMEOUT_MS` | `5000` / `10000` | 외부 이미지 다운로드 연결 타임아웃과 홉당 전체 기한(ms). 읽기 값은 헤더·본문 수신을 합친 총 기한이며 초과 시 연결을 끊고 일시적 오류로 처리 |
+| `IMAGE_MIRRORING_HOST_MAX_CONCURRENCY` / `IMAGE_MIRRORING_HOST_MIN_INTERVAL_MS` | `2` / `200` | CDN 호스트별 동시 요청 상한 및 최소 요청 간격(ms) |
+| `IMAGE_MIRRORING_CIRCUIT_FAILURE_THRESHOLD` / `IMAGE_MIRRORING_CIRCUIT_OPEN_SECONDS` | `3` / `300` | 연속 `429`/`503` 발생 시 호스트 자동 차단 임계치 및 쿨다운(초). `403`은 경로별 결과라 서킷에 반영하지 않음. 서킷 상태는 인스턴스별 메모리의 일시적 계측값이며 재시작 시 초기화 |
+| `IMAGE_MIRRORING_DEDUP_TTL_SECONDS` | `30` | 동일 `source_url_hash` 최근 다운로드 중복 제거 TTL(초) |
+| `IMAGE_MIRRORING_DEDUP_MAX_BYTES` | `16777216` | 중복 제거 캐시가 보관하는 원본 바이트 총량 상한(만료 항목은 삽입 시 정리) |
+| `IMAGE_MIRRORING_MAX_ATTEMPTS` | `5` | 작업당 최대 시도 수. 일시적 오류(타임아웃·`5xx`·`429`·서킷 열림·동시성 거부·저장소 오류)는 초과 전까지 백오프 후 `PENDING`으로 복귀 |
+| `IMAGE_MIRRORING_RETRY_BASE_DELAY_SECONDS` / `IMAGE_MIRRORING_RETRY_MAX_DELAY_SECONDS` | `60` / `3600` | 재시도 지수 백오프의 첫 지연과 상한(초). 서킷 열림은 서킷 쿨다운 이상 대기 |
+| `IMAGE_MIRRORING_LOCK_TIMEOUT_SECONDS` | `600` | `PROCESSING` 선점(`locked_at`) 만료 시간(초). 만료된 작업은 다시 선점해 처리 |
+| `STORAGE_SUPABASE_CONNECT_TIMEOUT_MS` / `STORAGE_SUPABASE_READ_TIMEOUT_MS` | `3000` / `15000` | Supabase Storage 호출 연결·읽기 타임아웃(ms) |
 
 ## 상태 점검
 
