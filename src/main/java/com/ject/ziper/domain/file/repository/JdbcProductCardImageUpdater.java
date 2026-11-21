@@ -21,9 +21,13 @@ public class JdbcProductCardImageUpdater implements ProductCardImageUpdater {
 	}
 
 	@Override
-	public void markMirrorFailed(Long cardId) {
-		// Original image_url is intentionally preserved for fallback rendering;
-		// Wave 2 (JEC-54) may extend this updater to also record image_status =
-		// 'FAILED'.
+	public boolean markMirrorFailed(Long cardId, String expectedImageUrl) {
+		// The original image_url is kept so the client can still render it as a
+		// fallback.
+		return jdbcTemplate.update("""
+				UPDATE ziper.product_cards
+				SET image_status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND is_deleted = FALSE AND image_url = ?
+				""", cardId, expectedImageUrl) > 0;
 	}
 }

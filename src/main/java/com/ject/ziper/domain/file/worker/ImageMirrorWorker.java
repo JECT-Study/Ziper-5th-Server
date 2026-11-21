@@ -138,7 +138,7 @@ public class ImageMirrorWorker {
 			for (ImageMirrorJob job : due) {
 				if (job.getAttemptCount() >= properties.mirrorMaxAttempts()) {
 					job.markFailed(MAX_ATTEMPTS_EXCEEDED, now);
-					productCardImageUpdater.markMirrorFailed(job.getCardId());
+					productCardImageUpdater.markMirrorFailed(job.getCardId(), job.getSourceUrl());
 				} else {
 					job.markProcessing(now);
 					toProcess.add(job);
@@ -235,7 +235,7 @@ public class ImageMirrorWorker {
 				current.scheduleRetry(errorReason, now.plus(retryDelay(current.getAttemptCount(), errorReason)), now);
 			} else {
 				current.markFailed(errorReason, now);
-				productCardImageUpdater.markMirrorFailed(current.getCardId());
+				productCardImageUpdater.markMirrorFailed(current.getCardId(), current.getSourceUrl());
 			}
 			jobRepository.save(current);
 		});
