@@ -1,0 +1,149 @@
+spring:
+  application:
+    name: ziper-server
+  jmx:
+    enabled: false
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: ${DB_JDBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 3000
+      validation-timeout: 1000
+      data-source-properties:
+        connectTimeout: 3
+        socketTimeout: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: ziper
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    url: ${MIGRATION_JDBC_URL:${DB_JDBC_URL}}
+    user: ${MIGRATION_USERNAME:${DB_USERNAME}}
+    password: ${MIGRATION_PASSWORD:${DB_PASSWORD}}
+    default-schema: ziper
+    schemas: ziper
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
+      "[mail.smtp.ssl.checkserveridentity]": true
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  servlet:
+    session:
+      tracking-modes: []
+management:
+  health:
+    mail:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+    jmx:
+      exposure:
+        exclude: '*'
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+        add-additional-paths: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+app:
+  mail:
+    enabled: ${EMAIL_MAIL_ENABLED:false}
+    from: ${EMAIL_FROM:}
+    code-secret-base64: ${EMAIL_CODE_SECRET_BASE64:}
+  monitoring:
+    metrics-enabled: ${APP_MONITORING_METRICS_ENABLED:false}
+    origin: ${APP_MONITORING_ORIGIN:local}
+  runtime-mode: ${APP_RUNTIME_MODE:server}
+  security:
+    jwt-secret-base64: ${JWT_SECRET_BASE64:}
+    jwt-issuer: ${JWT_ISSUER:ziper-server}
+    jwt-audience: ${JWT_AUDIENCE:ziper-api}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+    access-token-expiration-seconds: ${JWT_ACCESS_EXPIRATION_SECONDS:3600}
+    refresh-token-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:1209600}
+    apple-issuer: ${APPLE_ISSUER:https://appleid.apple.com}
+    apple-jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
+    apple-client-ids: ${APPLE_CLIENT_IDS:}
+    apple-token-uri: ${APPLE_TOKEN_URI:https://appleid.apple.com/auth/token}
+    apple-auth-client-id: ${APPLE_AUTH_CLIENT_ID:}
+    apple-team-id: ${APPLE_TEAM_ID:}
+    apple-key-id: ${APPLE_KEY_ID:}
+    apple-private-key: ${APPLE_PRIVATE_KEY:}
+    naver-user-info-uri: ${NAVER_USER_INFO_URI:https://openapi.naver.com/v1/nid/me}
+    naver-token-uri: ${NAVER_TOKEN_URI:https://nid.naver.com/oauth2.0/token}
+    naver-client-id: ${NAVER_CLIENT_ID:}
+    naver-client-secret: ${NAVER_CLIENT_SECRET:}
+    kakao-user-info-uri: ${KAKAO_USER_INFO_URI:https://kapi.kakao.com/v2/user/me}
+    kakao-token-uri: ${KAKAO_TOKEN_URI:https://kauth.kakao.com/oauth/token}
+    kakao-client-id: ${KAKAO_CLIENT_ID:}
+    kakao-client-secret: ${KAKAO_CLIENT_SECRET:}
+sentry:
+  enabled: ${SENTRY_ENABLED:false}
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:${spring.profiles.active:server}}
+  release: ${SENTRY_RELEASE:local}
+  traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.1}
+  profile-session-sample-rate: ${SENTRY_PROFILE_SESSION_SAMPLE_RATE:0.0}
+  profile-lifecycle: TRACE
+  tags:
+    origin: ${APP_MONITORING_ORIGIN:local}
+  send-default-pii: false
+  max-request-body-size: none
+  logs:
+    enabled: false
+  send-client-reports: false
+  data-collection:
+    user-info: false
+    cookies:
+      mode: 'OFF'
+    url-query-params:
+      mode: 'OFF'
+    http-bodies: []
+    http-headers:
+      request:
+        mode: 'OFF'
+      response:
+        mode: 'OFF'
+    database-query-data: false
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+    persist-authorization: false
+    validator-url: ""
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"
