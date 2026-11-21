@@ -12,9 +12,12 @@ public record StorageProperties(String provider, String supabaseUrl, String supa
 		List<String> disabledMirrorHosts, Boolean workerEnabled, Long mirrorPollIntervalMs, Integer mirrorBatchSize,
 		Integer mirrorConnectTimeoutMs, Integer mirrorReadTimeoutMs, Integer mirrorHostMaxConcurrency,
 		Long mirrorHostMinIntervalMs, Integer mirrorCircuitFailureThreshold, Long mirrorCircuitOpenSeconds,
-		Long mirrorDedupTtlSeconds) {
+		Long mirrorDedupTtlSeconds, Long mirrorDedupMaxBytes, Integer mirrorMaxAttempts,
+		Long mirrorRetryBaseDelaySeconds, Long mirrorRetryMaxDelaySeconds, Long mirrorLockTimeoutSeconds,
+		Integer supabaseConnectTimeoutMs, Integer supabaseReadTimeoutMs) {
 
 	public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 5_242_880L;
+	public static final long DEFAULT_DEDUP_MAX_BYTES = 16L * 1024 * 1024;
 
 	@ConstructorBinding
 	public StorageProperties {
@@ -75,11 +78,54 @@ public record StorageProperties(String provider, String supabaseUrl, String supa
 		if (mirrorDedupTtlSeconds < 0) {
 			throw new IllegalArgumentException("app.storage.mirror-dedup-ttl-seconds must be non-negative");
 		}
+		mirrorDedupMaxBytes = mirrorDedupMaxBytes == null ? DEFAULT_DEDUP_MAX_BYTES : mirrorDedupMaxBytes;
+		if (mirrorDedupMaxBytes < 0) {
+			throw new IllegalArgumentException("app.storage.mirror-dedup-max-bytes must be non-negative");
+		}
+		mirrorMaxAttempts = mirrorMaxAttempts == null ? 5 : mirrorMaxAttempts;
+		if (mirrorMaxAttempts <= 0) {
+			throw new IllegalArgumentException("app.storage.mirror-max-attempts must be positive");
+		}
+		mirrorRetryBaseDelaySeconds = mirrorRetryBaseDelaySeconds == null ? 60L : mirrorRetryBaseDelaySeconds;
+		if (mirrorRetryBaseDelaySeconds <= 0) {
+			throw new IllegalArgumentException("app.storage.mirror-retry-base-delay-seconds must be positive");
+		}
+		mirrorRetryMaxDelaySeconds = mirrorRetryMaxDelaySeconds == null ? 3600L : mirrorRetryMaxDelaySeconds;
+		if (mirrorRetryMaxDelaySeconds < mirrorRetryBaseDelaySeconds) {
+			throw new IllegalArgumentException(
+					"app.storage.mirror-retry-max-delay-seconds must not be less than the base delay");
+		}
+		mirrorLockTimeoutSeconds = mirrorLockTimeoutSeconds == null ? 600L : mirrorLockTimeoutSeconds;
+		if (mirrorLockTimeoutSeconds <= 0) {
+			throw new IllegalArgumentException("app.storage.mirror-lock-timeout-seconds must be positive");
+		}
+		supabaseConnectTimeoutMs = supabaseConnectTimeoutMs == null ? 3000 : supabaseConnectTimeoutMs;
+		if (supabaseConnectTimeoutMs <= 0) {
+			throw new IllegalArgumentException("app.storage.supabase-connect-timeout-ms must be positive");
+		}
+		supabaseReadTimeoutMs = supabaseReadTimeoutMs == null ? 15000 : supabaseReadTimeoutMs;
+		if (supabaseReadTimeoutMs <= 0) {
+			throw new IllegalArgumentException("app.storage.supabase-read-timeout-ms must be positive");
+		}
 	}
 
 	public static StorageProperties defaultsForMemory() {
 		return new StorageProperties("memory", "", "", "product-images", 900L, DEFAULT_MAX_FILE_SIZE_BYTES, true,
-				List.of(), false, 5000L, 5, 5000, 10000, 2, 0L, 3, 300L, 30L);
+				List.of(), false, 5000L, 5, 5000, 10000, 2, 0L, 3, 300L, 30L, DEFAULT_DEDUP_MAX_BYTES, 5, 60L, 3600L,
+				600L, 3000, 15000);
+	}
+
+	/**
+	 * Test/override helper: copies this configuration with a different dedup cache
+	 * budget.
+	 */
+	public StorageProperties withDedup(long ttlSeconds, long maxBytes) {
+		return new StorageProperties(provider, supabaseUrl, supabaseServiceRoleKey, bucket, signedUrlExpirationSeconds,
+				maxFileSizeBytes, mirroringEnabled, disabledMirrorHosts, workerEnabled, mirrorPollIntervalMs,
+				mirrorBatchSize, mirrorConnectTimeoutMs, mirrorReadTimeoutMs, mirrorHostMaxConcurrency,
+				mirrorHostMinIntervalMs, mirrorCircuitFailureThreshold, mirrorCircuitOpenSeconds, ttlSeconds, maxBytes,
+				mirrorMaxAttempts, mirrorRetryBaseDelaySeconds, mirrorRetryMaxDelaySeconds, mirrorLockTimeoutSeconds,
+				supabaseConnectTimeoutMs, supabaseReadTimeoutMs);
 	}
 
 	public boolean isHostDisabled(String host) {
@@ -101,7 +147,11 @@ public record StorageProperties(String provider, String supabaseUrl, String supa
 				+ ", mirrorHostMaxConcurrency=" + mirrorHostMaxConcurrency + ", mirrorHostMinIntervalMs="
 				+ mirrorHostMinIntervalMs + ", mirrorCircuitFailureThreshold=" + mirrorCircuitFailureThreshold
 				+ ", mirrorCircuitOpenSeconds=" + mirrorCircuitOpenSeconds + ", mirrorDedupTtlSeconds="
-				+ mirrorDedupTtlSeconds + "]";
+				+ mirrorDedupTtlSeconds + ", mirrorDedupMaxBytes=" + mirrorDedupMaxBytes + ", mirrorMaxAttempts="
+				+ mirrorMaxAttempts + ", mirrorRetryBaseDelaySeconds=" + mirrorRetryBaseDelaySeconds
+				+ ", mirrorRetryMaxDelaySeconds=" + mirrorRetryMaxDelaySeconds + ", mirrorLockTimeoutSeconds="
+				+ mirrorLockTimeoutSeconds + ", supabaseConnectTimeoutMs=" + supabaseConnectTimeoutMs
+				+ ", supabaseReadTimeoutMs=" + supabaseReadTimeoutMs + "]";
 	}
 
 	private static String normalizeBaseUrl(String raw) {

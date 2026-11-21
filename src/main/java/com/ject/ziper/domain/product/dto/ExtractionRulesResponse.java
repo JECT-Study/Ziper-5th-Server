@@ -44,7 +44,7 @@ public record ExtractionRulesResponse(
 
 	@Schema(description = "표준 URL 정규화 패턴 및 템플릿")
 	public record CanonicalRule(
-			@Schema(description = "상품 경로 정규식 패턴", example = "/(?:products|app/goods)/(\\d+)", requiredMode = RequiredMode.REQUIRED) String pattern,
+			@Schema(description = "상품 경로 정규식 패턴. 경로(path)에 적용하며 경로 시작(^)과 상품 번호 끝 경계((?:/|$))를 포함한다. 비예약 문자의 퍼센트 인코딩을 디코딩한 경로에 매칭한다.", example = "^/(?:products|app/goods)/(\\d+)(?:/|$)", requiredMode = RequiredMode.REQUIRED) String pattern,
 			@Schema(description = "표준 URL 생성 템플릿", example = "https://www.musinsa.com/products/{1}", requiredMode = RequiredMode.REQUIRED) String template) {
 	}
 

@@ -50,7 +50,9 @@ public class WebpThumbnailProcessor {
 			}
 		}
 
-		BufferedImage source = decodeValidatedImage(rawBytes);
+		// ImageIO ignores EXIF Orientation, so phone photos would otherwise be rotated
+		// and cropped the wrong way.
+		BufferedImage source = ExifOrientation.apply(decodeValidatedImage(rawBytes), ExifOrientation.read(rawBytes));
 		BufferedImage cropped = centerCropPortrait4to3(source);
 		BufferedImage resized = resizeWithoutUpscaling(cropped);
 		byte[] webpBytes = encodeWebp(resized);

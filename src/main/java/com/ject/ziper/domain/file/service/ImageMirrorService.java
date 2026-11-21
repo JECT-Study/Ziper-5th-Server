@@ -70,6 +70,17 @@ public class ImageMirrorService {
 		return true;
 	}
 
+	/**
+	 * Cancels the card's PENDING and PROCESSING jobs. Call it in the same
+	 * transaction that edits the card's image or deletes the card, so a
+	 * late-finishing worker cannot attach a stale image. Returns the number of jobs
+	 * canceled.
+	 */
+	@Transactional
+	public int cancelPendingMirrorJobs(long cardId) {
+		return jobRepository.cancelActiveByCardId(cardId, clock.instant());
+	}
+
 	private void schedulePostCommitWakeup() {
 		if (TransactionSynchronizationManager.isSynchronizationActive()) {
 			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
