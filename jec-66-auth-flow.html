@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ziper 로그인 흐름 · JEC-66</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    color-scheme: light dark;
+    --demo-ink: var(--foreground, light-dark(#172239, #eaf0fa));
+    --demo-muted: var(--muted-foreground, light-dark(#54627a, #b1bed3));
+    --demo-paper: var(--card, light-dark(#fff, #192337));
+    --demo-soft: var(--secondary, light-dark(#f1f5fb, #26334b));
+    --demo-line: var(--border, light-dark(#dce5f1, #415069));
+    --demo-blue: light-dark(#3059c4, #a7baff);
+    --demo-active: light-dark(#e8efff, #2d3d63);
+    --demo-good: light-dark(#12664e, #a0e3c3);
+    --demo-bad: light-dark(#ad332c, #ffb3aa);
+    font: 15px/1.5 var(--font-sans, system-ui, sans-serif);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--demo-ink); }
+  main { max-width: 96ch; margin: 1.2rem auto; }
+  [hidden] { display: none !important; }
+  h1, h2, p { margin: 0; }
+  h1 { font-size: clamp(1.5rem, 4vw, 2rem); letter-spacing: -.035em; margin-bottom: .28rem; }
+  h2 { font-size: 1.2rem; letter-spacing: -.025em; }
+  .id { font-size: .78rem; font-weight: 750; color: var(--demo-blue); margin-bottom: .35rem; }
+  .lede, .subtle { color: var(--demo-muted); }
+  .lede { margin-bottom: 1rem; }
+  .toolbar, .titles, .method { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+  .toolbar { justify-content: space-between; margin-bottom: .8rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1.08fr; gap: .8rem; align-items: start; }
+  .panel {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--demo-line);
+    background: var(--demo-paper);
+    border-radius: var(--radius, 14px);
+  }
+  .stack { display: grid; gap: .75rem; }
+  .group, .status-panel { background: var(--demo-soft); border-radius: 10px; padding: .75rem; }
+  .group { display: grid; gap: .6rem; }
+  .titles { justify-content: space-between; }
+  button, select, input:not([type=checkbox]) {
+    font: inherit;
+    color: inherit;
+    border: 1px solid var(--demo-line);
+    border-radius: 8px;
+    background: var(--demo-paper);
+    padding: .45rem .7rem;
+  }
+  button { cursor: pointer; font-weight: 650; }
+  button:hover:not(:disabled), button[aria-pressed=true] {
+    border-color: var(--demo-blue);
+    background: var(--demo-active);
+  }
+  button:disabled { opacity: .48; cursor: default; }
+  :focus-visible { outline: 3px solid var(--demo-blue); outline-offset: 3px; }
+  .primary, button.primary:hover {
+    color: #fff; border-color: #345bcc; background: #345bcc;
+  }
+  button.primary:hover { background: #2647ae; }
+  .link-button { border: 0; color: var(--demo-blue); background: transparent; padding: .24rem .38rem; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+  label.field { display: grid; gap: .22rem; font-size: .88rem; }
+  label.check {
+    display: flex; gap: .55rem; align-items: center; padding: .25rem 0;
+  }
+  .check input { width: 1.1rem; height: 1.1rem; accent-color: #345bcc; flex: none; }
+  .pill, .method-label { font: 700 .78rem/1.3 var(--font-mono, ui-monospace, monospace); }
+  .pill {
+    border: 1px solid var(--demo-line); border-radius: 999px; padding: .2rem .5rem;
+    color: var(--demo-muted); white-space: nowrap;
+  }
+  .pill[data-kind=good], .yes { color: var(--demo-good); }
+  .pill[data-kind=bad], .error { color: var(--demo-bad); }
+  .note { font-size: .85rem; color: var(--demo-muted); }
+  .error { font-size: .88rem; font-weight: 650; }
+  .method { overflow-wrap: anywhere; }
+  .method code, pre { font: .76rem/1.55 var(--font-mono, ui-monospace, monospace); }
+  .method-label { color: var(--demo-blue); }
+  pre {
+    margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
+    border-radius: 8px; padding: .6rem;
+    background: var(--code-background, var(--demo-soft));
+  }
+  details summary { cursor: pointer; font-weight: 650; font-size: .87rem; }
+  .history { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0 0; padding: 0; list-style: none; }
+  .history button { font-size: .77rem; padding: .26rem .48rem; }
+  dl { margin: .35rem 0 0; display: grid; grid-template-columns: 1fr auto; column-gap: .4rem; }
+  dd { margin: 0; }
+  @media (max-width: 650px) {
+    .grid { grid-template-columns: 1fr; }
+    .split { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="id">Ziper · JEC-66</p>
+    <h1>로그인 흐름 리뷰</h1>
+    <p class="lede">예시 계정으로 로그인하고 API 요청과 응답을 함께 확인하세요. 모든 응답은 이 파일에서 시뮬레이션합니다.</p>
+  </header>
+  <div class="toolbar">
+    <div role="group" aria-label="클라이언트 선택">
+      <button data-mode="web" aria-pressed="true">웹 브라우저</button>
+      <button data-mode="mobile" aria-pressed="false">모바일 앱</button>
+    </div>
+    <button class="link-button" data-action="reset">처음부터</button>
+  </div>
+  <div class="grid">
+    <section class="panel" aria-label="로그인 목업">
+      <div data-view="entry" class="stack">
+        <h2 tabindex="-1">로그인</h2>
+        <button class="primary" data-action="email">이메일로 로그인</button>
+        <div class="group">
+          <label class="field">소셜 제공자
+            <select id="provider">
+              <option value="kakao">카카오</option>
+              <option value="naver">네이버</option>
+              <option value="apple">Apple</option>
+            </select>
+          </label>
+          <label class="field">소셜 인증 방식
+            <select id="oauth-transport">
+              <option value="code">인가 코드 교환</option>
+              <option value="token">소셜 토큰 검증</option>
+            </select>
+          </label>
+          <div class="split">
+            <button data-action="social-new">신규 소셜 계정</button>
+            <button data-action="social-existing">기존 소셜 계정</button>
+          </div>
+        </div>
+      </div>
+      <div data-view="email" class="stack" hidden>
+        <h2 tabindex="-1">이메일 로그인</h2>
+        <form id="email-form" class="stack">
+          <label class="field">이메일
+            <input value="member@example.test" readonly>
+          </label>
+          <label class="field">비밀번호
+            <input type="password" value="ZiperDemo9!" readonly>
+          </label>
+          <button type="submit" class="primary">예시 계정으로 로그인</button>
+        </form>
+        <button data-action="wrong-password">잘못된 비밀번호로 요청</button>
+        <button class="link-button" data-action="entry">다른 방식 선택</button>
+        <p class="error" data-status="email" role="status" hidden></p>
+      </div>
+      <div data-view="consent" class="stack" hidden>
+        <h2 tabindex="-1">약관 동의</h2>
+        <p class="subtle">소셜 계정을 확인했습니다. 필수 약관에 동의하면 회원과 세션이 생성됩니다.</p>
+        <form id="consent-form" class="stack">
+          <div class="group">
+            <label class="check"><input type="checkbox" name="terms"> 서비스 이용약관 (필수)</label>
+            <label class="check"><input type="checkbox" name="privacy"> 개인정보 수집·이용 (필수)</label>
+            <label class="check"><input type="checkbox" name="marketing"> 마케팅 수신 (선택)</label>
+          </div>
+          <button type="submit" class="primary">가입 완료</button>
+        </form>
+        <p class="error" data-status="consent" role="status" hidden></p>
+        <button class="link-button" data-action="entry">가입 취소</button>
+      </div>
+      <div data-view="session" class="stack" hidden>
+        <div class="titles">
+          <h2 tabindex="-1">로그인 완료</h2>
+          <span class="pill" data-kind="good">세션 활성</span>
+        </div>
+        <p id="session-transport" class="subtle"></p>
+        <div class="status-panel">
+          <strong>서버에 기록된 약관</strong>
+          <dl id="agreement-status"></dl>
+          <p id="agreement-note" class="note" hidden></p>
+        </div>
+        <button class="primary" data-action="refresh">세션 갱신</button>
+        <button data-action="replay" disabled>이전 Refresh Token 재사용</button>
+        <button data-action="denied-origin">미허용 Origin으로 갱신</button>
+        <button data-action="logout">로그아웃</button>
+        <p id="session-feedback" class="note" role="status" hidden></p>
+      </div>
+      <div data-view="signed-out" class="stack" hidden>
+        <h2 tabindex="-1">로그아웃 완료</h2>
+        <p id="signed-out-note" class="subtle"></p>
+        <button class="primary" data-action="entry">다시 로그인</button>
+      </div>
+    </section>
+    <section class="panel stack" aria-label="API 요청과 응답">
+      <div class="titles">
+        <h2>API 흐름</h2>
+        <span class="pill" id="api-status">요청 대기</span>
+      </div>
+      <p class="note" id="transport-hint"></p>
+      <div hidden id="api-call" class="stack">
+        <div class="method"><span class="method-label">POST</span><code id="api-path"></code></div>
+        <details>
+          <summary>요청 데이터</summary>
+          <pre id="api-request"></pre>
+        </details>
+        <div>
+          <strong>응답 데이터</strong>
+          <pre id="api-response"></pre>
+        </div>
+        <details id="history-section">
+          <summary>이전 요청 보기</summary>
+          <ol class="history" id="history"></ol>
+        </details>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+  'use strict';
+
+  const labels = { kakao: '카카오', naver: '네이버', apple: 'Apple' };
+  const origin = 'https://app.ziper.cc';
+  const signupToken = 'cca2d56c-b1b3-49f6-8afe-baf2281770a0';
+  const cookieOptions = 'Path=/api/v1/auth; HttpOnly; Secure; SameSite=Lax';
+  const email = 'member@example.test';
+  const timestamp = '2026-11-21T06:00:00Z';
+  const session = { mode: 'web', version: 0, agreements: null, history: [] };
+
+  const byId = (id) => document.getElementById(id);
+  const isWeb = () => session.mode === 'web';
+  const refreshToken = (version) => 'demo-refresh-' + version;
+
+  function show(view, focus = true) {
+    document.querySelectorAll('[data-view]').forEach(panel => {
+      panel.hidden = panel.dataset.view !== view;
+    });
+    if (focus) document.querySelector('[data-view="' + view + '"] h2').focus();
+  }
+
+  function setText(element, text) {
+    element.textContent = text;
+    element.hidden = !text;
+  }
+
+  function reset(focus = true) {
+    session.version = 0;
+    session.agreements = null;
+    session.history = [];
+    byId('consent-form').reset();
+    byId('api-call').hidden = true;
+    byId('api-status').textContent = '요청 대기';
+    delete byId('api-status').dataset.kind;
+    setText(document.querySelector('[data-status="email"]'), '');
+    setText(document.querySelector('[data-status="consent"]'), '');
+    setText(byId('transport-hint'), isWeb()
+      ? '웹 · Access Token은 본문, Refresh Token은 HttpOnly 쿠키'
+      : '모바일 · Access Token과 Refresh Token 모두 JSON 본문');
+    byId('api-call').querySelectorAll('details').forEach(details => { details.open = false; });
+    show('entry', focus);
+  }
+
+  function requestData(body) {
+    if (!isWeb()) return { body };
+    return {
+      headers: { Origin: origin, 'X-Refresh-Token-Mode': 'cookie' },
+      credentials: 'include',
+      body
+    };
+  }
+
+  function sessionRequest(version, source = origin) {
+    if (!isWeb()) return { body: { refreshToken: refreshToken(version) } };
+    return {
+      headers: {
+        Origin: source,
+        'X-Refresh-Token-Mode': 'cookie',
+        Cookie: 'ziper_refresh_token=[브라우저가 전송]'
+      },
+      credentials: 'include'
+    };
+  }
+
+  function makeAgreements(terms, privacy, marketing) {
+    return {
+      termsOfService: terms,
+      privacyPolicy: privacy,
+      marketing,
+      termsAgreedAt: terms ? timestamp : null,
+      privacyAgreedAt: privacy ? timestamp : null,
+      marketingAgreedAt: timestamp
+    };
+  }
+
+  function sessionResponse(extra = {}) {
+    const body = { ...extra, accessToken: 'demo-access-' + session.version };
+    const headers = { 'Cache-Control': 'no-store' };
+    if (isWeb()) {
+      headers['Set-Cookie'] = 'ziper_refresh_token=[값 생략]; Max-Age=1209600; ' + cookieOptions;
+    } else {
+      body.refreshToken = refreshToken(session.version);
+    }
+    body.agreements = session.agreements;
+    return { headers, body };
+  }
+
+  function publicError(code) {
+    return { body: { code } };
+  }
+
+  function record(label, path, status, request, response) {
+    session.history.unshift({ label, path, status, request, response });
+    renderTrace(0);
+  }
+
+  function renderTrace(index) {
+    const event = session.history[index];
+    const status = byId('api-status');
+    status.textContent = String(event.status);
+    status.dataset.kind = event.status < 400 ? 'good' : 'bad';
+    byId('api-path').textContent = event.path;
+    byId('api-request').textContent = JSON.stringify(event.request, null, 2);
+    byId('api-response').textContent = JSON.stringify(event.response, null, 2);
+    byId('api-call').hidden = false;
+    byId('history-section').hidden = session.history.length < 2;
+    byId('history').replaceChildren(...session.history.map((request, itemIndex) => {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.textContent = request.label + ' · ' + request.status;
+      button.setAttribute('aria-pressed', String(index === itemIndex));
+      button.addEventListener('click', () => {
+        renderTrace(itemIndex);
+        byId('history').children[itemIndex].firstElementChild.focus();
+      });
+      item.append(button);
+      return item;
+    }));
+  }
+
+  function startSession(agreements) {
+    session.version = 1;
+    session.agreements = agreements;
+    const states = [
+      ['서비스 이용약관', agreements.termsOfService ? '동의' : '기록 없음'],
+      ['개인정보 수집·이용', agreements.privacyPolicy ? '동의' : '기록 없음'],
+      ['마케팅 수신', agreements.marketing ? '동의' : '미동의']
+    ];
+    byId('agreement-status').replaceChildren(...states.flatMap(([label, answer]) => {
+      const name = document.createElement('dt');
+      const value = document.createElement('dd');
+      name.textContent = label;
+      value.textContent = answer;
+      return [name, value];
+    }));
+    setText(byId('session-transport'), isWeb()
+      ? '브라우저가 Refresh 쿠키를 보관하고 인증 요청에 전송합니다.'
+      : '앱이 보안 저장소에 Refresh Token을 보관한다고 가정합니다.');
+    setText(byId('session-feedback'), '');
+    setText(byId('agreement-note'), agreements.termsOfService && agreements.privacyPolicy
+      ? '' : '이 예시는 필수 약관 기록이 없는 기존 소셜 계정입니다.');
+    document.querySelector('[data-action="replay"]').disabled = true;
+    document.querySelector('[data-action="denied-origin"]').hidden = !isWeb();
+    show('session');
+  }
+
+  function emailLogin(valid) {
+    const request = requestData({ email, password: '[예시 비밀번호 · ' + (valid ? '일치' : '불일치') + ']' });
+    if (!valid) {
+      record('이메일 로그인', '/api/v1/auth/email/login', 401, request, publicError('UNAUTHORIZED'));
+      setText(document.querySelector('[data-status="email"]'), '이메일 또는 비밀번호를 확인해 주세요.');
+      return;
+    }
+    startSession(makeAgreements(true, true, false));
+    record('이메일 로그인', '/api/v1/auth/email/login', 200, request, sessionResponse());
+  }
+
+  function socialLogin(existing) {
+    const provider = byId('provider').value;
+    const useCode = byId('oauth-transport').value === 'code';
+    const path = '/api/v1/auth/oauth/' + provider + (useCode ? '/code' : '');
+    const request = requestData(useCode ? { code: 'demo-authorization-code' } : { token: 'demo-provider-token' });
+    if (existing) {
+      startSession(makeAgreements(false, false, false));
+      record(labels[provider] + ' 로그인', path, 200, request, sessionResponse({ authType: 'LOGIN', isNewUser: false }));
+      return;
+    }
+    record(labels[provider] + ' 계정 확인', path, 200, request, {
+      headers: { 'Cache-Control': 'no-store' },
+      body: { authType: 'SIGNUP_REQUIRED', signupToken, isNewUser: false }
+    });
+    byId('consent-form').reset();
+    setText(document.querySelector('[data-status="consent"]'), '');
+    show('consent');
+  }
+
+  function completeSignup(form) {
+    const termsOfService = form.elements.terms.checked;
+    const privacyPolicy = form.elements.privacy.checked;
+    const marketing = form.elements.marketing.checked;
+    const request = requestData({ signupToken, agreements: { termsOfService, privacyPolicy, marketing } });
+    const path = '/api/v1/auth/oauth/signup';
+    if (!termsOfService || !privacyPolicy) {
+      record('약관 동의', path, 400, request, publicError('INVALID_REQUEST'));
+      setText(document.querySelector('[data-status="consent"]'), '두 필수 약관에 모두 동의해 주세요.');
+      return;
+    }
+    startSession(makeAgreements(termsOfService, privacyPolicy, marketing));
+    record('가입 완료', path, 201, request, sessionResponse({ authType: 'LOGIN', isNewUser: true }));
+  }
+
+  function refresh(kind) {
+    const path = '/api/v1/auth/reissue';
+    const feedback = byId('session-feedback');
+    if (kind === 'replay') {
+      record('이전 토큰 재사용', path, 401, sessionRequest(session.version - 1), publicError('UNAUTHORIZED'));
+      setText(feedback, '회전 전 Refresh Token은 재사용할 수 없습니다.');
+      return;
+    }
+    if (kind === 'denied-origin') {
+      record('Origin 검사', path, 403, sessionRequest(session.version, 'https://untrusted.ziper.cc'), publicError('FORBIDDEN'));
+      setText(feedback, '허용 목록에 없는 Origin의 요청이 거부됐습니다.');
+      return;
+    }
+    const request = sessionRequest(session.version);
+    session.version += 1;
+    record('세션 갱신', path, 200, request, sessionResponse());
+    document.querySelector('[data-action="replay"]').disabled = false;
+    setText(feedback, '새 Refresh Token이 발급됐습니다.');
+  }
+
+  function logout() {
+    const headers = { 'Cache-Control': 'no-store' };
+    if (isWeb()) headers['Set-Cookie'] = 'ziper_refresh_token=; Max-Age=0; ' + cookieOptions;
+    record('로그아웃', '/api/v1/auth/logout', 204, sessionRequest(session.version), { headers });
+    session.version = 0;
+    session.agreements = null;
+    setText(byId('signed-out-note'), isWeb() ? '서버 세션을 폐기하고 쿠키를 만료했습니다.' : '서버 세션을 폐기했습니다.');
+    show('signed-out');
+  }
+
+  const actions = {
+    reset,
+    entry: () => show('entry'),
+    email: () => {
+      setText(document.querySelector('[data-status="email"]'), '');
+      show('email');
+    },
+    'wrong-password': () => emailLogin(false),
+    'social-new': () => socialLogin(false),
+    'social-existing': () => socialLogin(true),
+    refresh: () => refresh('rotate'),
+    replay: () => refresh('replay'),
+    'denied-origin': () => refresh('denied-origin'),
+    logout
+  };
+
+  document.querySelectorAll('[data-action]').forEach(button => {
+    button.addEventListener('click', () => actions[button.dataset.action]());
+  });
+  document.querySelectorAll('[data-mode]').forEach(button => {
+    button.addEventListener('click', () => {
+      if (session.mode === button.dataset.mode) return;
+      session.mode = button.dataset.mode;
+      document.querySelectorAll('[data-mode]').forEach(choice => {
+        choice.setAttribute('aria-pressed', String(choice === button));
+      });
+      reset();
+    });
+  });
+  byId('email-form').addEventListener('submit', event => {
+    event.preventDefault();
+    emailLogin(true);
+  });
+  byId('consent-form').addEventListener('submit', event => {
+    event.preventDefault();
+    completeSignup(event.currentTarget);
+  });
+  reset(false);
+</script>
+</body>
+</html>
