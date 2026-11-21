@@ -218,6 +218,16 @@ class EmailSignupIntegrationTest extends PostgresTestSupport {
 		}
 	}
 
+	@Test
+	void 닉네임에NUL이담긴요청_가입하면_500이아닌400공통요청오류를응답하고회원을만들지않는다() throws Exception {
+		UUID flowId = verifiedFlow(EMAIL);
+
+		signup(flowId, PASSWORD, "감\u0000자").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM ziper.users", Integer.class)).isZero();
+	}
+
 	private ResultActions signup(UUID flowId, String password, String nickname) throws Exception {
 		return mvc.perform(post(SIGNUP).contentType("application/json")
 				.content(body(flowId, password, nickname, true, true, false)));
