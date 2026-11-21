@@ -92,10 +92,45 @@ public class ProductBoardCommandService {
 		if (rawName == null) {
 			throw new BusinessException(ErrorCode.INVALID_BOARD_NAME);
 		}
-		String trimmed = rawName.strip();
-		if (trimmed.isEmpty() || trimmed.codePointCount(0, trimmed.length()) > MAX_BOARD_NAME_LENGTH) {
+		String trimmed = stripInvisible(rawName);
+		if (trimmed.isEmpty() || trimmed.codePointCount(0, trimmed.length()) > MAX_BOARD_NAME_LENGTH
+				|| containsUnstorableCharacter(trimmed)) {
 			throw new BusinessException(ErrorCode.INVALID_BOARD_NAME);
 		}
 		return trimmed;
+	}
+
+	/** 앞뒤의 유니코드 공백과 서식 문자(NBSP, 제로폭 공백 등)를 제거한다. String.strip()은 NBSP를 제거하지 않는다. */
+	private static String stripInvisible(String value) {
+		int start = 0;
+		int end = value.length();
+		while (start < end) {
+			int codePoint = value.codePointAt(start);
+			if (!isStrippable(codePoint)) {
+				break;
+			}
+			start += Character.charCount(codePoint);
+		}
+		while (end > start) {
+			int codePoint = value.codePointBefore(end);
+			if (!isStrippable(codePoint)) {
+				break;
+			}
+			end -= Character.charCount(codePoint);
+		}
+		return value.substring(start, end);
+	}
+
+	private static boolean isStrippable(int codePoint) {
+		return Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint)
+				|| Character.getType(codePoint) == Character.FORMAT;
+	}
+
+	/** 제어 문자(NUL 포함)와 짝 없는 서로게이트는 PostgreSQL이 저장하지 못하거나 화면에 안전하지 않다. */
+	private static boolean containsUnstorableCharacter(String value) {
+		return value.codePoints().anyMatch(codePoint -> {
+			int type = Character.getType(codePoint);
+			return type == Character.CONTROL || type == Character.SURROGATE;
+		});
 	}
 }

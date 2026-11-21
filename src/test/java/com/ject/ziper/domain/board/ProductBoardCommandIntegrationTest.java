@@ -161,6 +161,21 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 				.andExpect(jsonPath("$.code").value("INVALID_BOARD_NAME"));
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = {"\u00a0", "\u200b", "\u00a0\u200b\u3000 ", "\ufeff", "\u2060\u200d", "가\u0000나", "가\u0007"})
+	void 유니코드공백이나서식문자만있거나제어문자가포함된이름_보드를생성하면_400과보드이름오류코드를반환한다(String invalidName) throws Exception {
+		mvc.perform(post(BOARDS_PATH).header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+				.contentType(MediaType.APPLICATION_JSON).content(nameBody(invalidName)))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_BOARD_NAME"));
+	}
+
+	@Test
+	void 앞뒤에줄바꿈방지공백과제로폭공백이붙은이름_보드를생성하면_201과제거된이름을반환한다() throws Exception {
+		mvc.perform(post(BOARDS_PATH).header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+				.contentType(MediaType.APPLICATION_JSON).content(nameBody("\u00a0\u200b봄 코디\u200b\u00a0")))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.name").value("봄 코디"));
+	}
+
 	@Test
 	void 이름필드가누락된요청_보드를생성하면_400과보드이름오류코드를반환한다() throws Exception {
 		mvc.perform(post(BOARDS_PATH).header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
@@ -255,6 +270,17 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 		mvc.perform(patch(BOARDS_PATH + "/" + boardId).header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
 				.contentType(MediaType.APPLICATION_JSON).content(nameBody("열한글자보드이름입니다")))
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_BOARD_NAME"));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"\u00a0", "\u200b", "\u00a0\u200b ", "가\u0000나", "가\u0007"})
+	void 유니코드공백이나서식문자만있거나제어문자가포함된이름_이름수정을요청하면_400과보드이름오류코드를반환한다(String invalidName) throws Exception {
+		Long boardId = createBoardViaApi(accessToken, "보드 하나");
+
+		mvc.perform(patch(BOARDS_PATH + "/" + boardId).header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+				.contentType(MediaType.APPLICATION_JSON).content(nameBody(invalidName)))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_BOARD_NAME"));
+		assertThat(productBoardRepository.findById(boardId).orElseThrow().getName()).isEqualTo("보드 하나");
 	}
 
 	@Test
