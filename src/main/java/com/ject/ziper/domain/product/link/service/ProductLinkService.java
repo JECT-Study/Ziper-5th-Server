@@ -4,6 +4,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,10 +75,14 @@ public class ProductLinkService {
 		if (observedAt == null) {
 			throw new BusinessException(ErrorCode.INVALID_LINK_STATUS_REPORT);
 		}
+		Instant now = clock.instant();
+		// 합의 창(24시간)보다 오래된 관측은 어떤 합의에도 쓰일 수 없으므로 DB 쓰기 전에 400으로 거부한다.
+		if (observedAt.isBefore(now.minus(CONSENSUS_WINDOW))) {
+			throw new BusinessException(ErrorCode.INVALID_LINK_STATUS_REPORT);
+		}
 		ProductCardLinkSnapshot card = productCardLinkJdbcRepository.findOwnedActiveCard(cardId, userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND));
 
-		Instant now = clock.instant();
 		Long linkId = card.linkId();
 		if (linkId == null) {
 			linkId = resolveOrCreateLink(card.productUrl(), null).getId();
@@ -94,29 +100,37 @@ public class ProductLinkService {
 			throw new BusinessException(ErrorCode.LINK_STATUS_REPORT_RATE_LIMITED);
 		}
 
-		if (observedAt.isAfter(now.plusSeconds(FUTURE_CLOCK_SKEW_SECONDS))
-				|| (lockedCard.linkCheckedAt() != null && !observedAt.isAfter(lockedCard.linkCheckedAt()))) {
+		// 허용 오차를 넘는 미래 관측은 무시한다. 오차 이내 미래 시각은 서버 현재 시각으로 보정해
+		// 미래 시각이 저장되어 이후 정상 관측이 "더 오래됨"으로 무시되는 일을 막는다.
+		if (observedAt.isAfter(now.plusSeconds(FUTURE_CLOCK_SKEW_SECONDS))) {
+			return toResponse(lockedCard);
+		}
+		Instant effectiveObservedAt = observedAt.isAfter(now) ? now : observedAt;
+		if (lockedCard.linkCheckedAt() != null && !effectiveObservedAt.isAfter(lockedCard.linkCheckedAt())) {
 			return toResponse(lockedCard);
 		}
 
-		productCardLinkJdbcRepository.updateCardLinkStatus(cardId, userId, linkId, reportedStatus, observedAt,
+		productCardLinkJdbcRepository.updateCardLinkStatus(cardId, userId, linkId, reportedStatus, effectiveObservedAt,
 				ProductLinkCheckSource.CLIENT, now);
 		productLinkReportRepository
-				.saveAndFlush(ProductLinkReport.create(linkId, userId, reportedStatus, observedAt, now));
+				.saveAndFlush(ProductLinkReport.create(linkId, userId, reportedStatus, effectiveObservedAt, now));
 
-		long distinctReporters = productLinkReportRepository.countDistinctReportersSince(linkId, reportedStatus,
-				now.minus(CONSENSUS_WINDOW));
-		if (distinctReporters >= CONSENSUS_THRESHOLD) {
+		// 합의는 사용자별 최신 보고 기준이며, 전파 시각은 합의에 쓰인 관측 중 가장 최신 시각이다.
+		// 링크 상태는 상품 URL 단위 공유 사실이므로 휴지통 카드에도 전파한다(복구 시 최신 상태 노출, 의도된 동작).
+		List<Instant> agreedObservedAts = productLinkReportRepository.findLatestObservedAtPerReporter(linkId,
+				reportedStatus, now.minus(CONSENSUS_WINDOW));
+		if (agreedObservedAts.size() >= CONSENSUS_THRESHOLD) {
+			Instant consensusAt = Collections.max(agreedObservedAts);
 			productLinkRepository.findById(linkId).ifPresent(link -> {
-				if (link.getCheckedAt() == null || !observedAt.isBefore(link.getCheckedAt())) {
-					link.applyCheckResult(reportedStatus, observedAt, ProductLinkCheckSource.CLIENT, now);
+				if (link.getCheckedAt() == null || !consensusAt.isBefore(link.getCheckedAt())) {
+					link.applyCheckResult(reportedStatus, consensusAt, ProductLinkCheckSource.CLIENT, now);
 				}
 			});
-			productCardLinkJdbcRepository.propagateLinkStatus(linkId, cardId, reportedStatus, observedAt,
+			productCardLinkJdbcRepository.propagateLinkStatus(linkId, cardId, reportedStatus, consensusAt,
 					ProductLinkCheckSource.CLIENT, now);
 		}
 
-		return new ProductLinkStatusResponse(reportedStatus, observedAt, ProductLinkCheckSource.CLIENT);
+		return new ProductLinkStatusResponse(reportedStatus, effectiveObservedAt, ProductLinkCheckSource.CLIENT);
 	}
 
 	@Transactional
@@ -135,7 +149,10 @@ public class ProductLinkService {
 
 	@Transactional
 	public void applyServerCheck(Long linkId, ProductLinkStatus status, Instant checkedAt) {
-		if (linkId == null || status == null || checkedAt == null || status == ProductLinkStatus.UNKNOWN) {
+		// 서버 요청은 봇 차단 등으로 정상 상품도 404를 받을 수 있으므로 REMOVED(삭제 확정)는
+		// 실사용자 WebView 보고·합의로만 전파한다.
+		if (linkId == null || status == null || checkedAt == null || status == ProductLinkStatus.UNKNOWN
+				|| status == ProductLinkStatus.REMOVED) {
 			return;
 		}
 		locks.lock("link-id:" + linkId);
