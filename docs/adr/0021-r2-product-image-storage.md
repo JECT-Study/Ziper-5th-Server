@@ -11,13 +11,15 @@
 ## 결정
 
 - 상품 이미지는 Cloudflare R2 Standard의 비공개 버킷에 저장합니다. 홈서버와 Cloud Run이 같은 운영 버킷을 사용합니다. WebP 변환, DB 작업 큐와 기존 `imageFileUrl` 응답 계약은 ADR 0017을 따릅니다.
-- 버킷 이름은 `ziper-<용도>-<환경>` 형태로 지정합니다. 기존 Infra의 `ziper-` 접두어와 `production` 표기를 따라 운영 버킷 이름으로 **`ziper-product-images-production`**을 권장합니다. 프로비저닝 시 계정 내 이름 중복을 확인합니다. [R2 버킷 이름 규칙](https://developers.cloudflare.com/r2/buckets/create-buckets/)
-- 버킷의 `r2.dev` 공개 접근을 끄고 공개 커스텀 도메인도 연결하지 않습니다. 서버 자격 증명은 해당 버킷의 객체 읽기·쓰기 권한으로 범위를 제한하고 [ADR 0013](0013-secret-manager-single-source.md)의 방식으로 공급합니다. [R2 공개 접근](https://developers.cloudflare.com/r2/buckets/public-buckets/) · [R2 토큰 권한](https://developers.cloudflare.com/r2/api/tokens/)
+- 버킷 이름은 `ziper-<용도>-<환경>` 형태로 지정합니다. 기존 Infra의 `ziper-` 접두어와 `production` 표기를 따라 APAC 리전 Standard 클래스 비공개 버킷 **`ziper-product-images-production`**을 생성했습니다. [R2 버킷 이름 규칙](https://developers.cloudflare.com/r2/buckets/create-buckets/)
+- 버킷의 `r2.dev` 공개 접근을 끄고 공개 커스텀 도메인도 연결하지 않습니다. 서버 자격 증명은 해당 버킷의 객체 읽기·쓰기 권한으로 범위를 제한하고 [ADR 0013](0013-secret-manager-single-source.md)의 방식으로 공급합니다. 기존 운영 배포가 참조하는 Secret Manager `ziper-runtime-properties` v4는 활성 상태로 유지한 채 R2 설정을 추가한 v5를 등록해, `Ziper-5th-Infra` 버전 핀을 전환하기 전까지 운영 영향이 없도록 분리합니다. [R2 공개 접근](https://developers.cloudflare.com/r2/buckets/public-buckets/) · [R2 토큰 권한](https://developers.cloudflare.com/r2/api/tokens/)
 - 초기에는 서버가 카드 소유권을 확인한 뒤 R2 S3 API 도메인의 15분 유효 GET 서명 URL을 발급합니다. 사용자 ID 기준으로 URL을 발급하는 API 요청을 제한하고, 한 응답에서 발급하는 URL 수는 목록의 조회 범위로 제한합니다. 앱은 유효한 링크를 재사용합니다. 발급된 서명 URL은 만료 전까지 재사용될 수 있으므로 전체 서명 URL을 로그에 기록하지 않습니다. [R2 서명 URL](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
+- 서버 어댑터(`R2ObjectStorageClient`)는 기존 `ObjectStorageClient` 포트를 구현하되, JDK 표준 `Mac`/`MessageDigest` 기반 AWS SigV4(`region=auto`, `service=s3`)와 Spring `RestClient`를 사용해 외부 SDK 의존성을 늘리지 않습니다. `createSignedUrl`은 추가 네트워크 왕복 없이 로컬에서 서명 URL을 생성하고, `deleteObject`의 `404` 응답은 멱등 처리합니다.
 
 ## 대안
 
 - Supabase Storage는 DB와 같은 공급자에서 운영할 수 있습니다. 상품 썸네일 조회가 늘면 이미지 다운로드와 DB 사용량이 동일한 대역폭 한도를 소비합니다.
+- AWS SDK v2 S3 클라이언트(`software.amazon.awssdk:s3`)는 공식 서명과 멀티파트 유틸리티를 제공하지만, 본 서비스가 사용하는 연산이 단일 객체 업로드·삭제와 로컬 Presigned GET URL 발급에 한정되므로 전이 의존성과 컨테이너 이미지 크기를 늘리지 않는 경량 JDK SigV4 + `RestClient` 구현을 선택했습니다.
 - 이미지 조회를 Worker로 통과시키면, 공개 버킷 없이 Worker의 R2 바인딩을 사용해 인증과 요청 제한을 실제 객체 조회 전에 적용할 수 있습니다. R2 읽기에 한도를 강제해야 한다면 직접 서명 URL 발급을 종료하고 이 경로를 사용합니다. 사용자별 제한과 별도로 Durable Object 같은 일관된 공용 카운터에서 조회 허용량을 먼저 차감합니다. 소진 시 R2에 접근하기 전에 차단하고 앱은 대체 아이콘을 표시합니다. 일반 Worker Rate Limiting 바인딩은 위치별 근삿값이므로 전체 한도를 집행하는 카운터로 사용하기 어렵습니다. [Worker R2 바인딩](https://developers.cloudflare.com/r2/api/workers/) · [Worker 요청 제한 동작](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 
 ## 영향과 한계
