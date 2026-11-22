@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -15,16 +16,25 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 import javax.imageio.ImageIO;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.env.SystemEnvironmentPropertySource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ject.ziper.domain.file.client.ExternalImageFetcher;
 import com.ject.ziper.domain.file.client.ExternalImageFetcher.FetchResult;
@@ -33,6 +43,7 @@ import com.ject.ziper.domain.file.entity.ImageMirrorJob;
 import com.ject.ziper.domain.file.entity.ImageMirrorJobStatus;
 import com.ject.ziper.domain.file.repository.FileAssetRepository;
 import com.ject.ziper.domain.file.repository.ImageMirrorJobRepository;
+import com.ject.ziper.domain.file.repository.ProductCardImageUpdater;
 import com.ject.ziper.domain.file.service.FileImageService;
 import com.ject.ziper.domain.file.service.ImageMirrorService;
 import com.ject.ziper.domain.file.worker.ImageMirrorWorker;
@@ -66,6 +77,12 @@ class ImageMirrorIntegrationTest extends PostgresTestSupport {
 	@Autowired
 	private FileImageService fileImageService;
 
+	@Autowired
+	private PlatformTransactionManager transactionManager;
+
+	@Autowired
+	private ProductCardImageUpdater productCardImageUpdater;
+
 	@MockitoBean
 	private ExternalImageFetcher externalImageFetcher;
 
@@ -80,6 +97,51 @@ class ImageMirrorIntegrationTest extends PostgresTestSupport {
 		jdbc.update("DELETE FROM ziper.product_cards");
 		jdbc.update("DELETE FROM ziper.users");
 		fileAssetRepository.deleteAll();
+	}
+
+	@Test
+	void 백업에서이미지미러링작업을저장한뒤_홈워커가폴링하면_같은작업이완료되고카드에파일이연결된다() throws Exception {
+		Long userId = insertUser("mirror-handoff@ziper.test", "미러복구");
+		String imageUrl = "https://image.msscdn.net/images/goods/handoff.jpg";
+		Long cardId = insertCard(userId, "https://www.musinsa.com/products/90", imageUrl);
+
+		StorageProperties backup = bindOriginWorker(false);
+		StorageProperties home = bindOriginWorker(true);
+		assertThat(backup.workerEnabled()).isFalse();
+		assertThat(home.workerEnabled()).isTrue();
+		ExecutorService executor = mock(ExecutorService.class);
+		ImageMirrorWorker backupWorker = new ImageMirrorWorker(jobRepository, externalImageFetcher, fileImageService,
+				productCardImageUpdater, backup, transactionManager, executor);
+		ImageMirrorService backupService = new ImageMirrorService(jobRepository, backup, backupWorker);
+		new TransactionTemplate(transactionManager).executeWithoutResult(
+				status -> assertThat(backupService.enqueueMirrorJob(cardId, userId, imageUrl, "무신사")).isTrue());
+		backupWorker.pollPendingJobs();
+
+		ImageMirrorJob queued = jobRepository.findByCardIdOrderByIdDesc(cardId).getFirst();
+		assertThat(queued.getStatus()).isEqualTo(ImageMirrorJobStatus.PENDING);
+		assertThat(queued.getAttemptCount()).isZero();
+		verifyNoInteractions(executor, externalImageFetcher);
+
+		when(externalImageFetcher.fetch(eq(imageUrl), any(), eq("무신사")))
+				.thenReturn(FetchResult.ok(createJpeg(300, 400), "image/jpeg"));
+		ImageMirrorWorker homeWorker = new ImageMirrorWorker(jobRepository, externalImageFetcher, fileImageService,
+				productCardImageUpdater, home, transactionManager, executor);
+		homeWorker.pollPendingJobs();
+
+		assertThat(jobRepository.findById(queued.getId()).orElseThrow().getStatus())
+				.isEqualTo(ImageMirrorJobStatus.READY);
+		assertThat(
+				jdbc.queryForObject("SELECT image_file_id FROM ziper.product_cards WHERE id = ?", Long.class, cardId))
+				.isNotNull();
+	}
+
+	private static StorageProperties bindOriginWorker(boolean enabled) {
+		StandardEnvironment environment = new StandardEnvironment();
+		environment.getPropertySources().addFirst(new MapPropertySource("sharedRuntimeProperties",
+				Map.of("app.storage.worker-enabled", !enabled, "app.storage.provider", "memory")));
+		environment.getPropertySources().addFirst(new SystemEnvironmentPropertySource("origin-systemEnvironment",
+				Map.of("APP_STORAGE_WORKERENABLED", Boolean.toString(enabled))));
+		return Binder.get(environment).bind("app.storage", Bindable.of(StorageProperties.class)).get();
 	}
 
 	@Test
