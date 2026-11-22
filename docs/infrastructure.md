@@ -31,6 +31,8 @@ gh workflow run deploy-production.yml --repo JECT-Study/Ziper-5th-Server --ref m
 
 민감 설정은 이미지와 artifact에 포함하지 않습니다. 운영 비밀의 단일 원본은 Secret Manager의 고정 버전입니다([ADR 0013](adr/0013-secret-manager-single-source.md)). Cloud Run은 전용 runtime SA로 파일을 마운트하고, 홈은 Infra deploy job이 WIF로 읽어 전달한 같은 버전의 파일을 마운트합니다. 두 origin 모두 `SPRING_CONFIG_IMPORT`로 properties 파일을 읽으며 홈만 마이그레이션 계정 파일을 추가로 읽습니다. 사용자 정의 Secret Manager `ConfigDataLoader`는 구현하지 않았습니다. CI는 WIF를 사용하며 Worker의 전용 Cloud Run invoker 키와 구분합니다. 운영 DB와 스키마의 책임은 [DB 문서](database.md)를 따릅니다. 공통 DB 장애는 origin 전환으로 해결되지 않습니다.
 
+상품 이미지 미러링 작업은 양쪽 origin이 같은 DB에 등록합니다. Infra의 홈 Compose와 Cloud Run revision 설정으로 실행 주체를 홈서버로 지정합니다. 적용 순서와 적체 확인은 [운영 문서](operations.md#장애-전환-시-미러링과-복귀-확인), 결정 근거는 [ADR 0020](adr/0020-home-image-mirror-worker.md)을 따릅니다.
+
 ## 모니터링과 검증 범위
 
 앱의 Sentry 설정·지표·공개 probe·프로젝트별 접근은 [운영 문서](operations.md)를 따릅니다. Discord 배포 알림, Worker의 회로 경로, 실제 두 origin의 readiness와 복구 결과는 Infra PR #1에서 각각 판정합니다. 배포 알림 수신을 Sentry 오류 알림 수신으로, 공개 HTTP 200을 Sentry Uptime 모니터 성공으로 간주하지 않습니다.

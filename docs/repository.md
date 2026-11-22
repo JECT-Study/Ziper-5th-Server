@@ -69,7 +69,7 @@ CF_ACCESS_CLIENT_ID/SECRET은 Server Repository secrets에서 읽을 수 있으�
 
 쌍 배포 caller의 packages:write와 id-token:write는 재사용 workflow를 위한 상한입니다. publish만 packages:write, home·backup은 packages:read이며 WIF가 필요한 backup만 id-token:write를 사용합니다. Source production의 HOME_ACCESS_CLIENT_ID/SECRET은 보호 origin 사전 검사에 쓰며 기존 SSH 자격과 구분합니다. 운영 비밀은 이미지·artifact에 포함하지 않습니다.
 
-현재 쌍 배포 caller의 두 pin은 `7f2a94286a83c3079303957b4f330cd80897b201`이다. [Infra #32](https://github.com/JECT-Study/Ziper-5th-Infra/pull/32)의 `ziper-runtime-properties` 고정 버전 `4`(Mailgun SMTP 및 OAuth 2.0 인가 코드/토큰 검증 설정) 갱신이 포함된 실제 병합 SHA다. [해당 Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/43899303579)와 Server main CI 성공 후 수동 실행한다. 홈 Docker export 결함에 대한 Registry Raw manifest 식별은 Infra ADR0014를 유지하며 홈 제어 파일의 내용 변경은 없다. 실제 배포·반복 결과는 Infra PR #1에 기록한다.
+현재 쌍 배포 caller의 두 pin은 `e289b2ee569141cef3b7a35d5178657d267b25b6`입니다. 이 SHA는 [Infra PR #35](https://github.com/JECT-Study/Ziper-5th-Infra/pull/35)의 실제 병합 커밋이며, 이미지 미러링 실행 값을 origin별로 지정합니다. 이전 pin `7f2a94286a83c3079303957b4f330cd80897b201`에서 적용한 운영 설정 고정 버전 `4`의 이력은 [Infra PR #32](https://github.com/JECT-Study/Ziper-5th-Infra/pull/32)에 기록돼 있습니다. 새 홈 Compose를 같은 Infra SHA에서 설치하고 [해당 Infra main CI](https://github.com/JECT-Study/Ziper-5th-Infra/actions/runs/44983802483)와 Server main CI 성공 후 수동 배포를 실행합니다. 실제 배포·반복 결과는 Infra PR #1에 기록합니다.
 
 예약 종료 뒤 Docker가 기존 정지 상태를 유지한 사례에 대한 재기동 정책은 Infra ADR 0009가 소유합니다. 새 컨테이너의 실제 정책과 다음 전체 BIOS 부팅은 구분해 검증합니다.
 
