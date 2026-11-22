@@ -141,6 +141,11 @@ app:
     mirror-lock-timeout-seconds: ${IMAGE_MIRRORING_LOCK_TIMEOUT_SECONDS:600}
     supabase-connect-timeout-ms: ${STORAGE_SUPABASE_CONNECT_TIMEOUT_MS:3000}
     supabase-read-timeout-ms: ${STORAGE_SUPABASE_READ_TIMEOUT_MS:15000}
+    r2-endpoint: ${STORAGE_R2_ENDPOINT:}
+    r2-access-key-id: ${STORAGE_R2_ACCESS_KEY_ID:}
+    r2-secret-access-key: ${STORAGE_R2_SECRET_ACCESS_KEY:}
+    r2-connect-timeout-ms: ${STORAGE_R2_CONNECT_TIMEOUT_MS:3000}
+    r2-read-timeout-ms: ${STORAGE_R2_READ_TIMEOUT_MS:15000}
 sentry:
   enabled: ${SENTRY_ENABLED:false}
   dsn: ${SENTRY_DSN:}

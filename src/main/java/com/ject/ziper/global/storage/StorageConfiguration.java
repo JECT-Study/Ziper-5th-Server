@@ -22,6 +22,9 @@ public class StorageConfiguration {
 		if ("supabase".equals(properties.provider())) {
 			return new SupabaseObjectStorageClient(properties, restClientBuilder);
 		}
+		if ("r2".equals(properties.provider())) {
+			return new R2ObjectStorageClient(properties, restClientBuilder);
+		}
 		throw new IllegalArgumentException("Unsupported storage provider: " + properties.provider());
 	}
 
