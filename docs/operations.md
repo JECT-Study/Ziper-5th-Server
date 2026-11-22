@@ -63,6 +63,30 @@ Bearer API 인증은 서명·만료·클레임 검증 뒤 `sub`의 회원이 `us
 | `IMAGE_MIRRORING_LOCK_TIMEOUT_SECONDS` | `600` | `PROCESSING` 선점(`locked_at`) 만료 시간(초). 만료된 작업은 다시 선점해 처리 |
 | `STORAGE_SUPABASE_CONNECT_TIMEOUT_MS` / `STORAGE_SUPABASE_READ_TIMEOUT_MS` | `3000` / `15000` | Supabase Storage 호출 연결·읽기 타임아웃(ms) |
 
+### 장애 전환 시 미러링과 복귀 확인
+
+운영에서는 Infra가 Spring 설정 `app.storage.worker-enabled`에 직접 바인딩되는 `APP_STORAGE_WORKERENABLED`를 홈서버에서 `true`, Cloud Run에서 `false`로 설정합니다. 일반 실행에는 위 표의 `IMAGE_MIRRORING_WORKER_ENABLED`도 사용할 수 있습니다. `IMAGE_MIRRORING_ENABLED`가 활성화된 상태에서는 두 origin 모두 미러링 대상 카드와 작업을 함께 저장합니다. 표시 순서와 장애 전환 시 지연 허용 범위는 [ADR 0020](adr/0020-home-image-mirror-worker.md)을 따릅니다.
+
+첫 배포 전 운영 Flyway 버전과 기존 `product_cards` 데이터 유무를 확인합니다. 이번 상품 저장 릴리스는 V12까지의 스키마가 필요합니다. 현재 쌍 배포는 Flyway가 꺼진 Cloud Run을 홈보다 먼저 올려 Hibernate 스키마를 검증하므로, V12가 적용되지 않았다면 운영 데이터 검토 후 별도 마이그레이션으로 스키마를 먼저 준비해야 합니다. [스키마 변경](database.md) · [쌍 배포 순서](https://github.com/JECT-Study/Ziper-5th-Infra/blob/main/docs/operations.md#비공개-백업과-운영-검증-준비)
+
+첫 전환에서는 Cloud Run에서 외부 이미지가 있는 카드 한 장을 저장하고, 응답이 `PENDING`인지 확인합니다. 홈서버가 복귀하면 같은 카드의 `READY`와 서명된 이미지 표시를 확인합니다. 전환·복귀 UTC 시각, 배포 SHA, 작업 건수와 가장 오래된 대기 시각, 실패 코드별 건수를 실행 증거에 기록합니다. 다음 쿼리는 읽기 전용 세션에서 실행하고, 실패 조회 시작 시각은 실제 전환 시각으로 설정합니다.
+
+```sql
+SELECT status, count(*) AS jobs, min(created_at) AS oldest_created_at
+FROM ziper.image_mirror_jobs
+WHERE status IN ('PENDING', 'PROCESSING')
+GROUP BY status;
+
+SELECT last_error, count(*) AS jobs
+FROM ziper.image_mirror_jobs
+WHERE status = 'FAILED'
+  AND updated_at >= :'window_start_utc'::timestamptz
+GROUP BY last_error
+ORDER BY jobs DESC;
+```
+
+홈 복귀 뒤에도 처리 가능 시각이 지난 대기 작업이 줄지 않으면 `next_attempt_at`과 `locked_at`을 확인해 백오프 중인 작업과 실행 정체를 구분합니다. `HTTP_403`·`HTTP_404`·`HTTP_410`은 원본 만료나 접근 차단의 단서로 사용합니다. 기록에는 원본 URL, 사용자 ID, 서명 값 대신 집계만 남깁니다.
+
 ## 상태 점검
 
 | 경로 | 확인 대상 | 정상 | 비정상 |

@@ -51,3 +51,4 @@
 - [0017 상품 카드 이미지 외부 저장소 도입 및 단일 중해상도 썸네일(B-2) 정책](adr/0017-product-image-storage-and-thumbnail-policy.md) — B-2 공용 썸네일, DB 작업 테이블 기반 1회 비동기 미러링 및 `CLIENT_UPLOAD` 정책
   - [0021 상품 이미지 저장소로 Cloudflare R2 Standard 채택](adr/0021-r2-product-image-storage.md) — 0017의 운영 저장소 선택을 대체하고 버킷 이름과 비용 보호 기준을 기록
 - [0019 클라이언트 격리 WebView 상품 추출, URL 정규화 및 링크 상태 경계](adr/0019-client-side-product-extraction-and-url-policy.md)
+- [0020 홈서버에서 상품 이미지 미러링 실행](adr/0020-home-image-mirror-worker.md) — 0017에서 미정이었던 실행 주체 확정
