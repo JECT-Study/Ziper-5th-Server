@@ -1,6 +1,7 @@
 package com.ject.ziper.domain.board.entity;
 
 import java.time.Instant;
+import java.util.Objects;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -33,6 +34,9 @@ public class ProductBoard {
 	@Column(name = "deleted_at")
 	private Instant deletedAt;
 
+	@Column(name = "created_at", nullable = false, updatable = false)
+	private Instant createdAt;
+
 	protected ProductBoard() {
 	}
 
@@ -41,10 +45,24 @@ public class ProductBoard {
 		this.name = name;
 		this.modifiable = modifiable;
 		this.deleted = false;
+		this.createdAt = Instant.now();
 	}
 
 	public static ProductBoard createDefault(Long userId) {
 		return new ProductBoard(userId, DEFAULT_BOARD_NAME, false);
+	}
+
+	public static ProductBoard createCustom(Long userId, String name) {
+		return new ProductBoard(userId, name, true);
+	}
+
+	public void rename(String name) {
+		this.name = Objects.requireNonNull(name);
+	}
+
+	public void softDelete(Instant deletedAt) {
+		this.deleted = true;
+		this.deletedAt = Objects.requireNonNull(deletedAt);
 	}
 
 	public Long getId() {
@@ -65,5 +83,13 @@ public class ProductBoard {
 
 	public boolean isDeleted() {
 		return deleted;
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	public Instant getDeletedAt() {
+		return deletedAt;
 	}
 }

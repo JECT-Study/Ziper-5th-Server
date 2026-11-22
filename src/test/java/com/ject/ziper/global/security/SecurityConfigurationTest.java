@@ -21,6 +21,7 @@ import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
@@ -69,7 +70,8 @@ class SecurityConfigurationTest {
 		List<JWTClaimsSet.Builder> invalid = List.of(
 				claims().expirationTime(Date.from(Instant.now().minusSeconds(300))), claims().expirationTime(null),
 				claims().issuer("wrong"), claims().audience("wrong"), claims().audience((String) null),
-				claims().subject(null), claims().subject(" "),
+				claims().subject(null), claims().subject(" "), claims().subject("2"), claims().subject("member-1"),
+				claims().subject("99999999999999999999"), claims().subject("-1"),
 				claims().claim(JwtTokenProvider.CLAIM_TOKEN_TYPE, JwtTokenProvider.TOKEN_TYPE_REFRESH),
 				claims().notBeforeTime(Date.from(Instant.now().plusSeconds(300))));
 		for (var claims : invalid) {
@@ -143,7 +145,7 @@ class SecurityConfigurationTest {
 	}
 
 	private JWTClaimsSet.Builder claims() {
-		return new JWTClaimsSet.Builder().issuer("ziper-server").audience("ziper-api").subject("member-1")
+		return new JWTClaimsSet.Builder().issuer("ziper-server").audience("ziper-api").subject("1")
 				.expirationTime(Date.from(Instant.now().plusSeconds(300)));
 	}
 
@@ -163,6 +165,10 @@ class SecurityConfigurationTest {
 	@Import({SecurityConfiguration.class, Endpoints.class, ProblemFactory.class, OpenApiConfiguration.class,
 			RequestIdFilter.class})
 	static class Fixture {
+		@Bean
+		ActiveUserChecker activeUserChecker() {
+			return userId -> userId == 1L;
+		}
 	}
 
 	@RestController

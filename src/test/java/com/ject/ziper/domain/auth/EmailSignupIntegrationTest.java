@@ -80,7 +80,10 @@ class EmailSignupIntegrationTest extends PostgresTestSupport {
 						.content(body(flowId, PASSWORD, "감자", true, true, true)))
 				.andExpect(status().isCreated()).andExpect(header().string("Cache-Control", "no-store"))
 				.andExpect(jsonPath("$.accessToken").isNotEmpty()).andExpect(jsonPath("$.refreshToken").isNotEmpty())
-				.andReturn();
+				.andExpect(jsonPath("$.agreements.termsOfService").value(true))
+				.andExpect(jsonPath("$.agreements.privacyPolicy").value(true))
+				.andExpect(jsonPath("$.agreements.marketing").value(true))
+				.andExpect(jsonPath("$.agreements.termsAgreedAt").isNotEmpty()).andReturn();
 
 		String passwordHash = jdbc.queryForObject("SELECT password_hash FROM ziper.users WHERE email = ?", String.class,
 				EMAIL);
@@ -213,6 +216,16 @@ class EmailSignupIntegrationTest extends PostgresTestSupport {
 		} catch (RuntimeException exception) {
 			return false;
 		}
+	}
+
+	@Test
+	void 닉네임에NUL이담긴요청_가입하면_500이아닌400공통요청오류를응답하고회원을만들지않는다() throws Exception {
+		UUID flowId = verifiedFlow(EMAIL);
+
+		signup(flowId, PASSWORD, "감\u0000자").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM ziper.users", Integer.class)).isZero();
 	}
 
 	private ResultActions signup(UUID flowId, String password, String nickname) throws Exception {

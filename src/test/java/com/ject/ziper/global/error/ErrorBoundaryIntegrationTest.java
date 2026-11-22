@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ject.ziper.global.observability.RequestIdFilter;
 import com.ject.ziper.global.observability.SentryConfiguration;
+import com.ject.ziper.global.security.ActiveUserChecker;
 import com.ject.ziper.global.security.SecurityConfiguration;
 import com.ject.ziper.global.config.OpenApiConfiguration;
 
@@ -74,6 +75,10 @@ class ErrorBoundaryIntegrationTest {
 	@Import({SecurityConfiguration.class, OpenApiConfiguration.class, ProblemFactory.class, ApiExceptionHandler.class,
 			SafeErrorController.class, RequestIdFilter.class, SentryConfiguration.class, Endpoints.class})
 	static class Fixture {
+		@Bean
+		ActiveUserChecker activeUserChecker() {
+			return userId -> true;
+		}
 		@Bean
 		RecordingTransport transport() {
 			return new RecordingTransport();

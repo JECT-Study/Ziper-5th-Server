@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -26,6 +27,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ject.ziper.global.security.ActiveUserChecker;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
@@ -95,14 +97,20 @@ class MonitoringIntegrationTest extends PostgresTestSupport {
 	static String token() {
 		var encoder = new NimbusJwtEncoder(
 				new ImmutableSecret<>(Base64.getDecoder().decode("MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")));
-		var claims = JwtClaimsSet.builder().issuer("ziper-server").subject("verification")
-				.audience(List.of("ziper-api")).expiresAt(Instant.now().plusSeconds(60)).build();
+		var claims = JwtClaimsSet.builder().issuer("ziper-server").subject("1").audience(List.of("ziper-api"))
+				.expiresAt(Instant.now().plusSeconds(60)).build();
 		return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
 				.getTokenValue();
 	}
 
 	@TestConfiguration(proxyBeanMethods = false)
 	static class Recording {
+		@Bean
+		@Primary
+		ActiveUserChecker verificationUserChecker() {
+			return userId -> userId == 1L;
+		}
+
 		@Bean
 		RecordingTransport transport() {
 			return new RecordingTransport();

@@ -6,6 +6,8 @@ Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키
 
 업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 트랜잭션 범위 PostgreSQL advisory lock(`persistence`의 `AdvisoryLockRepository`), 보안(JWT·OAuth 토큰 검증 및 `RestClientAuthorizationCodeTokenResponseClient` 기반 무상태 인가 코드 교환 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정이며, 업무 도메인으로 인증(`auth`), 회원(`user`), 보드(`board`)가 있습니다.
 
+상품 카드·보드·링크 쓰기가 함께 쓰는 advisory lock 키는 `board:{userId}` → `product-card:{userId}` → `link:{uuid}` → `link-id:{id}` 순서로만 잡습니다. 카드 등록은 보드 삭제와 같은 `board:`로 활성 보드 검증·연결을 직렬화하고, `ProductLinkService.resolveOrCreateLink`는 상태 갱신과 같은 `link-id:`를 잡은 채 최신 링크 상태를 반환합니다. 링크 잠금을 잡은 뒤에는 `board:`·`product-card:`를 잡지 않아 교착을 피합니다. 스토리지 서명처럼 외부 호출이 필요한 응답 조립은 `@Transactional` 밖(`ProductCardRegistrationFacade`)에서 합니다.
+
 이메일 인증의 HTTP 계약·DB 발급 기록·요청 제한·번호 확인과 이메일 회원 가입(`EmailSignupService`)은 `domain/auth`가 맡습니다. 가입 후 토큰·세션 발급은 OAuth 로그인과 같은 `AuthService.startSession`을 사용하고 비밀번호 해시는 `global/security`의 `PasswordEncoder` 빈을 사용합니다. `global/security`의 `EmailCodeHmac`은 별도 키로 번호와 요청자 식별자를 해시하며 비밀이나 번호 원문을 로그에 남기지 않습니다.
 
 컨트롤러는 HTTP 입출력을 처리하고 서비스는 업무 규칙과 트랜잭션을 담당합니다. 엔티티를 API 응답으로 직접 노출하지 않습니다. 웹과 모바일 클라이언트가 같은 API를 사용할 예정입니다.
@@ -56,6 +58,8 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 
 [ADR 0001](adr/0001-runtime-contract.md)의 오류 계약을 따릅니다. `BusinessException`은 예상한 업무 4xx 전용입니다. 업무 계층에서 기술 예외를 잡아 무시하거나 이 예외로 감싸지 않습니다. 공개 `detail`은 정적인 한국어 오류 카탈로그에서 선택합니다. `code`와 서버가 생성한 `requestId`를 포함하고 JWT 401·403에도 같은 팩토리를 적용합니다. 예상 4xx는 Sentry에서 제외하고 예상하지 못한 5xx는 요청당 한 번 수집합니다.
 
+JSON 요청 본문은 `global/config`의 `JacksonConfiguration`이 공통으로 엄격하게 읽습니다. 모든 JSON 문자열 값에서 NUL(`\u0000`)을 포함한 C0 제어 문자(U+0000~U+001F)를 거부하되, 메모의 여러 줄 입력과 PostgreSQL `text`가 받아들이는 탭·줄바꿈(LF)·캐리지 리턴은 허용합니다. 정수 필드(`int`·`Integer`·`long`·`Long`)는 실수(`29000.9`, `1e3`)·문자열(`"29000"`)·불리언·빈 문자열·빈 배열 강제 변환을 거부합니다. 거부는 역직렬화 실패로 이어져 기존 전역 처리기가 `INVALID_REQUEST` 400 ProblemDetail로 응답하므로 업무 코드에서 따로 검사하거나 DB 오류를 잡지 않습니다. JSON 객체의 필드 이름과 외부 API 응답의 문자열 의미 검증은 이 규칙의 대상이 아닙니다.
+
 ### ADR 작성 기준
 
 되돌리기 어렵거나 변경 범위와 의도를 분명히 남겨야 하는 결정은 구현과 같은 PR에서 `docs/adr/`에 ADR로 기록하고 [문서 지도](context-map.md)의 결정 이력에 연결합니다. 다음 중 하나라도 해당하면 ADR을 작성합니다.
@@ -81,6 +85,6 @@ ArchUnit은 실제 운영 클래스에서 컨트롤러의 저장소 의존, 업�
 
 공개 배포 검증기의 `--expected-release`와 `--expected-origin`은 함께 지정한다. 각각 40자리 소문자 SHA와 home 또는 cloudrun을 받으며 두 probe의 검증된 응답 헤더가 모두 일치해야 한다. 이전 릴리스·누락·불일치는 재시도하지 않는다. `scripts/test-public-health.py`는 실제 HTTP fixture로 헤더·content negotiation·응답 계약을 검사하고 가상 시계로 준비 한도와 연속 성공 초기화를 확인한다.
 
-로컬 OAuth 리뷰 데모 도구 `scripts/oauth-e2e-demo.py`는 기본 `--mode mock`에서 외부 개발자 계정이나 비밀 키 없이 로컬 임시 RSA JWKS 및 Mock IdP(Apple·Naver·Kakao)와 원클릭 테스트 UI(`http://localhost:5173`)를 제공해 실제 `POST /api/v1/auth/oauth/{provider}`, `/oauth/{provider}/code`, `/reissue`, `/logout` 흐름을 검증할 수 있게 합니다. `--mode env`는 서버 프로세스의 환경 변수나 `.env`·`.env.oauth-demo`(Git 제외 파일)에만 `client_id`·`client_secret`·`.p8`를 보관해 브라우저에 비밀을 노출하지 않고 실 OAuth E2E 데모를 실행합니다. 실 OAuth 콘솔 연동 시 Kakao·Naver 콘솔에는 `http://localhost:5173` 도메인과 `http://localhost:5173/callback/{kakao|naver}` Redirect URI를 등록하며, `127.0.0.1:5173`으로 접속한 경우 UI 상단 배너로 `http://localhost:5173` 전환을 안내합니다. `scripts/test-oauth-e2e-demo.py`가 키 생성·표준 `.env` 폴백·Mock IdP 왕복·비밀 미노출·프록시 경로 제한을 검사하며 `check.sh`에 포함됩니다.
+로컬 OAuth 리뷰 데모 도구 `scripts/oauth-e2e-demo.py`는 기본 `--mode mock`에서 외부 개발자 계정이나 비밀 키 없이 로컬 임시 RSA JWKS 및 Mock IdP(Apple·Naver·Kakao)와 원클릭 테스트 UI(`http://localhost:5173`)를 제공해 실제 `POST /api/v1/auth/oauth/{provider}`, `/oauth/{provider}/code`, `/oauth/signup`, `/reissue`, `/logout` 흐름을 검증할 수 있게 합니다. 신규 소셜 계정은 데모에 표시되는 필수 약관에 체크한 뒤 가입을 완료합니다. `--mode env`는 서버 프로세스의 환경 변수나 `.env`·`.env.oauth-demo`(Git 제외 파일)에만 `client_id`·`client_secret`·`.p8`를 보관해 브라우저에 비밀을 노출하지 않고 실 OAuth E2E 데모를 실행합니다. 실 OAuth 콘솔 연동 시 Kakao·Naver 콘솔에는 `http://localhost:5173` 도메인과 `http://localhost:5173/callback/{kakao|naver}` Redirect URI를 등록하며, `127.0.0.1:5173`으로 접속한 경우 UI 상단 배너로 `http://localhost:5173` 전환을 안내합니다. `scripts/test-oauth-e2e-demo.py`가 키 생성·표준 `.env` 폴백·Mock IdP 왕복·비밀 미노출·프록시 경로 제한을 검사하며 `check.sh`에 포함됩니다.
 
 정적 OpenAPI 문서 내보내기 스크립트 `scripts/export-openapi.sh`는 `OPENAPI_EXPORT_DIR` 환경 변수(기본값 `build/openapi`)를 지정해 `OpenApiSpecExportTest`를 실행한 뒤 `scripts/openapi_docs.py build-html`로 외부 자산 없이 단독 실행되는 `ziper-api-docs.html`을 생성합니다. 이 테스트는 일반 `check.sh` 및 CI `test`에서는 건너뛰며, 명시적으로 실행할 때만 `local` 프로파일·`app.runtime-mode=local`·`app.mail.enabled=true` 조건에서 `openapi.json`, `openapi.yaml`과 Swagger UI 정적 자산 및 `ziper-api-docs.html`을 출력 디렉터리에 생성합니다. `scripts/test-openapi-docs.py`가 엔드포인트 증감 비교, 단일 HTML 번들링 및 스크립트 이스케이프, Discord 멀티파트 전송 계약을 검사하며 `check.sh`에 포함됩니다.
