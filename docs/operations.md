@@ -34,14 +34,18 @@ Bearer API 인증은 서명·만료·클레임 검증 뒤 `sub`의 회원이 `us
 
 ## 상품 카드 이미지 저장소와 비동기 B-2 미러링
 
-상품 카드 직접 업로드(`POST /api/v1/files/images`, JWT 인증 필수)와 외부 OG 이미지 비동기 미러링은 모두 4:3 세로 비율(최대 `480×640`) WebP 썸네일로 정규화해 비공개 Object Storage에 저장하고 단기 서명 URL로 서빙합니다([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)). 로컬(`local`)과 테스트(`test`) 프로필은 기본으로 인메모리 어댑터(`memory`)를 사용하며, 운영 환경은 `STORAGE_PROVIDER=supabase`와 비공개 버킷 자격 증명을 사용합니다.
+상품 카드 직접 업로드(`POST /api/v1/files/images`, JWT 인증 필수)와 외부 OG 이미지 비동기 미러링은 모두 4:3 세로 비율(최대 `480×640`) WebP 썸네일로 정규화해 비공개 Object Storage에 저장하고 단기 서명 URL로 서빙합니다([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)). 로컬(`local`)과 테스트(`test`) 프로필은 기본으로 인메모리 어댑터(`memory`)를 사용합니다. 운영 환경은 비공개 Cloudflare R2 Standard(`STORAGE_PROVIDER=r2`, 버킷 `ziper-product-images-production`)를 사용하며, 버킷 이름과 비용 보호 기준은 [ADR 0021](adr/0021-r2-product-image-storage.md)에 기록했습니다.
 
 | 환경 변수 | 기본값 | 역할 |
 | --- | --- | --- |
-| `STORAGE_PROVIDER` | `supabase` (`local`/`test`: `memory`) | Object Storage 어댑터 선택 (`supabase` \| `memory`) |
-| `STORAGE_SUPABASE_URL` | 없음 | Supabase 프로젝트 HTTPS URL |
+| `STORAGE_PROVIDER` | `supabase` (`local`/`test`: `memory`) | Object Storage 어댑터 선택 (`r2` \| `supabase` \| `memory`) |
+| `STORAGE_R2_ENDPOINT` | 없음 | Cloudflare R2 S3 API HTTPS 엔드포인트(`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) |
+| `STORAGE_R2_ACCESS_KEY_ID` | 없음 | R2 버킷 전용 S3 Access Key ID(로그·응답 노출 금지) |
+| `STORAGE_R2_SECRET_ACCESS_KEY` | 없음 | R2 버킷 전용 S3 Secret Access Key(로그·응답 노출 금지) |
+| `STORAGE_R2_CONNECT_TIMEOUT_MS` / `STORAGE_R2_READ_TIMEOUT_MS` | `3000` / `15000` | R2 S3 호출 연결·읽기 타임아웃(ms) |
+| `STORAGE_SUPABASE_URL` | 없음 | Supabase 프로젝트 HTTPS URL(`supabase` 어댑터용) |
 | `STORAGE_SUPABASE_SERVICE_ROLE_KEY` | 없음 | Supabase Storage 접근용 Service Role 키(로그·응답 노출 금지) |
-| `STORAGE_BUCKET` | `product-images` | 비공개 이미지 버킷 이름 |
+| `STORAGE_BUCKET` | `product-images` | 비공개 이미지 버킷 이름(운영 R2: `ziper-product-images-production`) |
 | `STORAGE_SIGNED_URL_EXPIRATION_SECONDS` | `900` | 단기 서명 URL 유효 시간(초) |
 | `STORAGE_MAX_FILE_SIZE_BYTES` | `5242880` | 업로드·다운로드 최대 파일 크기(5MB) |
 | `IMAGE_MIRRORING_ENABLED` | `true` | 외부 OG 이미지 미러링 전역 킬 스위치(`false` 시 작업 미등록, 원본 `image_url` 유지) |
