@@ -58,7 +58,7 @@
   - **서버 제공 API**: 인증 필수의 `GET /api/v1/products/extraction-rules`(`ETag`/`304` 캐시, 앱 배포 없이 몰별 선택자·정규화·`imageHosts`·`imageStrategy` 갱신)와 `POST /api/v1/products/url-check`(외부 요청 없이 정규화·지원몰 판정·기존 저장 카드 `existingCardId` 반환)를 제공한다.
   - **폴백 및 저장 시 검증**: 유효한 `http(s)` URL이면 추출 실패·미지원 쇼핑몰 모두 차단하지 않고 `MANUAL` 수기 입력으로 저장을 허용한다(잘못된 URL 형식·비허용 스킴만 `400` 거부). 앱 추출 값(`CLIENT`)도 직접 입력(`MANUAL`)과 동일한 신뢰 수준으로 저장 시 서버가 검증하며(상품명 HTML 제거·200자 제한, 지원몰 `shop` 서버 판정, `imageUrl` `https` 및 지원몰 `imageHosts` 허용 목록 검증), 서버는 외부 페이지 요청 없이 저장을 확정한다.
 - **이미지 정책** ([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)):
-  - **공유 외부 Object Storage(Supabase Storage 확정) + B-2 단일 중해상도 WebP 썸네일**: 무상태(홈서버+Cloud Run) 환경에서 **Supabase Storage**를 1차 저장소로 확정하되 Free Plan 용량·전송량 제약을 고려해 S3 호환 추상화 인터페이스를 유지한다(트래픽·Egress 증가 시 Cloudflare R2 전환 시임 보존). 1차 MVP(`JEC-76`)부터 유저 직접 업로드 이미지와 외부 OG 이미지 미러링 모두 `480~600px` WebP 썸네일(4:3 크롭, 장당 25~45KB)로 저장해 전 화면에서 공용 서빙한다(원본 `image_url`도 메타데이터·폴백용으로 병행 보관, 고도화·고아 파일 정리는 `JEC-10`).
+  - **공유 외부 Object Storage(Cloudflare R2 Standard) + B-2 단일 중해상도 WebP 썸네일**: 홈서버와 Cloud Run은 [ADR 0021](adr/0021-r2-product-image-storage.md)의 비공개 R2 버킷을 공유하며 서버는 저장소 인터페이스를 통해 접근한다. 1차 MVP(`JEC-76`)부터 유저 직접 업로드 이미지와 외부 OG 이미지 미러링 모두 `480~600px` WebP 썸네일(4:3 크롭, 장당 25~45KB)로 저장해 전 화면에서 공용 서빙한다(원본 `image_url`도 메타데이터·폴백용으로 병행 보관, 고도화·고아 파일 정리는 `JEC-10`).
   - **저장 직후 1회 비동기 미러링 (`@Async` 미사용)**: 외부 쇼핑몰 이미지는 카드 저장 직후 1회만 비동기 미러링하며 주기적으로 재수집하지 않는다. 프로세스 메모리 내 `@Async`는 사용하지 않고, 카드 저장과 같은 트랜잭션에서 DB 작업 테이블에 작업을 등록한 뒤 커밋 직후 빠른 경로(fast-path) 워커 + `FOR UPDATE SKIP LOCKED` 폴링으로 처리한다(미러링 실패가 카드 저장 실패로 이어지지 않음). Cloud Run 전환 중에는 작업을 기록하고 홈서버가 돌아오면 처리한다. 그동안 원본 이미지나 대체 아이콘으로 카드를 표시한다. [장애 전환 시 미러링](adr/0020-home-image-mirror-worker.md)
   - **응답 `imageStatus` 및 표시 우선순위**: 카드 응답에 `imageStatus`(`NONE` | `PENDING` | `READY` | `FAILED`)를 포함하며, 표시 우선순위는 `imageFileUrl`(자체 Object Storage) → `imageUrl`(원본 외부 URL) → **카테고리 대체 아이콘 5종(`TOP`, `PANTS`, `SKIRT`, `ACCESSORY`, `BEAUTY`)** 순으로 고정한다. 클라이언트 로드 실패(`onError`) 시 재요청 대기 없이 즉시 대체 아이콘으로 폴백한다.
   - **CDN 차단 및 컴플라이언스 퇴각 경로**: 호스트별 동시·초당 요청 제한 및 `403`/`429` 연속 시 자동 일시 중단을 적용하며, 특정 몰 CDN의 서버 IP 차단이 지속되면 `extraction-rules`의 `imageStrategy`를 `CLIENT_UPLOAD`로 전환해 앱이 직접 이미지를 받아 기존 업로드 API로 올린다. 또한 도메인별/전역 플래그로 미러링을 즉시 중단(원본 URL 참조 + 대체 아이콘 폴백)할 수 있고, 미러링 썸네일은 소유자 인증 기반 비공개 접근 및 삭제/탈퇴 시 즉시 파기를 원칙으로 한다.
@@ -128,7 +128,7 @@
   - 소셜(카카오·네이버·애플) 및 이메일 회원가입·로그인·자동 로그인·로그아웃
   - 마이페이지 조회, 프로필(닉네임) 수정, 비밀번호 변경(이메일 계정), 회원 탈퇴(`WITHDRAWN` 소프트 삭제)
   - 외부 공유하기 및 앱 내 링크 등록 + 1차 지원몰(무신사·에이블리·지그재그) 앱 격리 WebView 자동 추출 + 서버 추출 규칙(`extraction-rules`)·문자열 기반 URL 확인(`url-check`) + 수기 입력(`MANUAL`) 폴백 ([ADR 0019](adr/0019-client-side-product-extraction-and-url-policy.md))
-  - 외부 Object Storage(Supabase Storage 확정, S3 호환 추상화 유지) 기반 B-2 단일 중해상도 WebP 썸네일 저장(`files`, 유저 직접 업로드 + 저장 직후 1회 DB 작업 테이블 기반 비동기 OG 이미지 미러링) + `imageStatus` + 원본 `image_url` 폴백 + 카테고리 대체 아이콘 5종 ([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md))
+  - 외부 Object Storage(Cloudflare R2 Standard) 기반 B-2 단일 중해상도 WebP 썸네일 저장(`files`, 유저 직접 업로드 + 저장 직후 1회 DB 작업 테이블 기반 비동기 OG 이미지 미러링) + `imageStatus` + 원본 `image_url` 폴백 + 카테고리 대체 아이콘 5종 ([ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md))
   - 한 줄 메모 및 다중 해시태그(기본 4종 보호 + 유저별 커스텀 태그 조회·생성·삭제)
   - 상품 링크 상태 모델(`product_links`·`product_link_reports`, `link_status`·`link_checked_at`·`link_check_source`, `JEC-90`)
   - 홈 요약(재발견 대기 수·보드별 대표 썸네일 최대 3장·최근 저장), 다중 보드 관리(보드 상세 4종 정렬·태그 필터), 상품 상세/수정, 구매 완료 목록, 30일 휴지통 및 지정 복구(상품 카드)
@@ -194,7 +194,7 @@
    - **커스텀 태그 삭제 불변식**: 커스텀 태그 삭제 시 다른 상품 카드에서도 사용 중이면 현재 카드와의 관계(`product_card_tags`)만 해제하고, 해당 카드에서만 유일하게 사용 중인 태그는 `ON DELETE CASCADE`로 태그 행 삭제를 허용한다.
    - 카드당 태그 수: **`1..N`개 필수** (상품 등록·수정 입력 시점에 최소 1개 이상의 해시태그 연결을 애플리케이션 계층에서 검증한다). 이 조건은 입력 시점 검증일 뿐 저장 후 불변식이 아니며, 태그 삭제(해당 카드에서만 쓰던 태그의 `ON DELETE CASCADE` 삭제 포함)로 카드의 태그가 0개가 되는 것은 허용한다.
 6. **`ziper.files`**
-   - 유저 직접 업로드 이미지 및 B-2 공용 WebP 썸네일(`480~600px`) 메타데이터 저장 (`storage_key UNIQUE`, `file_size >= 0`, Supabase Storage 확정·S3 호환 추상화 유지, [ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)). 카드 영구 삭제·회원 탈퇴 시 연결된 Object Storage 객체도 함께 파기한다.
+   - 유저 직접 업로드 이미지 및 B-2 공용 WebP 썸네일(`480~600px`) 메타데이터 저장 (`storage_key UNIQUE`, `file_size >= 0`, Cloudflare R2 Standard, [ADR 0017](adr/0017-product-image-storage-and-thumbnail-policy.md)). 카드 영구 삭제·회원 탈퇴 시 연결된 Object Storage 객체도 함께 파기한다.
    - 외부 OG 이미지 미러링 비동기 작업은 프로세스 메모리 `@Async`가 아닌 DB 작업 테이블로 영속 관리한다(`PENDING` → 커밋 후 빠른 경로 워커 + `FOR UPDATE SKIP LOCKED` 폴링).
 7. **`ziper.user_card_events`**
    - `event_type IN ('VIEW_DETAIL', 'OPEN_ORIGINAL_URL', 'REDISCOVERY_KEEP', 'REDISCOVERY_PURCHASE', 'REDISCOVERY_DELETE', 'REDISCOVERY_UNDO')`.
