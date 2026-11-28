@@ -10,5 +10,5 @@ public record TrashProductItemResponse(
 		@Schema(description = "상품명", example = "오버핏 코튼 티셔츠", requiredMode = RequiredMode.REQUIRED) String productTitle,
 		@Schema(description = "가격 (원)", example = "29000", requiredMode = RequiredMode.REQUIRED) Long price,
 		@Schema(description = "표시할 이미지 URL (없으면 null)", nullable = true) String imageUrl,
-		@Schema(description = "자동 영구 삭제까지 남은 일수 (올림)", example = "12", requiredMode = RequiredMode.REQUIRED) int daysRemaining) {
+		@Schema(description = "휴지통 조회·복구 가능 기간의 남은 일수 (올림)", example = "12", requiredMode = RequiredMode.REQUIRED) int daysRemaining) {
 }

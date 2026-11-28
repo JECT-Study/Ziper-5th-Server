@@ -19,4 +19,9 @@ public class AdvisoryLockRepository {
 		jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", result -> {
 		}, key);
 	}
+
+	public boolean tryLock(String key) {
+		return Boolean.TRUE.equals(
+				jdbc.queryForObject("SELECT pg_try_advisory_xact_lock(hashtextextended(?, 0))", Boolean.class, key));
+	}
 }
