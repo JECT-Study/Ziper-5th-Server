@@ -133,3 +133,8 @@ Windows에서 `gradlew.bat check --console=plain`의 Spotless·Checkstyle·ArchU
 - 로컬 OpenAPI 내보내기 테스트가 통과했고 `GET /api/v1/trash/products`와 응답 항목의 `cardId`, `shop`, `productTitle`, `price`, `imageUrl`, `daysRemaining`을 생성된 JSON에서 확인했습니다.
 - WSL에서 `scripts/check.sh`의 문서 정책과 Python 검사군은 모두 통과했습니다. WSL Gradle은 Windows 형식의 Java 경로를 Spotless 입력으로 받아 중단됐습니다. Windows Gradle `check`의 컴파일·Spotless·Checkstyle은 통과했고 전체 Java 테스트 443개 중 3개가 인증 1개·이미지 미러링 2개에서 실패했으며 3개는 건너뛰었습니다. 실패한 두 테스트 클래스를 분리 실행해도 같은 3개가 실패했습니다. 변경 전 커밋 `7cc32a2`의 별도 worktree에서도 같은 3개가 실패했습니다. 따라서 전체 Java 검사 성공으로 기록하지 않습니다.
 - 2026-11-28 02:26 UTC에 Windows 시각을 Docker `postgres:17.6` 컨테이너 실행 전후로 감싸 측정했습니다. Windows는 02:26:53.630~54.426, 컨테이너는 02:26:57.540으로 컨테이너 시계가 약 3~4초 앞섰습니다. 인증 테스트는 DB `CURRENT_TIMESTAMP - 1초`로 만료시킨 티켓을 Java 현재 시각과 비교하므로 아직 유효하다고 판단할 수 있습니다. 이미지 미러링 테스트도 DB 시각으로 설정한 작업 기한을 Java 현재 시각과 비교하므로 작업을 아직 선점하지 못하는 결과와 일치합니다. 시계 차이는 이번 변경 전에도 같은 실패가 난 원인으로 판단하며, Docker 시계 동기화 후 재검증은 하지 않았습니다.
+
+## 2026-11-28 보드 내 상품 연결 해제
+
+- `DELETE /api/v1/boards/{boardId}/products/{productId}` 통합 테스트에서 두 보드에 연결된 동일 카드를 순서대로 제거하면 첫 삭제 후 다른 보드에 남고 휴지통은 비어 있으며, 마지막 연결 해제 후 휴지통에 한 번만 나타나는 것을 확인했습니다. 미연결·타인 보드·재삭제 404와 미인증 401도 확인했습니다. 같은 테스트 클래스의 기존 보드 삭제 사례도 통과했습니다.
+- Windows Gradle `spotlessCheck`, `checkstyleMain`, `checkstyleTest`가 통과했습니다. 로컬 OpenAPI 테스트에서 새 DELETE 경로와 보드 한정 삭제 설명을 확인했습니다. 전체 Java 테스트는 이번 변경에 대해 재실행하지 않았습니다.

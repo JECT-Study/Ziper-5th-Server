@@ -30,6 +30,10 @@ public class ProductBoardCardCleanupRepository {
 		return jdbc.update("DELETE FROM ziper.product_board_card WHERE board_id = ?", boardId);
 	}
 
+	public int deleteBoardCardLink(Long boardId, Long cardId) {
+		return jdbc.update("DELETE FROM ziper.product_board_card WHERE board_id = ? AND card_id = ?", boardId, cardId);
+	}
+
 	public int softDeleteOrphanCards(Long userId, List<Long> cardIds, Instant deletedAt) {
 		if (cardIds.isEmpty()) {
 			return 0;

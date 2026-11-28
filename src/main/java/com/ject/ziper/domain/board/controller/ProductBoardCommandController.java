@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/v1/boards")
-@Tag(name = "보드", description = "상품 보드 생성·이름 수정·삭제 API")
+@Tag(name = "보드", description = "상품 보드 생성·이름 수정·삭제 및 보드 상품 제거 API")
 public class ProductBoardCommandController {
 	private static final String MAX_LONG_TEXT = String.valueOf(Long.MAX_VALUE);
 
@@ -58,6 +58,15 @@ public class ProductBoardCommandController {
 	public ResponseEntity<Void> deleteBoard(@AuthenticationPrincipal Jwt jwt,
 			@Parameter(description = "삭제할 보드 ID", example = "2") @PathVariable Long boardId) {
 		boardCommandService.deleteBoard(extractUserId(jwt), boardId);
+		return ResponseEntity.noContent().build();
+	}
+
+	@DeleteMapping("/{boardId}/products/{productId}")
+	@Operation(summary = "특정 보드에서 상품 제거", description = "지정한 활성 보드의 상품 연결만 해제합니다. 다른 활성 보드에 연결되지 않은 고아 상품만 30일 휴지통으로 이동합니다.")
+	public ResponseEntity<Void> removeProductFromBoard(@AuthenticationPrincipal Jwt jwt,
+			@Parameter(description = "상품이 속한 보드 ID", example = "2") @PathVariable Long boardId,
+			@Parameter(description = "해당 보드에서 제거할 상품 카드 ID", example = "10") @PathVariable Long productId) {
+		boardCommandService.removeProductFromBoard(extractUserId(jwt), boardId, productId);
 		return ResponseEntity.noContent().build();
 	}
 

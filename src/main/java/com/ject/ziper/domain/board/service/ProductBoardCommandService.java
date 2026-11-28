@@ -13,6 +13,8 @@ import com.ject.ziper.domain.board.dto.UpdateBoardResponse;
 import com.ject.ziper.domain.board.entity.ProductBoard;
 import com.ject.ziper.domain.board.repository.ProductBoardCardCleanupRepository;
 import com.ject.ziper.domain.board.repository.ProductBoardRepository;
+import com.ject.ziper.domain.product.repository.ProductBoardCardRepository;
+import com.ject.ziper.domain.product.repository.ProductCardRepository;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
 import com.ject.ziper.global.persistence.AdvisoryLockRepository;
@@ -20,22 +22,32 @@ import com.ject.ziper.global.persistence.AdvisoryLockRepository;
 @Service
 public class ProductBoardCommandService {
 	private static final int MAX_BOARD_NAME_LENGTH = 10;
+	private static final String PRODUCT_CARD_LOCK_PREFIX = "product-card:";
 
 	private final ProductBoardRepository productBoardRepository;
 	private final ProductBoardCardCleanupRepository cardCleanupRepository;
+	private final ProductBoardCardRepository productBoardCardRepository;
+	private final ProductCardRepository productCardRepository;
 	private final AdvisoryLockRepository locks;
 	private final Clock clock;
 
 	@Autowired
 	public ProductBoardCommandService(ProductBoardRepository productBoardRepository,
-			ProductBoardCardCleanupRepository cardCleanupRepository, AdvisoryLockRepository locks) {
-		this(productBoardRepository, cardCleanupRepository, locks, Clock.systemUTC());
+			ProductBoardCardCleanupRepository cardCleanupRepository,
+			ProductBoardCardRepository productBoardCardRepository, ProductCardRepository productCardRepository,
+			AdvisoryLockRepository locks) {
+		this(productBoardRepository, cardCleanupRepository, productBoardCardRepository, productCardRepository, locks,
+				Clock.systemUTC());
 	}
 
 	public ProductBoardCommandService(ProductBoardRepository productBoardRepository,
-			ProductBoardCardCleanupRepository cardCleanupRepository, AdvisoryLockRepository locks, Clock clock) {
+			ProductBoardCardCleanupRepository cardCleanupRepository,
+			ProductBoardCardRepository productBoardCardRepository, ProductCardRepository productCardRepository,
+			AdvisoryLockRepository locks, Clock clock) {
 		this.productBoardRepository = productBoardRepository;
 		this.cardCleanupRepository = cardCleanupRepository;
+		this.productBoardCardRepository = productBoardCardRepository;
+		this.productCardRepository = productCardRepository;
 		this.locks = locks;
 		this.clock = clock;
 	}
@@ -75,6 +87,21 @@ public class ProductBoardCommandService {
 		board.softDelete(now);
 		productBoardRepository.saveAndFlush(board);
 		cardCleanupRepository.softDeleteOrphanCards(userId, linkedCardIds, now);
+	}
+
+	/** 지정 보드 연결만 해제하고 다른 활성 보드 연결이 없는 카드만 휴지통으로 이동한다. */
+	@Transactional
+	public void removeProductFromBoard(Long userId, Long boardId, Long productId) {
+		locks.lock("board:" + userId);
+		loadActiveOwnedBoard(userId, boardId);
+		locks.lock(PRODUCT_CARD_LOCK_PREFIX + userId);
+		if (productId == null || productId <= 0L
+				|| productCardRepository.findByIdAndUserIdAndDeletedFalse(productId, userId).isEmpty()
+				|| !productBoardCardRepository.existsByBoardIdAndCardId(boardId, productId)) {
+			throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
+		}
+		cardCleanupRepository.deleteBoardCardLink(boardId, productId);
+		cardCleanupRepository.softDeleteOrphanCards(userId, List.of(productId), clock.instant());
 	}
 
 	private ProductBoard loadActiveOwnedBoard(Long userId, Long boardId) {

@@ -1,7 +1,9 @@
 package com.ject.ziper.domain.board;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -120,6 +122,8 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 		mvc.perform(patch(BOARDS_PATH + "/" + defaultBoardId).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"봄 코디\"}")).andExpect(status().isUnauthorized());
 		mvc.perform(delete(BOARDS_PATH + "/" + defaultBoardId)).andExpect(status().isUnauthorized());
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", defaultBoardId, 1L))
+				.andExpect(status().isUnauthorized());
 	}
 
 	@Test
@@ -376,6 +380,90 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 		CardDeletionState alreadyTrashedState = readCardState(alreadyTrashedCardId);
 		assertThat(alreadyTrashedState.deleted()).isTrue();
 		assertThat(alreadyTrashedState.deletedAt()).isEqualTo(previousDeletedAt);
+	}
+
+	@Test
+	void 두보드에연결된상품_순서대로제거하면_마지막연결해제후휴지통에한번나타난다() throws Exception {
+		Long firstBoardId = createBoardViaApi(accessToken, "첫 보드");
+		Long secondBoardId = createBoardViaApi(accessToken, "둘째 보드");
+		Long targetCardId = insertCard(userId, "https://shop.example/target", "삭제할 상품", false, null);
+		Long otherCardId = insertCard(userId, "https://shop.example/other", "남길 상품", false, null);
+		linkCardToBoard(firstBoardId, targetCardId);
+		linkCardToBoard(secondBoardId, targetCardId);
+		linkCardToBoard(secondBoardId, otherCardId);
+
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", firstBoardId, targetCardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isNoContent());
+
+		mvc.perform(get(BOARDS_PATH + "/{boardId}/products", firstBoardId).header(HttpHeaders.AUTHORIZATION,
+				bearer(accessToken))).andExpect(status().isOk()).andExpect(jsonPath("$.productCount").value(0))
+				.andExpect(jsonPath("$.items").isEmpty());
+		mvc.perform(get(BOARDS_PATH + "/{boardId}/products", secondBoardId).header(HttpHeaders.AUTHORIZATION,
+				bearer(accessToken))).andExpect(status().isOk()).andExpect(jsonPath("$.productCount").value(2))
+				.andExpect(
+						jsonPath("$.items[*].cardId").value(hasItems(targetCardId.intValue(), otherCardId.intValue())));
+		mvc.perform(get("/api/v1/trash/products").header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+		assertThat(readCardState(targetCardId).deleted()).isFalse();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ?", Integer.class,
+				targetCardId)).isEqualTo(1);
+		assertThat(readCardState(otherCardId).deleted()).isFalse();
+
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", secondBoardId, targetCardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isNoContent());
+		mvc.perform(get(BOARDS_PATH + "/{boardId}/products", secondBoardId).header(HttpHeaders.AUTHORIZATION,
+				bearer(accessToken))).andExpect(status().isOk()).andExpect(jsonPath("$.productCount").value(1))
+				.andExpect(jsonPath("$.items[0].cardId").value(otherCardId));
+		mvc.perform(get("/api/v1/trash/products").header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1))
+				.andExpect(jsonPath("$.items[0].cardId").value(targetCardId));
+		assertThat(readCardState(targetCardId).deleted()).isTrue();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ?", Integer.class,
+				targetCardId)).isZero();
+	}
+
+	@Test
+	void 마지막보드의상품_제거하면_고아상품만휴지통으로이동한다() throws Exception {
+		Long boardId = createBoardViaApi(accessToken, "마지막 보드");
+		Long cardId = insertCard(userId, "https://shop.example/orphan-after-remove", "고아 상품", false, null);
+		linkCardToBoard(boardId, cardId);
+
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", boardId, cardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isNoContent());
+
+		mvc.perform(get(BOARDS_PATH + "/{boardId}/products", boardId).header(HttpHeaders.AUTHORIZATION,
+				bearer(accessToken))).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+		mvc.perform(get("/api/v1/trash/products").header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1))
+				.andExpect(jsonPath("$.items[0].cardId").value(cardId));
+		assertThat(readCardState(cardId).deleted()).isTrue();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ?", Integer.class,
+				cardId)).isZero();
+	}
+
+	@Test
+	void 연결되지않거나타인소유인보드상품_삭제를요청하면_404를반환하고카드는유지한다() throws Exception {
+		Long linkedBoardId = createBoardViaApi(accessToken, "연결 보드");
+		Long unlinkedBoardId = createBoardViaApi(accessToken, "무관 보드");
+		Long otherBoardId = createBoardViaApi(otherAccessToken, "타인 보드");
+		Long cardId = insertCard(userId, "https://shop.example/keep", "유지할 상품", false, null);
+		linkCardToBoard(linkedBoardId, cardId);
+
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", unlinkedBoardId, cardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("PRODUCT_CARD_NOT_FOUND"));
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", otherBoardId, cardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("BOARD_NOT_FOUND"));
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", linkedBoardId, cardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(otherAccessToken))).andExpect(status().isNotFound());
+		assertThat(readCardState(cardId).deleted()).isFalse();
+
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", linkedBoardId, cardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isNoContent());
+		mvc.perform(delete(BOARDS_PATH + "/{boardId}/products/{productId}", linkedBoardId, cardId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(accessToken))).andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("PRODUCT_CARD_NOT_FOUND"));
 	}
 
 	@Test

@@ -51,5 +51,10 @@ class ProductBoardOpenApiTest extends PostgresTestSupport {
 		assertThat(deleteOp.path("summary").asText()).isNotBlank();
 		assertThat(deleteOp.path("tags").toString()).contains("보드");
 		assertThat(deleteOp.has("security")).isFalse();
+
+		JsonNode removeProductOp = paths.path("/api/v1/boards/{boardId}/products/{productId}").path("delete");
+		assertThat(removeProductOp.isMissingNode()).isFalse();
+		assertThat(removeProductOp.path("summary").asText()).isEqualTo("특정 보드에서 상품 제거");
+		assertThat(removeProductOp.path("description").asText()).contains("연결만 해제");
 	}
 }
