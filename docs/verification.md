@@ -126,3 +126,10 @@ Windows에서 `gradlew.bat check --console=plain`의 Spotless·Checkstyle·ArchU
 - 로컬 Docker Compose(`ziper-local-app-1` + PostgreSQL 17.6, 커밋 `b97778e` 기준)에 `EMAIL_MAIL_ENABLED=true`, `EMAIL_FROM=noreply@joonamin.dev`, `MAIL_HOST=smtp.mailgun.org`, `MAIL_PORT=587`, `MAIL_USERNAME=noreply@joonamin.dev`를 적용해 기동(`Started ZiperApplication in 3.287 seconds`, `V5__create_email_verification_failures` 마이그레이션 포함)과 `/livez` `200`, `/readyz` `200`을 확인했습니다.
 - `POST /api/v1/auth/email/verifications` 호출로 `201 Created`(`flowId=22e1e65f-a6a6-47b5-b242-6b20a2252812`) 응답과 `noreply@joonamin.dev` 발신 메일이 Mailgun 및 Cloudflare Email Routing을 거쳐 Gmail 수신함까지 도착함을 확인했습니다. 검증 후 테스트용 `ziper-local-app-1` 컨테이너는 중지·정리했습니다.
 - GCP Secret Manager(`ziper-production` 프로젝트 `ziper-runtime-properties`)에 Mailgun SMTP 키를 포함한 버전 `3` 및 OAuth 키를 통합한 버전 `4`를 등록했습니다(비밀 값 미출력 확인). 운영 적용은 `Ziper-5th-Infra` `config/production.json`의 `secretVersions` 갱신 및 `main` 쌍 배포 이후 별도로 검증해야 하며, 운영 배포 전 대화에 노출됐던 초기 `MAIL_PASSWORD`의 회전이 필요합니다.
+
+## 2026-11-28 JECT-83 휴지통 상품 목록 조회
+
+- `feat/JECT-83-trash`에서 PostgreSQL 17.6 Testcontainers 통합 테스트 5개가 통과했습니다. 인증 필요, 빈 목록, 본인·미만료 카드 필터, 삭제 시각과 ID 정렬, 30일 D-Day 계산, 이미지 URL 우선순위와 DB 트랜잭션 밖 서명을 확인했습니다.
+- 로컬 OpenAPI 내보내기 테스트가 통과했고 `GET /api/v1/trash/products`와 응답 항목의 `cardId`, `shop`, `productTitle`, `price`, `imageUrl`, `daysRemaining`을 생성된 JSON에서 확인했습니다.
+- WSL에서 `scripts/check.sh`의 문서 정책과 Python 검사군은 모두 통과했습니다. WSL Gradle은 Windows 형식의 Java 경로를 Spotless 입력으로 받아 중단됐습니다. Windows Gradle `check`의 컴파일·Spotless·Checkstyle은 통과했고 전체 Java 테스트 443개 중 3개가 인증 1개·이미지 미러링 2개에서 실패했으며 3개는 건너뛰었습니다. 실패한 두 테스트 클래스를 분리 실행해도 같은 3개가 실패했습니다. 변경 전 커밋 `7cc32a2`의 별도 worktree에서도 같은 3개가 실패했습니다. 따라서 전체 Java 검사 성공으로 기록하지 않습니다.
+- 2026-11-28 02:26 UTC에 Windows 시각을 Docker `postgres:17.6` 컨테이너 실행 전후로 감싸 측정했습니다. Windows는 02:26:53.630~54.426, 컨테이너는 02:26:57.540으로 컨테이너 시계가 약 3~4초 앞섰습니다. 인증 테스트는 DB `CURRENT_TIMESTAMP - 1초`로 만료시킨 티켓을 Java 현재 시각과 비교하므로 아직 유효하다고 판단할 수 있습니다. 이미지 미러링 테스트도 DB 시각으로 설정한 작업 기한을 Java 현재 시각과 비교하므로 작업을 아직 선점하지 못하는 결과와 일치합니다. 시계 차이는 이번 변경 전에도 같은 실패가 난 원인으로 판단하며, Docker 시계 동기화 후 재검증은 하지 않았습니다.
