@@ -8,6 +8,8 @@ Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키
 
 상품 카드·보드·링크 쓰기가 함께 쓰는 advisory lock 키는 `board:{userId}` → `product-card:{userId}` → `link:{uuid}` → `link-id:{id}` 순서로만 잡습니다. 카드 등록은 보드 삭제와 같은 `board:`로 활성 보드 검증·연결을 직렬화하고, `ProductLinkService.resolveOrCreateLink`는 상태 갱신과 같은 `link-id:`를 잡은 채 최신 링크 상태를 반환합니다. 링크 잠금을 잡은 뒤에는 `board:`·`product-card:`를 잡지 않아 교착을 피합니다. 스토리지 서명처럼 외부 호출이 필요한 응답 조립은 `@Transactional` 밖(`ProductCardRegistrationFacade`)에서 합니다.
 
+구매 완료 전환은 사용자별 `product-card:` 락과 카드 행 잠금 아래 상태만 `PURCHASED`로 바꿉니다. 보드 연결은 유지하고, 일반 보드 조회는 기존 `PLANNED` 필터로 구매 완료 카드를 제외합니다. 활성 보드 연결 수는 V13의 연결 소프트 삭제 컬럼이 아직 없는 스키마와 도입된 스키마 양쪽에서 활성 연결만 세도록 조회합니다. 구매 완료 목록은 `product_cards`를 기준으로 페이지를 읽고 외부 이미지 서명은 `PurchasedProductFacade`에서 조회 트랜잭션이 끝난 뒤 수행합니다.
+
 이메일 인증의 HTTP 계약·DB 발급 기록·요청 제한·번호 확인과 이메일 회원 가입(`EmailSignupService`)은 `domain/auth`가 맡습니다. 가입 후 토큰·세션 발급은 OAuth 로그인과 같은 `AuthService.startSession`을 사용하고 비밀번호 해시는 `global/security`의 `PasswordEncoder` 빈을 사용합니다. `global/security`의 `EmailCodeHmac`은 별도 키로 번호와 요청자 식별자를 해시하며 비밀이나 번호 원문을 로그에 남기지 않습니다.
 
 컨트롤러는 HTTP 입출력을 처리하고 서비스는 업무 규칙과 트랜잭션을 담당합니다. 엔티티를 API 응답으로 직접 노출하지 않습니다. 웹과 모바일 클라이언트가 같은 API를 사용할 예정입니다.
