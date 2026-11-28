@@ -43,7 +43,7 @@ public class HomeQueryRepository {
 				       COUNT(pc.id) AS product_count
 				FROM ziper.product_boards pb
 				LEFT JOIN ziper.product_board_card pbc
-				       ON pbc.board_id = pb.id
+				       ON pbc.board_id = pb.id AND pbc.is_deleted = FALSE
 				LEFT JOIN ziper.product_cards pc
 				       ON pc.id = pbc.card_id
 				      AND pc.user_id = pb.user_id
@@ -79,7 +79,7 @@ public class HomeQueryRepository {
 				           ) AS rn
 				    FROM ziper.product_boards pb
 				    JOIN ziper.product_board_card pbc
-				      ON pbc.board_id = pb.id
+				      ON pbc.board_id = pb.id AND pbc.is_deleted = FALSE
 				    JOIN ziper.product_cards pc
 				      ON pc.id = pbc.card_id
 				    WHERE pb.user_id = ?

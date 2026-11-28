@@ -352,8 +352,12 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 		assertThat(deletedBoard.getDeletedAt()).isNotNull();
 
 		Integer remainingTargetLinks = jdbc.queryForObject(
-				"SELECT COUNT(*) FROM ziper.product_board_card WHERE board_id = ?", Integer.class, targetBoardId);
+				"SELECT COUNT(*) FROM ziper.product_board_card WHERE board_id = ? AND is_deleted = FALSE",
+				Integer.class, targetBoardId);
 		assertThat(remainingTargetLinks).isZero();
+		assertThat(jdbc.queryForObject(
+				"SELECT COUNT(*) FROM ziper.product_board_card WHERE board_id = ? AND is_deleted = TRUE", Integer.class,
+				targetBoardId)).isEqualTo(4);
 
 		List<Long> remainingActiveBoardCards = jdbc.queryForList(
 				"SELECT card_id FROM ziper.product_board_card WHERE board_id = ? ORDER BY card_id", Long.class,
@@ -405,7 +409,11 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 		mvc.perform(get("/api/v1/trash/products").header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
 		assertThat(readCardState(targetCardId).deleted()).isFalse();
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ?", Integer.class,
+		assertThat(jdbc.queryForObject(
+				"SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ? AND is_deleted = FALSE", Integer.class,
+				targetCardId)).isEqualTo(1);
+		assertThat(jdbc.queryForObject(
+				"SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ? AND is_deleted = TRUE", Integer.class,
 				targetCardId)).isEqualTo(1);
 		assertThat(readCardState(otherCardId).deleted()).isFalse();
 
@@ -419,6 +427,9 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 				.andExpect(jsonPath("$.items[0].cardId").value(targetCardId));
 		assertThat(readCardState(targetCardId).deleted()).isTrue();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ?", Integer.class,
+				targetCardId)).isEqualTo(2);
+		assertThat(jdbc.queryForObject(
+				"SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ? AND is_deleted = FALSE", Integer.class,
 				targetCardId)).isZero();
 	}
 
@@ -437,8 +448,9 @@ class ProductBoardCommandIntegrationTest extends PostgresTestSupport {
 				.andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].cardId").value(cardId));
 		assertThat(readCardState(cardId).deleted()).isTrue();
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ?", Integer.class,
-				cardId)).isZero();
+		assertThat(jdbc.queryForObject(
+				"SELECT COUNT(*) FROM ziper.product_board_card WHERE card_id = ? AND is_deleted = TRUE", Integer.class,
+				cardId)).isOne();
 	}
 
 	@Test

@@ -94,18 +94,19 @@
   - 상세·목록·재발견에서 `[구매 완료]` 선택 시 모든 일반 보드와 재발견 대상에서 제외
   - 별도 보드 행 생성 없이 전용 **'구매 완료 목록'**에서 상품당 1회만 노출
 - **삭제 범위 구분**:
-  - **개별 보드에서만 상품 제거**: 해당 보드 연결만 해제 (다른 보드에는 유지, 어느 보드에도 안 남은 **고아 상품**이 되면 30일 휴지통 이동)
-  - **보드 자체 삭제**: 해당 보드 연결 해제 후, 어느 보드에도 안 남은 **고아 상품만 30일 휴지통 이동** (다른 보드에도 담긴 상품은 유지)
+  - **개별 보드에서만 상품 제거**: 해당 보드 연결을 소프트 삭제 (다른 보드에는 유지, 활성 보드 연결이 0개인 **고아 상품**이 되면 30일 휴지통 이동)
+  - **보드 자체 삭제**: 해당 보드 연결을 소프트 삭제한 후, 활성 보드 연결이 0개인 **고아 상품만 30일 휴지통 이동** (다른 보드에도 담긴 상품은 유지)
   - **상품 상세 또는 재발견에서 삭제**: 담긴 **모든 보드에서 일괄 비노출**되고 즉시 30일 휴지통 이동
 
 ### 2.4 휴지통 및 복구
-- **접근 경로 및 대상**: `[마이페이지] -> [휴지통]` (일반 보드 목록에는 미노출). 복구 대상은 **삭제된 상품 카드**로 한정 (삭제된 보드 자체 복구는 미제공)
+- **접근 경로 및 대상**: `[마이페이지] -> [휴지통]` (일반 보드 목록에는 미노출). 복구 대상은 **삭제된 상품 카드**로 한정하며 삭제된 보드 복구는 제공하지 않는다.
 - **보관 및 파기**:
   - 보드 구분 없이 상품 카드 단위로 노출하며 30일 D-Day 표시
   - 삭제 후 30일 경과 시 자동 영구 삭제 / 휴지통 내 `[즉시 영구 삭제]` 시 즉시 DB 파기
+  - `DELETE /api/v1/trash/products` 하나에 `productIds` 배열을 보내 단일(1개)·다중(2개 이상) 영구 삭제를 처리한다. 선택한 카드 중 하나라도 본인 휴지통 상품이 아니면 전체 요청을 거절한다.
 - **지정 복구**:
-  - 복구 클릭 시 현재 존재하는 활성 보드 중 **원하는 보드(1개 이상)를 새로 지정**하여 복구
-  - 복구할 보드는 사용자가 직접 선택하며 휴지통 목록은 이전 보드 선택 힌트를 반환하지 않는다
+  - 복구 클릭 시 유저가 현재 보유한 활성 보드 목록에서 **1개 이상 직접 선택**한다 (다중 선택 가능, 복구 화면에서 새 보드 생성 불가).
+  - 과거 연결 여부와 관계없이 현재 활성 보드를 선택할 수 있다. 휴지통 상품 목록은 이전 보드 선택 힌트를 반환하지 않는다.
 
 ### 2.5 방치 상품 재발견(Rediscovery) 스와이프
 - **노출 대상**: 구매 예정 상태이면서 링크 상태가 정상/미확인(`link_status NOT IN ('REMOVED', 'SOLD_OUT')`)이고, 대기 주기(최초 14일 / 연장 30일·90일)가 경과한 상품 (동일 URL은 세션당 1회만 노출)
@@ -156,7 +157,7 @@
 | 보드상세 | `RQ-BOR-D5`~`D7` | D5~D7 | F/B | 정렬 4종·태그 필터, 상세/원본 이동 시 14일 주기 리셋, 수동 구매완료 일괄 동기화, 보드 삭제 시 고아 상품만 휴지통 이동 |
 | 상품상세 | `RQ-DTL-51`~`56` | 5-1~5-4, MOD, DEL | F/B | 전체 상품명·쇼핑몰명(`shop`)·링크 상태·메모·태그·소속 보드 조회 및 수정, 구매 완료 이동, 상세 삭제 시 모든 보드에서 휴지통 이동 |
 | 재발견 | `RQ-RED-E1`~`E8` | E-1~E-7, END | F/B | 14/30/90일 경과 상품 URL당 1회 노출(`REMOVED`·`SOLD_OUT` 제외), 유지·구매완료·삭제 동기화, 클라 3초 지연 되돌리기, Stateless 완료 금액 리포트 |
-| 휴지통 | `RQ-TRH-F1`~`F2` | F1, F2 | F/B | 휴지통 30일 D-Day 표시 및 만료 시 자동 영구 삭제, 유저가 지정한 활성 보드로 상품 카드 선택 복구 |
+| 휴지통 | `RQ-TRH-F1`~`F2` | F1, F2 | F/B | 휴지통 30일 D-Day 표시 및 만료 시 자동 영구 삭제, 현재 보유한 활성 보드 1개 이상 선택 복구 |
 
 ---
 
@@ -186,7 +187,7 @@
    - 재발견 단계 도메인: `rediscovery_stage BETWEEN 0 AND 2`.
 4. **`ziper.product_board_card`**
    - 매핑 고유성: `UNIQUE (board_id, card_id)`.
-   - **매핑 보존 원칙**: 상품 전체 삭제(`is_deleted = TRUE`)나 구매 완료(`status = 'PURCHASED'`) 전환 시 `product_board_card` 행을 물리 삭제하지 않고 유지한다. 일반 보드 상품 조회 쿼리에서 반드시 `pc.is_deleted = FALSE AND pc.status = 'PLANNED'` 조건을 결합해 필터링한다. (예비 서버 Undo 확장에 활용)
+   - **매핑 보존 원칙**: 보드에서 상품을 제거하거나 보드 자체를 삭제하면 해당 `product_board_card` 행을 소프트 삭제한다. 상품 전체 삭제 시에도 활성 연결을 소프트 삭제하며 행은 보존한다. 구매 완료 전환 시 보드 매핑은 유지한다. 일반 보드 조회는 `pbc.is_deleted = FALSE AND pc.is_deleted = FALSE AND pc.status = 'PLANNED'`로 필터링한다.
 5. **`ziper.tags` & `ziper.product_card_tags`**
    - `tags.title`: 유니코드 NFC로 정규화하고 선행 공백·`#` 접두부를 반복 제거한 뒤 앞뒤 공백을 제거하고 내부 연속 공백을 한 칸으로 줄인 비공백 문자열(제어·서식 문자 포함 시 `INVALID_TAG_TITLE`, 커스텀 태그 권장 최대 6자). 대소문자는 구분한다.
    - 기본 시드: `('봄', TRUE), ('여름', TRUE), ('가을', TRUE), ('겨울', TRUE)` (`user_id IS NULL`, 삭제 불가).
@@ -210,13 +211,13 @@
 | --- | --- | --- | --- |
 | **1. 상품 신규 등록** | • 필수값 검증 통과: `productUrl`, `productTitle`(HTML 제거·최대 200자), `price`(0 이상), 카드 이미지(`imageUrl`/`imageFileId`/`fallbackIcon` 중 1개 이상; `imageUrl`은 `https` 및 지원몰 `imageHosts` 검증), `boardIds`(1개 이상), 해시태그(1개 이상), `metadataSource`(`CLIENT`\|`MANUAL`)<br>• 요청한 모든 `boardIds`가 해당 `user_id`의 활성 보드(`is_deleted = FALSE`)<br>• `(user_id, canonical_url)` 미존재 (존재 시 `409`) | • `product_links` 조회/생성 후 `product_cards` 생성 (`product_url = canonical_url`, `shop`, `price`, 카드 이미지, `metadata_source`, `image_status`, `link_id`, `link_status`, `status='PLANNED'`, `rediscovery_stage=0`, `last_interacted_at=now()`, `next_rediscovery_at=now()+14d`, `is_deleted=FALSE`)<br>• 외부 `imageUrl` 존재 시 같은 트랜잭션에서 DB 이미지 미러링 작업 등록(`image_status='PENDING'`). 예외: (a) 직접 업로드 파일(`imageFileId`)이 함께 있으면 미러링하지 않으며, (b) 도메인별·전역 미러링 플래그가 OFF이면 작업을 등록하지 않고 원본 `imageUrl` 참조 + `fallbackIcon` 폴백으로 두며 `image_status='NONE'`으로 기록<br>• 선택한 모든 보드에 `product_board_card` 삽입<br>• 입력된 태그(1개 이상, 기본 태그 또는 해당 유저의 커스텀 태그) Upsert 후 `product_card_tags` 삽입 | 선택한 모든 보드에서 상품 조회 가능, 커밋 후 빠른 경로 워커가 미러링 수행 |
 | **2. 상품 상세 조회 / 원본 이동** (`RQ-BOR-D5`) | • `card.user_id == currentUserId`<br>• `card.is_deleted == FALSE` | • `card.rediscovery_stage = 0`<br>• `card.last_interacted_at = now()`<br>• `card.next_rediscovery_at = now() + INTERVAL '14 days'`<br>• `user_card_events`에 `VIEW_DETAIL` 또는 `OPEN_ORIGINAL_URL` 삽입 | 기존 30일/90일 연장 상태였더라도 즉시 14일 주기로 리셋됨 |
-| **3. 개별 보드에서 상품 제거** (`3.2.3`) | • 해당 `board_id`와 `card_id`가 현재 유저 소유 | • `DELETE FROM ziper.product_board_card WHERE board_id = :boardId AND card_id = :cardId`<br>• 남은 활성 보드(`pb.is_deleted = FALSE`) 연결 수를 카운트하여 **`0`개이면**: `card.is_deleted = TRUE`, `card.deleted_at = now()` | 다른 보드에 연결이 남아 있으면 유지, 0개(고아 상품)면 휴지통 이동 |
-| **4. 보드 자체 삭제** (`RQ-BOR-D7`) | • `board.modifiable == TRUE`<br>• `board.is_deleted == FALSE` | • 해당 보드의 `product_board_card` 연결 삭제 및 보드 삭제 처리 (`board.is_deleted = TRUE, deleted_at = now()`)<br>• 해당 보드에 속했던 카드들 중 남은 활성 보드 연결이 **`0`개인 고아 카드들만** 일괄 `is_deleted = TRUE, deleted_at = now()` 갱신 | 다른 활성 보드에도 속한 카드는 유지되고 고아 카드만 휴지통 이동 |
-| **5. 상품 전체 삭제 (상세/재발견)** (`RQ-DTL-56`, `RQ-RED-E5`) | • `card.user_id == currentUserId`<br>• `card.is_deleted == FALSE` | • `card.is_deleted = TRUE`, `card.deleted_at = now()`, `card.updated_at = now()`<br>• **`product_board_card` 행은 삭제하지 않고 유지** | 모든 일반 보드 및 재발견에서 즉시 제외 |
+| **3. 개별 보드에서 상품 제거** (`3.2.3`) | • 활성 `board_id`와 `card_id`가 현재 유저 소유이며 연결도 활성 | • 해당 `product_board_card`의 `is_deleted = TRUE, deleted_at = now()`<br>• 남은 활성 연결(`pbc.is_deleted = FALSE AND pb.is_deleted = FALSE`)이 **`0`개이면** 카드도 소프트 삭제 | 다른 활성 보드에 연결이 남아 있으면 유지, 0개(고아 상품)면 휴지통 이동 |
+| **4. 보드 자체 삭제** (`RQ-BOR-D7`) | • `board.modifiable == TRUE`<br>• `board.is_deleted == FALSE` | • 해당 보드의 활성 `product_board_card` 연결을 소프트 삭제하고 보드도 소프트 삭제 (`board.is_deleted = TRUE, deleted_at = now()`)<br>• 해당 보드에 속했던 카드들 중 남은 활성 연결이 **`0`개인 고아 카드들만** 일괄 소프트 삭제 | 다른 활성 보드에도 속한 카드는 유지되고 고아 카드만 휴지통 이동 |
+| **5. 상품 전체 삭제 (상세/재발견)** (`RQ-DTL-56`, `RQ-RED-E5`) | • `card.user_id == currentUserId`<br>• `card.is_deleted == FALSE` | • 활성 `product_board_card` 연결을 소프트 삭제하고 행은 보존<br>• `card.is_deleted = TRUE`, `card.deleted_at = now()`, `card.updated_at = now()` | 모든 일반 보드 및 재발견에서 즉시 제외 |
 | **6. 구매 완료 전환 (상세/목록/재발견)** (`RQ-DTL-54`, `RQ-RED-E4`) | • `card.user_id == currentUserId`<br>• `card.is_deleted == FALSE` | • `card.status = 'PURCHASED'`, `card.updated_at = now()`<br>• **`product_board_card` 행은 삭제하지 않고 유지** | 일반 보드 및 재발견에서 제외, 구매 완료 목록에만 단일 카드로 노출 |
 | **7. 재발견 `[유지]` 선택** (`RQ-RED-E3`) | • `card.status == 'PLANNED'` AND `card.is_deleted == FALSE` | • `oldStage == 0` 이면 `newStage = 1`, `interval = 30 days`<br>• `oldStage >= 1` 이면 `newStage = 2`, `interval = 90 days`<br>• `card.rediscovery_stage = newStage`, `card.last_interacted_at = now()`, `card.next_rediscovery_at = now() + interval`<br>• `user_card_events`에 `REDISCOVERY_KEEP` 기록 | 30일 또는 90일 동안 재발견 큐에서 제외 |
-| **8. 휴지통 지정 복구** (`RQ-TRH-F2`) | • `card.is_deleted == TRUE`<br>• 요청한 `targetBoardIds`가 모두 활성 보드(1개 이상) | • 기존 `product_board_card`에서 해당 `card_id` 행 모두 삭제 후 `targetBoardIds`로 새로 삽입<br>• `card.is_deleted = FALSE`, `card.deleted_at = NULL`, `card.status = 'PLANNED'`, `card.rediscovery_stage = 0`, `card.next_rediscovery_at = now() + 14d` | 지정한 보드들로 상품 복구 완료 |
-| **9. 휴지통 영구 삭제 (수동 / 30일 만료)** (`RQ-TRH-F1`) | • 수동: `card.is_deleted == TRUE`<br>• 배치: `card.is_deleted == TRUE AND card.deleted_at <= now() - INTERVAL '30 days'` | • `DELETE FROM ziper.product_cards WHERE id = :cardId` (`ON DELETE CASCADE`로 매핑·이벤트 함께 삭제) | DB에서 영구 파기 |
+| **8. 휴지통 지정 복구** (`RQ-TRH-F2`) | • 본인 카드가 삭제 상태이고 삭제 후 30일 미만<br>• 요청한 `targetBoardIds`(1개 이상)가 모두 본인 소유 활성 보드 | • 기존 활성 카드 연결은 소프트 삭제<br>• 선택한 보드의 과거 연결은 재활성화하고 새 연결은 삽입 (`created_at = now()`)<br>• `card.is_deleted = FALSE`, `card.deleted_at = NULL`, `card.status = 'PLANNED'`, `card.rediscovery_stage = 0`, `card.next_rediscovery_at = now() + 14d` | 선택한 현재 활성 보드에만 복구 완료 |
+| **9. 휴지통 영구 삭제 (수동 / 30일 만료)** (`RQ-TRH-F1`) | • 수동 단일·다중: 요청한 카드 모두 본인 소유 및 `is_deleted == TRUE`; 다중은 1개 이상<br>• 만료 배치: `card.is_deleted == TRUE AND card.deleted_at <= now() - INTERVAL '30 days'` | • 수동 다중은 한 트랜잭션에서 요청한 카드 전체를 삭제하고 하나라도 유효하지 않으면 모두 유지<br>• `DELETE FROM ziper.product_cards` (`ON DELETE CASCADE`로 매핑·이벤트 함께 삭제) | DB에서 영구 파기 |
 | **10. 회원 탈퇴** (`RQ-MYP-04`) | • `user.status == 'ACTIVE'` | • `DELETE FROM ziper.sessions WHERE user_id = :userId`<br>• `user.status = 'WITHDRAWN'` (및 탈퇴 사유 기록) | 즉시 세션 종료 및 탈퇴 계정 재로그인·토큰 재발급 차단 |
 
 ---
@@ -224,7 +225,7 @@
 ## 7. 핵심 조회 및 집계 쿼리 규약
 
 1. **일반 보드 내 상품 목록 조회 (`D-2`)**:
-   - 조건: `pbc.board_id = :boardId AND pc.user_id = :userId AND pc.is_deleted = FALSE AND pc.status = 'PLANNED'`
+   - 조건: `pbc.board_id = :boardId AND pbc.is_deleted = FALSE AND pc.user_id = :userId AND pc.is_deleted = FALSE AND pc.status = 'PLANNED'`
    - 선택 필터: `tagIds`(또는 `tagId`) 전달 시 `product_card_tags` 조인으로 해당 태그 포함 카드만 필터링
    - 보드 상세의 `productCount`는 현재 태그 필터와 일치하는 활성 구매 예정 상품의 전체 개수이며 페이지 크기와 무관하다. 보드 목록의 개수는 태그 필터 없이 집계한다.
    - 다음 페이지는 같은 보드와 정렬에서 직전 응답의 `nextCursor`를 그대로 전달한다. 서버는 마지막 항목의 정렬 키와 보드 연결 ID를 기준으로 다음 항목을 조회한다.
@@ -241,6 +242,7 @@
    - D-Day 계산: `CEIL(EXTRACT(EPOCH FROM ((pc.deleted_at + INTERVAL '30 days') - now())) / 86400.0)`
    - 정렬: `ORDER BY pc.deleted_at DESC, pc.id DESC`
    - 응답: `items` 배열에 `cardId`, `shop`, `productTitle`, `price`, `imageUrl`, `daysRemaining`만 반환. `imageUrl`은 저장소 썸네일 서명 URL을 우선하고, 없으면 원본 외부 이미지 URL을 사용한다. 대체 아이콘만 있는 카드의 `imageUrl`은 `null`이다.
+   - 복구 보드 후보 조회: 삭제 후 30일 미만인 본인 카드에 대해 현재 보유한 활성 보드를 보드 생성 시각 최신순으로 반환한다. 복구 화면 내 새 보드 생성은 제공하지 않는다.
 4. **재발견 스와이프 큐 조회 (`RQ-RED-E2`)**:
    - 조건: `pc.user_id = :userId AND pc.is_deleted = FALSE AND pc.status = 'PLANNED' AND pc.link_status NOT IN ('REMOVED', 'SOLD_OUT') AND pc.next_rediscovery_at <= now()`
    - 정렬: 사용자가 최근 자주 저장한 태그(`product_card_tags`) 가중치 우선 → `pc.next_rediscovery_at ASC, pc.id ASC`
@@ -257,5 +259,6 @@
    - 최근 저장 상품 목록: `pc.user_id = :userId AND pc.is_deleted = FALSE AND pc.status = 'PLANNED' ORDER BY pc.created_at DESC, pc.id DESC` (상위 N개)
 7. **보드 목록 조회 (`D-1`, 저장 바텀시트 공용)**:
    - 조건: `pb.user_id = :userId AND pb.is_deleted = FALSE`
+   - 상품 개수와 미리보기는 `pbc.is_deleted = FALSE AND pc.is_deleted = FALSE AND pc.status = 'PLANNED'`인 연결만 집계한다.
    - 정렬: 순수 최신 생성순 (`ORDER BY pb.created_at DESC, pb.id DESC`, `'기본 보드'` 최상단 고정 없음)
    - 부가 정보: 각 보드별 활성 `PLANNED` 상품 개수 + 최신 등록 상품 대표 썸네일 최대 3장(`[{ cardId, imageUrl, fallbackIcon }]`, `imageUrl`은 `imageFileUrl ?? image_url` 우선), 및 특수 `'구매 완료 목록'` 요약(`purchasedSummary`: 개수 + 대표 썸네일 최대 3장)

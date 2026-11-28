@@ -103,8 +103,8 @@ public class ProductCardDetailService {
 		userCardEventRepository.save(UserCardEvent.create(userId, card.getId(), UserCardEventType.VIEW_DETAIL, now));
 
 		List<TagResponse> tags = loadCardTags(card.getId());
-		Set<Long> linkedBoardIds = productBoardCardRepository.findAllByCardIdOrderByIdAsc(card.getId()).stream()
-				.map(ProductBoardCard::getBoardId).collect(Collectors.toSet());
+		Set<Long> linkedBoardIds = productBoardCardRepository.findAllByCardIdAndDeletedFalseOrderByIdAsc(card.getId())
+				.stream().map(ProductBoardCard::getBoardId).collect(Collectors.toSet());
 		List<ProductCardBoardSummary> boards = loadActiveOwnedBoards(userId, linkedBoardIds);
 
 		return new ProductCardDetailView(card, tags, boards);
@@ -177,9 +177,12 @@ public class ProductCardDetailService {
 		validateCardId(cardId);
 		productCardRepository.findActiveProductUrl(cardId, userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND));
+		advisoryLockRepository.lock("board:" + userId);
 		ProductCard card = lockForMutation(userId, cardId);
 		Instant now = clock.instant();
 		imageMirrorService.cancelPendingMirrorJobs(card.getId());
+		productBoardCardRepository.findAllByCardIdAndDeletedFalseOrderByIdAsc(cardId)
+				.forEach(link -> link.softDelete(now));
 		card.softDelete(now);
 		productCardRepository.saveAndFlush(card);
 	}
@@ -231,11 +234,14 @@ public class ProductCardDetailService {
 		Set<Long> existingBoardIds = existingLinks.stream().map(ProductBoardCard::getBoardId)
 				.collect(Collectors.toSet());
 
-		List<ProductBoardCard> toRemove = existingLinks.stream()
-				.filter(link -> !desiredBoardIds.contains(link.getBoardId())).toList();
-		if (!toRemove.isEmpty()) {
-			productBoardCardRepository.deleteAll(toRemove);
-			productBoardCardRepository.flush();
+		for (ProductBoardCard link : existingLinks) {
+			if (desiredBoardIds.contains(link.getBoardId())) {
+				if (link.isDeleted()) {
+					link.reactivate(now);
+				}
+			} else if (!link.isDeleted()) {
+				link.softDelete(now);
+			}
 		}
 
 		List<ProductBoardCard> toAdd = boardIds.stream().filter(boardId -> !existingBoardIds.contains(boardId))

@@ -82,8 +82,8 @@ public class ProductBoardCommandService {
 		ProductBoard board = loadActiveOwnedBoard(userId, boardId);
 		verifyModifiable(board);
 		List<Long> linkedCardIds = cardCleanupRepository.findCardIdsByBoardId(boardId);
-		cardCleanupRepository.deleteBoardCardLinks(boardId);
 		Instant now = clock.instant();
+		cardCleanupRepository.softDeleteBoardCardLinks(boardId, now);
 		board.softDelete(now);
 		productBoardRepository.saveAndFlush(board);
 		cardCleanupRepository.softDeleteOrphanCards(userId, linkedCardIds, now);
@@ -97,11 +97,12 @@ public class ProductBoardCommandService {
 		locks.lock(PRODUCT_CARD_LOCK_PREFIX + userId);
 		if (productId == null || productId <= 0L
 				|| productCardRepository.findByIdAndUserIdAndDeletedFalse(productId, userId).isEmpty()
-				|| !productBoardCardRepository.existsByBoardIdAndCardId(boardId, productId)) {
+				|| !productBoardCardRepository.existsByBoardIdAndCardIdAndDeletedFalse(boardId, productId)) {
 			throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
 		}
-		cardCleanupRepository.deleteBoardCardLink(boardId, productId);
-		cardCleanupRepository.softDeleteOrphanCards(userId, List.of(productId), clock.instant());
+		Instant now = clock.instant();
+		cardCleanupRepository.softDeleteBoardCardLink(boardId, productId, now);
+		cardCleanupRepository.softDeleteOrphanCards(userId, List.of(productId), now);
 	}
 
 	private ProductBoard loadActiveOwnedBoard(Long userId, Long boardId) {

@@ -32,11 +32,27 @@ class TrashProductCommandOpenApiTest extends PostgresTestSupport {
 	void 로컬문서가활성화됐을때_영구삭제경로를조회하면_204와한국어명세가포함된다() throws Exception {
 		String body = mvc.perform(get("/v3/api-docs")).andExpect(status().isOk()).andReturn().getResponse()
 				.getContentAsString(StandardCharsets.UTF_8);
-		JsonNode operation = mapper.readTree(body).path("paths").path("/api/v1/trash/products/{productId}")
-				.path("delete");
+		JsonNode paths = mapper.readTree(body).path("paths");
+		JsonNode operation = paths.path("/api/v1/trash/products").path("delete");
 
 		assertThat(operation.isMissingNode()).isFalse();
 		assertThat(operation.path("summary").asText()).isEqualTo("휴지통 상품 즉시 영구 삭제");
 		assertThat(operation.path("responses").has("204")).isTrue();
+		assertThat(operation.has("requestBody")).isTrue();
+		assertThat(paths.path("/api/v1/trash/products/{productId}").path("delete").isMissingNode()).isTrue();
+	}
+
+	@Test
+	void 로컬문서가활성화됐을때_복구경로를조회하면_보드목록과204명세가포함된다() throws Exception {
+		String body = mvc.perform(get("/v3/api-docs")).andExpect(status().isOk()).andReturn().getResponse()
+				.getContentAsString(StandardCharsets.UTF_8);
+		JsonNode paths = mapper.readTree(body).path("paths");
+		JsonNode boards = paths.path("/api/v1/trash/products/{productId}/restore-boards").path("get");
+		JsonNode restore = paths.path("/api/v1/trash/products/{productId}/restore").path("post");
+
+		assertThat(boards.path("summary").asText()).isEqualTo("휴지통 상품 복구 보드 목록");
+		assertThat(boards.path("responses").has("200")).isTrue();
+		assertThat(restore.path("summary").asText()).isEqualTo("휴지통 상품 지정 보드 복구");
+		assertThat(restore.path("responses").has("204")).isTrue();
 	}
 }

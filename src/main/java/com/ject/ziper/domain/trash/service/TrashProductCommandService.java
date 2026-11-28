@@ -1,5 +1,9 @@
 package com.ject.ziper.domain.trash.service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,18 +29,23 @@ public class TrashProductCommandService {
 	}
 
 	@Transactional
-	public void permanentlyDeleteProduct(Long userId, Long productId) {
-		if (productId == null || productId <= 0L) {
-			throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
+	public void permanentlyDeleteProducts(Long userId, List<Long> productIds) {
+		if (productIds == null || productIds.isEmpty() || productIds.stream().anyMatch(id -> id == null || id <= 0L)) {
+			throw new BusinessException(ErrorCode.INVALID_PRODUCT_CARD_INPUT);
 		}
+		List<Long> distinctIds = new ArrayList<>(new LinkedHashSet<>(productIds));
 		locks.lock("board:" + userId);
 		locks.lock(PRODUCT_CARD_LOCK_PREFIX + userId);
-		if (!repository.existsOwnedDeletedCard(userId, productId)) {
-			throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
+		for (Long id : distinctIds) {
+			if (!repository.existsOwnedDeletedCard(userId, id)) {
+				throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
+			}
 		}
-		imageMirrorService.lockActiveJobsForCard(productId);
-		if (repository.deleteOwnedDeletedCard(userId, productId) != 1) {
-			throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
+		for (Long id : distinctIds) {
+			imageMirrorService.lockActiveJobsForCard(id);
+			if (repository.deleteOwnedDeletedCard(userId, id) != 1) {
+				throw new BusinessException(ErrorCode.PRODUCT_CARD_NOT_FOUND);
+			}
 		}
 	}
 }

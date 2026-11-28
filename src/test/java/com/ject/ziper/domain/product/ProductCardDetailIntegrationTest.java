@@ -317,6 +317,8 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 				Timestamp.from(preservedCreatedAt), defaultBoard.getId(), cardId);
 		long preservedLinkId = productBoardCardRepository.findAllByCardIdOrderByIdAsc(cardId).stream()
 				.filter(link -> link.getBoardId().equals(defaultBoard.getId())).findFirst().orElseThrow().getId();
+		long removedLinkId = productBoardCardRepository.findAllByCardIdOrderByIdAsc(cardId).stream()
+				.filter(link -> link.getBoardId().equals(customBoard.getId())).findFirst().orElseThrow().getId();
 
 		ProductBoard thirdBoard = productBoardRepository.save(ProductBoard.createCustom(owner.getId(), "위시 보드"));
 
@@ -347,8 +349,11 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 				.andExpect(jsonPath("$.boards[1].boardId").value(defaultBoard.getId()));
 
 		List<ProductBoardCard> boardCards = productBoardCardRepository.findAllByCardIdOrderByIdAsc(cardId);
-		assertThat(boardCards).extracting(ProductBoardCard::getBoardId).containsExactlyInAnyOrder(defaultBoard.getId(),
-				thirdBoard.getId());
+		assertThat(boardCards).hasSize(3);
+		assertThat(boardCards.stream().filter(link -> !link.isDeleted()).map(ProductBoardCard::getBoardId))
+				.containsExactlyInAnyOrder(defaultBoard.getId(), thirdBoard.getId());
+		assertThat(boardCards.stream().filter(ProductBoardCard::isDeleted).map(ProductBoardCard::getBoardId))
+				.containsExactly(customBoard.getId());
 		ProductBoardCard preservedLink = boardCards.stream()
 				.filter(link -> link.getBoardId().equals(defaultBoard.getId())).findFirst().orElseThrow();
 		assertThat(preservedLink.getId()).isEqualTo(preservedLinkId);
@@ -358,6 +363,15 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 		assertThat(jobs).hasSize(2);
 		assertThat(jobs.get(0).getSourceUrl()).isEqualTo("https://image.msscdn.net/images/goods/new.jpg");
 		assertThat(jobs.get(0).getStatus()).isEqualTo(ImageMirrorJobStatus.PENDING);
+
+		updatePayload.put("boardIds", List.of(defaultBoard.getId(), customBoard.getId(), thirdBoard.getId()));
+		mvc.perform(patch("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken))
+				.contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(updatePayload)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.boards.length()").value(3));
+		ProductBoardCard reactivatedLink = productBoardCardRepository.findAllByCardIdOrderByIdAsc(cardId).stream()
+				.filter(link -> link.getBoardId().equals(customBoard.getId())).findFirst().orElseThrow();
+		assertThat(reactivatedLink.getId()).isEqualTo(removedLinkId);
+		assertThat(reactivatedLink.isDeleted()).isFalse();
 	}
 
 	@Test
@@ -507,7 +521,7 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 	}
 
 	@Test
-	void 활성상품카드가있을때_전체삭제를호출하면_소프트삭제되고보드매핑은유지된다() throws Exception {
+	void 활성상품카드가있을때_전체삭제를호출하면_카드와보드연결이소프트삭제된다() throws Exception {
 		long cardId = registerCard(ownerToken,
 				Map.of("productUrl", "https://www.musinsa.com/products/7777777", "productTitle", "삭제 대상 카드", "price",
 						33000, "fallbackIcon", "PANTS", "boardIds", List.of(defaultBoard.getId(), customBoard.getId()),
@@ -520,11 +534,11 @@ class ProductCardDetailIntegrationTest extends PostgresTestSupport {
 		assertThat(deletedCard.isDeleted()).isTrue();
 		assertThat(deletedCard.getDeletedAt()).isNotNull();
 
-		// CRITICAL INVARIANT: product_board_card rows must remain intact for trash
-		// restore previousBoardIds
 		List<ProductBoardCard> preservedMappings = productBoardCardRepository.findAllByCardIdOrderByIdAsc(cardId);
 		assertThat(preservedMappings).extracting(ProductBoardCard::getBoardId)
 				.containsExactlyInAnyOrder(defaultBoard.getId(), customBoard.getId());
+		assertThat(preservedMappings).allMatch(ProductBoardCard::isDeleted);
+		assertThat(preservedMappings).allMatch(link -> link.getDeletedAt() != null);
 
 		// Subsequent calls on soft-deleted card return 404 PRODUCT_CARD_NOT_FOUND
 		mvc.perform(get("/api/v1/products/{cardId}", cardId).header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))

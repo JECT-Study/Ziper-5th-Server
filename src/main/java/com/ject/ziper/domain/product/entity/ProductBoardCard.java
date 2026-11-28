@@ -23,8 +23,14 @@ public class ProductBoardCard {
 	@Column(name = "card_id", nullable = false)
 	private Long cardId;
 
-	@Column(name = "created_at", nullable = false, updatable = false)
+	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
+
+	@Column(name = "is_deleted", nullable = false)
+	private boolean deleted;
+
+	@Column(name = "deleted_at")
+	private Instant deletedAt;
 
 	protected ProductBoardCard() {
 	}
@@ -33,6 +39,8 @@ public class ProductBoardCard {
 		this.boardId = Objects.requireNonNull(boardId);
 		this.cardId = Objects.requireNonNull(cardId);
 		this.createdAt = Objects.requireNonNull(createdAt);
+		this.deleted = false;
+		this.deletedAt = null;
 	}
 
 	public static ProductBoardCard create(Long boardId, Long cardId, Instant createdAt) {
@@ -53,5 +61,24 @@ public class ProductBoardCard {
 
 	public Instant getCreatedAt() {
 		return createdAt;
+	}
+
+	public boolean isDeleted() {
+		return deleted;
+	}
+
+	public Instant getDeletedAt() {
+		return deletedAt;
+	}
+
+	public void softDelete(Instant now) {
+		this.deleted = true;
+		this.deletedAt = Objects.requireNonNull(now);
+	}
+
+	public void reactivate(Instant now) {
+		this.deleted = false;
+		this.deletedAt = null;
+		this.createdAt = Objects.requireNonNull(now);
 	}
 }

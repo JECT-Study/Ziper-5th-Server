@@ -4,10 +4,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ject.ziper.domain.trash.dto.PermanentlyDeleteTrashProductsRequest;
 import com.ject.ziper.domain.trash.service.TrashProductCommandService;
 import com.ject.ziper.global.error.BusinessException;
 import com.ject.ziper.global.error.ErrorCode;
@@ -29,12 +30,12 @@ public class TrashProductCommandController {
 		this.commandService = commandService;
 	}
 
-	@DeleteMapping("/{productId}")
-	@Operation(summary = "휴지통 상품 즉시 영구 삭제", description = "본인의 휴지통 상품 카드를 DB에서 즉시 영구 삭제합니다. 연결된 보드·태그·이벤트·이미지 작업도 함께 삭제됩니다.")
-	@ApiResponse(responseCode = "204", description = "영구 삭제 완료")
-	public ResponseEntity<Void> permanentlyDeleteProduct(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
-			@Parameter(description = "영구 삭제할 상품 카드 ID", example = "10") @PathVariable Long productId) {
-		commandService.permanentlyDeleteProduct(extractUserId(jwt), productId);
+	@DeleteMapping
+	@Operation(summary = "휴지통 상품 즉시 영구 삭제", description = "productIds에 카드 ID를 1개 또는 여러 개 지정합니다. 선택한 본인 휴지통 상품을 한 트랜잭션에서 삭제하며, 하나라도 삭제할 수 없으면 전체 요청을 거절합니다.")
+	@ApiResponse(responseCode = "204", description = "선택한 상품 영구 삭제 완료")
+	public ResponseEntity<Void> permanentlyDeleteProducts(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+			@RequestBody PermanentlyDeleteTrashProductsRequest request) {
+		commandService.permanentlyDeleteProducts(extractUserId(jwt), request == null ? null : request.productIds());
 		return ResponseEntity.noContent().build();
 	}
 
