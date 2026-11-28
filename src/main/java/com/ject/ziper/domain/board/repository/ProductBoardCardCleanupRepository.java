@@ -22,12 +22,25 @@ public class ProductBoardCardCleanupRepository {
 	}
 
 	public List<Long> findCardIdsByBoardId(Long boardId) {
-		return jdbc.queryForList("SELECT card_id FROM ziper.product_board_card WHERE board_id = ?", Long.class,
+		return jdbc.queryForList(
+				"SELECT card_id FROM ziper.product_board_card WHERE board_id = ? AND is_deleted = FALSE", Long.class,
 				boardId);
 	}
 
-	public int deleteBoardCardLinks(Long boardId) {
-		return jdbc.update("DELETE FROM ziper.product_board_card WHERE board_id = ?", boardId);
+	public int softDeleteBoardCardLinks(Long boardId, Instant deletedAt) {
+		return jdbc.update("""
+				UPDATE ziper.product_board_card
+				SET is_deleted = TRUE, deleted_at = ?
+				WHERE board_id = ? AND is_deleted = FALSE
+				""", Timestamp.from(deletedAt), boardId);
+	}
+
+	public int softDeleteBoardCardLink(Long boardId, Long cardId, Instant deletedAt) {
+		return jdbc.update("""
+				UPDATE ziper.product_board_card
+				SET is_deleted = TRUE, deleted_at = ?
+				WHERE board_id = ? AND card_id = ? AND is_deleted = FALSE
+				""", Timestamp.from(deletedAt), boardId, cardId);
 	}
 
 	public int softDeleteOrphanCards(Long userId, List<Long> cardIds, Instant deletedAt) {
@@ -51,6 +64,7 @@ public class ProductBoardCardCleanupRepository {
 					      FROM ziper.product_board_card pbc
 					      JOIN ziper.product_boards pb ON pb.id = pbc.board_id
 					      WHERE pbc.card_id = pc.id
+					        AND pbc.is_deleted = FALSE
 					        AND pb.is_deleted = FALSE
 					  )
 					""", params);

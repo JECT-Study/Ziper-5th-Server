@@ -46,6 +46,7 @@ public class BoardQueryRepository {
 				    FROM ziper.product_board_card pbc
 				    JOIN ziper.product_cards pc ON pc.id = pbc.card_id
 				    WHERE pc.user_id = :userId
+				      AND pbc.is_deleted = FALSE
 				      AND pc.is_deleted = FALSE
 				      AND pc.status = 'PLANNED'
 				    GROUP BY pbc.board_id
@@ -84,6 +85,7 @@ public class BoardQueryRepository {
 				    JOIN ziper.product_cards pc ON pc.id = pbc.card_id
 				    WHERE pb.user_id = :userId
 				      AND pb.is_deleted = FALSE
+				      AND pbc.is_deleted = FALSE
 				      AND pc.user_id = :userId
 				      AND pc.is_deleted = FALSE
 				      AND pc.status = 'PLANNED'
@@ -144,6 +146,7 @@ public class BoardQueryRepository {
 				FROM ziper.product_board_card pbc
 				JOIN ziper.product_cards pc ON pc.id = pbc.card_id
 				WHERE pbc.board_id = :boardId
+				  AND pbc.is_deleted = FALSE
 				  AND pc.user_id = :userId
 				  AND pc.is_deleted = FALSE
 				  AND pc.status = 'PLANNED'
@@ -185,6 +188,7 @@ public class BoardQueryRepository {
 				FROM ziper.product_board_card pbc
 				JOIN ziper.product_cards pc ON pc.id = pbc.card_id
 				WHERE pbc.board_id = :boardId
+				  AND pbc.is_deleted = FALSE
 				  AND pc.user_id = :userId
 				  AND pc.is_deleted = FALSE
 				  AND pc.status = 'PLANNED'

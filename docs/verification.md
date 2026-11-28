@@ -126,3 +126,35 @@ Windows에서 `gradlew.bat check --console=plain`의 Spotless·Checkstyle·ArchU
 - 로컬 Docker Compose(`ziper-local-app-1` + PostgreSQL 17.6, 커밋 `b97778e` 기준)에 `EMAIL_MAIL_ENABLED=true`, `EMAIL_FROM=noreply@joonamin.dev`, `MAIL_HOST=smtp.mailgun.org`, `MAIL_PORT=587`, `MAIL_USERNAME=noreply@joonamin.dev`를 적용해 기동(`Started ZiperApplication in 3.287 seconds`, `V5__create_email_verification_failures` 마이그레이션 포함)과 `/livez` `200`, `/readyz` `200`을 확인했습니다.
 - `POST /api/v1/auth/email/verifications` 호출로 `201 Created`(`flowId=22e1e65f-a6a6-47b5-b242-6b20a2252812`) 응답과 `noreply@joonamin.dev` 발신 메일이 Mailgun 및 Cloudflare Email Routing을 거쳐 Gmail 수신함까지 도착함을 확인했습니다. 검증 후 테스트용 `ziper-local-app-1` 컨테이너는 중지·정리했습니다.
 - GCP Secret Manager(`ziper-production` 프로젝트 `ziper-runtime-properties`)에 Mailgun SMTP 키를 포함한 버전 `3` 및 OAuth 키를 통합한 버전 `4`를 등록했습니다(비밀 값 미출력 확인). 운영 적용은 `Ziper-5th-Infra` `config/production.json`의 `secretVersions` 갱신 및 `main` 쌍 배포 이후 별도로 검증해야 하며, 운영 배포 전 대화에 노출됐던 초기 `MAIL_PASSWORD`의 회전이 필요합니다.
+
+## 2026-11-28 JECT-83 휴지통 상품 목록 조회
+
+- `feat/JECT-83-trash`에서 PostgreSQL 17.6 Testcontainers 통합 테스트 5개가 통과했습니다. 인증 필요, 빈 목록, 본인·미만료 카드 필터, 삭제 시각과 ID 정렬, 30일 D-Day 계산, 이미지 URL 우선순위와 DB 트랜잭션 밖 서명을 확인했습니다.
+- 로컬 OpenAPI 내보내기 테스트가 통과했고 `GET /api/v1/trash/products`와 응답 항목의 `cardId`, `shop`, `productTitle`, `price`, `imageUrl`, `daysRemaining`을 생성된 JSON에서 확인했습니다.
+- WSL에서 `scripts/check.sh`의 문서 정책과 Python 검사군은 모두 통과했습니다. WSL Gradle은 Windows 형식의 Java 경로를 Spotless 입력으로 받아 중단됐습니다. Windows Gradle `check`의 컴파일·Spotless·Checkstyle은 통과했고 전체 Java 테스트 443개 중 3개가 인증 1개·이미지 미러링 2개에서 실패했으며 3개는 건너뛰었습니다. 실패한 두 테스트 클래스를 분리 실행해도 같은 3개가 실패했습니다. 변경 전 커밋 `7cc32a2`의 별도 worktree에서도 같은 3개가 실패했습니다. 따라서 전체 Java 검사 성공으로 기록하지 않습니다.
+- 2026-11-28 02:26 UTC에 Windows 시각을 Docker `postgres:17.6` 컨테이너 실행 전후로 감싸 측정했습니다. Windows는 02:26:53.630~54.426, 컨테이너는 02:26:57.540으로 컨테이너 시계가 약 3~4초 앞섰습니다. 인증 테스트는 DB `CURRENT_TIMESTAMP - 1초`로 만료시킨 티켓을 Java 현재 시각과 비교하므로 아직 유효하다고 판단할 수 있습니다. 이미지 미러링 테스트도 DB 시각으로 설정한 작업 기한을 Java 현재 시각과 비교하므로 작업을 아직 선점하지 못하는 결과와 일치합니다. 시계 차이는 이번 변경 전에도 같은 실패가 난 원인으로 판단하며, Docker 시계 동기화 후 재검증은 하지 않았습니다.
+
+## 2026-11-28 보드 내 상품 연결 해제
+
+- `DELETE /api/v1/boards/{boardId}/products/{productId}` 통합 테스트에서 두 보드에 연결된 동일 카드를 순서대로 제거하면 첫 삭제 후 다른 보드에 남고 휴지통은 비어 있으며, 마지막 연결 해제 후 휴지통에 한 번만 나타나는 것을 확인했습니다. 미연결·타인 보드·재삭제 404와 미인증 401도 확인했습니다. 같은 테스트 클래스의 기존 보드 삭제 사례도 통과했습니다.
+- Windows Gradle `spotlessCheck`, `checkstyleMain`, `checkstyleTest`가 통과했습니다. 로컬 OpenAPI 테스트에서 새 DELETE 경로와 보드 한정 삭제 설명을 확인했습니다. 전체 Java 테스트는 이번 변경에 대해 재실행하지 않았습니다.
+
+## 2026-11-28 휴지통 상품 즉시 영구 삭제
+
+- PostgreSQL 17.6 Testcontainers 통합 테스트 3개가 통과했습니다. 삭제된 본인 카드의 `204`, 활성·타인·미존재 카드의 `404`, 미인증 `401`, 만료된 삭제 카드의 수동 삭제, 재삭제 `404`, 카드와 보드·태그·이벤트·이미지 작업 연결 행의 DB 삭제 및 휴지통 목록 반영을 확인했습니다.
+- 로컬 OpenAPI 테스트에서 `DELETE /api/v1/trash/products/{productId}`와 `204` 명세를 확인했습니다. Windows Gradle `spotlessCheck`, `checkstyleMain`, `checkstyleTest`가 통과했습니다. 전체 Java 테스트는 이번 변경에 대해 재실행하지 않았습니다.
+
+## 2026-11-28 보드 연결 소프트 삭제와 휴지통 지정 복구
+
+- PostgreSQL 17.6 Testcontainers에서 보드 상품 제거·보드 자체 삭제·휴지통 복구·상품 상세 수정·전체 삭제·보드 목록·홈 요약·영구 삭제 관련 통합 테스트 클래스를 실행해 통과했습니다. 두 보드에서 순서대로 연결을 해제하면 마지막 해제 후 카드가 휴지통에 한 번 나타나고, 연결 행은 삭제 상태로 남습니다. 상품 전체 삭제도 연결과 카드를 소프트 삭제합니다. 이후 복구 후보를 과거 연결 보드만 반환하도록 수정했고, 삭제 보드를 선택했을 때 보드와 연결이 함께 활성화되는지, 이름 중복 시 요청 전체를 거절하는지 추가 통합 테스트로 확인했습니다. 선택한 보드의 연결만 활성화하고 카드 상태를 `PLANNED`·최초 14일 주기로 초기화합니다. 만료·타인 카드는 복구되지 않습니다.
+- 로컬 OpenAPI 테스트에서 복구 보드 목록 GET과 지정 복구 POST의 경로·`204` 응답을 확인했습니다. Windows Gradle `spotlessCheck`, `checkstyleMain`, `checkstyleTest`가 통과했습니다. WSL `scripts/check.sh`의 Python 검사군(1·10·19·6·3개)은 통과했으나 Gradle `installGitHooks`에서 `git` 프로세스를 시작하지 못해 중단됐습니다. 전체 Java 테스트는 이번 변경에 대해 재실행하지 않았습니다.
+- 과거 연결 보드 복구 규칙으로 수정한 뒤 보드 명령·조회, 홈 조회, 상품 상세, 휴지통 목록·복구·영구 삭제의 관련 통합 테스트를 다시 실행해 통과했습니다. 이어 Windows 전체 Java 테스트 456개 중 3개 실패·3개 건너뜀을 확인했습니다. 실패는 변경 전 기준선에서도 재현된 인증 만료 티켓 1개와 이미지 미러링 작업 시각 2개이며, 이번 변경 경로의 테스트 실패는 없었습니다. 전체 검사 성공으로 기록하지 않습니다.
+- 이후 PRD 문구에 맞춰 복구 후보를 과거 연결 보드가 아닌 현재 소유한 활성 보드 전체로 다시 변경했습니다. 삭제된 보드는 복구 대상에서 제외하고, 과거 연결이 없는 활성 보드도 선택할 수 있게 했습니다. 앞선 과거 보드 복구 검증은 최종 계약의 증거로 사용하지 않습니다.
+- 최종 활성 보드 선택 계약으로 `TrashRestoreIntegrationTest`와 `TrashProductCommandOpenApiTest`를 다시 실행해 통과했고, Windows Gradle `spotlessCheck`·`checkstyleMain`·`checkstyleTest`도 통과했습니다. 전체 Java 테스트 456개 결과는 이 최종 수정 이전 실행이므로 최종 코드의 전체 검사 결과로 간주하지 않습니다.
+
+## 2026-11-28 휴지통 상품 다중 즉시 영구 삭제
+
+- `DELETE /api/v1/trash/products`에 `productIds` 배열을 받는 일괄 삭제를 추가했습니다. PostgreSQL 17.6 Testcontainers 통합 테스트에서 여러 카드와 삭제 연결의 영구 삭제, 선택하지 않은 카드 보존, 중복 ID 허용, 빈 배열 400, 타인·활성 카드 혼합 요청 404와 전부 보존, 미인증 401을 확인했습니다. 기존 단일 삭제 테스트도 함께 통과했습니다.
+- 로컬 OpenAPI 테스트에서 다중 DELETE 요청 본문과 `204` 명세를 확인했습니다. Windows Gradle `spotlessCheck`·`checkstyleMain`·`checkstyleTest`, 문서 정책 검사, `git diff --check`가 통과했습니다. 전체 Java 테스트는 이 변경 후 재실행하지 않았습니다.
+- 단일·다중 삭제를 `DELETE /api/v1/trash/products` 한 경로로 통합하고 기존 `/{productId}` DELETE 경로를 제거했습니다. 이전 단일 경로 검증은 최종 계약의 증거가 아닙니다. 보안 설정의 `anyRequest().authenticated()`와 미인증 요청 테스트로 JWT 필수 경계를 확인했습니다.
+- 최종 단일·다중 통합 계약으로 `TrashProductCommandIntegrationTest`, `TrashProductCommandOpenApiTest`, `TrashRestoreIntegrationTest`와 Windows Gradle `spotlessCheck`·`checkstyleMain`·`checkstyleTest`가 통과했습니다. OpenAPI에서 단일 삭제 경로가 제거되고 배열 요청 본문을 사용하는 한 DELETE 경로만 남은 것을 확인했습니다.
