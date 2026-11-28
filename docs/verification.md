@@ -126,3 +126,8 @@ Windows에서 `gradlew.bat check --console=plain`의 Spotless·Checkstyle·ArchU
 - 로컬 Docker Compose(`ziper-local-app-1` + PostgreSQL 17.6, 커밋 `b97778e` 기준)에 `EMAIL_MAIL_ENABLED=true`, `EMAIL_FROM=noreply@joonamin.dev`, `MAIL_HOST=smtp.mailgun.org`, `MAIL_PORT=587`, `MAIL_USERNAME=noreply@joonamin.dev`를 적용해 기동(`Started ZiperApplication in 3.287 seconds`, `V5__create_email_verification_failures` 마이그레이션 포함)과 `/livez` `200`, `/readyz` `200`을 확인했습니다.
 - `POST /api/v1/auth/email/verifications` 호출로 `201 Created`(`flowId=22e1e65f-a6a6-47b5-b242-6b20a2252812`) 응답과 `noreply@joonamin.dev` 발신 메일이 Mailgun 및 Cloudflare Email Routing을 거쳐 Gmail 수신함까지 도착함을 확인했습니다. 검증 후 테스트용 `ziper-local-app-1` 컨테이너는 중지·정리했습니다.
 - GCP Secret Manager(`ziper-production` 프로젝트 `ziper-runtime-properties`)에 Mailgun SMTP 키를 포함한 버전 `3` 및 OAuth 키를 통합한 버전 `4`를 등록했습니다(비밀 값 미출력 확인). 운영 적용은 `Ziper-5th-Infra` `config/production.json`의 `secretVersions` 갱신 및 `main` 쌍 배포 이후 별도로 검증해야 하며, 운영 배포 전 대화에 노출됐던 초기 `MAIL_PASSWORD`의 회전이 필요합니다.
+
+## 2026-11-28 JECT-79 구매 완료 전환·목록 (독립 PR)
+
+- `develop` 기준으로 PostgreSQL 17.6 Testcontainers의 구매 완료 통합 테스트 4개와 OpenAPI 테스트 1개가 통과했습니다. 다중 보드 연결 보존, 일반 보드 목록 제외, 구매 완료 목록 단일 노출, 원본 상품 URL·쇼핑몰·이름·가격·이미지·대표 태그, 저장소 서명 이미지 우선, 최초 등록 최신순과 4종 정렬의 커서 페이지네이션, 타인·삭제 카드 거부를 확인했습니다.
+- Windows `gradlew.bat check`는 443개 중 3개 실패·3개 건너뜀으로 종료했습니다. 실패는 구매 완료 범위 밖의 `AuthIntegrationTest` 만료 토큰 시간 경계 1개와 `ImageMirrorIntegrationTest` 2개입니다. `spotlessCheck`, `checkstyleMain`, `checkstyleTest`는 통과했습니다. Windows의 `test-harness-policy.py`는 심볼릭 링크 생성 권한 부족으로 실패했고, `check-harness-policy.py --repo .`와 `test-pr-policy.py` 10개 테스트는 통과했습니다.

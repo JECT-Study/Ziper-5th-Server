@@ -235,7 +235,8 @@
      - `PRICE_DESC`: `ORDER BY pc.price DESC, pbc.created_at DESC, pbc.id DESC`
 2. **구매 완료 목록 조회 (`5-4`)**:
    - 조건: `pc.user_id = :userId AND pc.is_deleted = FALSE AND pc.status = 'PURCHASED'`
-   - 정렬 4종(`sort`, 기본 `RECENT`): `ORDER BY pc.updated_at DESC, pc.id DESC` / `ASC` / `pc.price ASC|DESC` (보드 조인 없이 `product_cards` 기준 1회 노출)
+   - 정렬 4종(`sort`, 기본 `RECENT`): 최초 등록 시각 `pc.created_at DESC, pc.id DESC` / `ASC` / `pc.price ASC|DESC NULLS LAST, pc.created_at DESC, pc.id DESC` (보드 조인 없이 `product_cards` 기준 1회 노출)
+   - 표시 항목: 원래 상품 URL, 쇼핑몰, 이름, 가격, 이미지 URL(자체 저장소 썸네일 우선), 대표 태그 하나(기본 태그 우선·ID 오름차순의 첫 항목), 최초 등록 시각. 태그가 없으면 `null`이다.
 3. **휴지통 목록 조회 (`RQ-TRH-F1`)**:
    - 조건: `pc.user_id = :userId AND pc.is_deleted = TRUE AND pc.deleted_at > now() - INTERVAL '30 days'`
    - D-Day 계산: `CEIL(EXTRACT(EPOCH FROM ((pc.deleted_at + INTERVAL '30 days') - now())) / 86400.0)`
