@@ -84,6 +84,12 @@ management:
         readiness:
           include: readinessState,db
 app:
+  trash:
+    cleanup:
+      enabled: ${TRASH_CLEANUP_ENABLED:true}
+      cron: ${TRASH_CLEANUP_CRON:0 0 3 * * *}
+      zone: ${TRASH_CLEANUP_ZONE:Asia/Seoul}
+      chunk-size: ${TRASH_CLEANUP_CHUNK_SIZE:100}
   mail:
     enabled: ${EMAIL_MAIL_ENABLED:false}
     from: ${EMAIL_FROM:}

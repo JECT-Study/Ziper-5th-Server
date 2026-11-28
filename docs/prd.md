@@ -240,6 +240,7 @@
 3. **휴지통 목록 조회 (`RQ-TRH-F1`)**:
    - 조건: `pc.user_id = :userId AND pc.is_deleted = TRUE AND pc.deleted_at > now() - INTERVAL '30 days'`
    - D-Day 계산: `CEIL(EXTRACT(EPOCH FROM ((pc.deleted_at + INTERVAL '30 days') - now())) / 86400.0)`
+   - `daysRemaining`은 휴지통 조회·복구 가능 기간의 남은 일수(올림)이며 실제 자동 영구 삭제 실행 시각을 보장하지 않는다.
    - 정렬: `ORDER BY pc.deleted_at DESC, pc.id DESC`
    - 응답: `items` 배열에 `cardId`, `shop`, `productTitle`, `price`, `imageUrl`, `daysRemaining`만 반환. `imageUrl`은 저장소 썸네일 서명 URL을 우선하고, 없으면 원본 외부 이미지 URL을 사용한다. 대체 아이콘만 있는 카드의 `imageUrl`은 `null`이다.
    - 복구 보드 후보 조회: 삭제 후 30일 미만인 본인 카드에 대해 현재 보유한 활성 보드를 보드 생성 시각 최신순으로 반환한다. 복구 화면 내 새 보드 생성은 제공하지 않는다.

@@ -4,7 +4,7 @@
 
 Groovy Gradle을 사용하는 단일 모듈 프로젝트입니다. 기본 패키지는 `com.ject.ziper`입니다.
 
-업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 트랜잭션 범위 PostgreSQL advisory lock(`persistence`의 `AdvisoryLockRepository`), 보안(JWT·OAuth 토큰 검증 및 `RestClientAuthorizationCodeTokenResponseClient` 기반 무상태 인가 코드 교환 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정입니다. 휴지통 조회·복구·영구 삭제는 `domain/trash`가 맡고, DB 조회 후 저장소 이미지 URL을 서명해 응답하는 경계는 `TrashQueryFacade`에 둡니다.
+업무 기능은 `domain/<feature>` 아래에 `controller`, `service`, `repository`, `entity`, `dto` 패키지로 나눕니다. 실제 기능이 생길 때 필요한 패키지만 만듭니다. 공통 관심사는 `global` 아래 `config`, `security`, `persistence`, `error`, `observability`에 둡니다. 현재 구현된 공통 코드는 트랜잭션 범위 PostgreSQL advisory lock(`persistence`의 `AdvisoryLockRepository`), 보안(JWT·OAuth 토큰 검증 및 `RestClientAuthorizationCodeTokenResponseClient` 기반 무상태 인가 코드 교환 경계), 오류 처리, 관측 기능과 로컬 OpenAPI 설정입니다. 휴지통 조회·복구·영구 삭제와 만료 정기 배치는 `domain/trash`가 맡고, DB 조회 후 저장소 이미지 URL을 서명해 응답하는 경계는 `TrashQueryFacade`에 둡니다. 배치는 `batch` 패키지에서 트랜잭션 범위 비차단 advisory lock을 쥔 조정 서비스와 `REQUIRES_NEW` 청크 서비스를 분리합니다([ADR 0023](adr/0023-trash-expiration-batch.md)).
 
 상품 카드·보드·링크 쓰기가 함께 쓰는 advisory lock 키는 `board:{userId}` → `product-card:{userId}` → `link:{uuid}` → `link-id:{id}` 순서로만 잡습니다. 카드 등록은 보드 삭제와 같은 `board:`로 활성 보드 검증·연결을 직렬화하고, `ProductLinkService.resolveOrCreateLink`는 상태 갱신과 같은 `link-id:`를 잡은 채 최신 링크 상태를 반환합니다. 링크 잠금을 잡은 뒤에는 `board:`·`product-card:`를 잡지 않아 교착을 피합니다. 스토리지 서명처럼 외부 호출이 필요한 응답 조립은 `@Transactional` 밖(`ProductCardRegistrationFacade`)에서 합니다.
 

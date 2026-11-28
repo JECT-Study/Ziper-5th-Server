@@ -158,3 +158,9 @@ Windows에서 `gradlew.bat check --console=plain`의 Spotless·Checkstyle·ArchU
 - 로컬 OpenAPI 테스트에서 다중 DELETE 요청 본문과 `204` 명세를 확인했습니다. Windows Gradle `spotlessCheck`·`checkstyleMain`·`checkstyleTest`, 문서 정책 검사, `git diff --check`가 통과했습니다. 전체 Java 테스트는 이 변경 후 재실행하지 않았습니다.
 - 단일·다중 삭제를 `DELETE /api/v1/trash/products` 한 경로로 통합하고 기존 `/{productId}` DELETE 경로를 제거했습니다. 이전 단일 경로 검증은 최종 계약의 증거가 아닙니다. 보안 설정의 `anyRequest().authenticated()`와 미인증 요청 테스트로 JWT 필수 경계를 확인했습니다.
 - 최종 단일·다중 통합 계약으로 `TrashProductCommandIntegrationTest`, `TrashProductCommandOpenApiTest`, `TrashRestoreIntegrationTest`와 Windows Gradle `spotlessCheck`·`checkstyleMain`·`checkstyleTest`가 통과했습니다. OpenAPI에서 단일 삭제 경로가 제거되고 배열 요청 본문을 사용하는 한 DELETE 경로만 남은 것을 확인했습니다.
+
+## 2026-11-28 JECT-84 휴지통 만료 자동 영구 삭제
+
+- `feat/JECT-84-trash-cleanup`에서 PostgreSQL 17.6 Testcontainers 통합 테스트 3개가 통과했습니다. 30일 이상 삭제 카드만 정리하고 29일 삭제·활성 카드는 보존하는지, 연결·태그·이벤트·이미지 작업 cascade, 공유 파일 보존, 청크 3회 처리, 다른 트랜잭션의 advisory lock 보유 시 주기 건너뜀과 해제 후 재실행을 확인했습니다.
+- Windows Gradle `spotlessCheck`, `checkstyleMain`, `checkstyleTest`, 배치·휴지통 조회·복구 관련 통합 테스트가 통과했습니다. WSL `scripts/check.sh`의 Python 문서·정책 검사군(1·10·19·6·3개)은 통과했으나 WSL Gradle `installGitHooks`가 `git` 프로세스를 시작하지 못해 중단됐습니다.
+- Windows 전체 `gradlew check`는 460개 테스트 중 3개 실패·3개 건너뜀으로 실패했습니다. 실패한 소셜 가입 토큰 만료 1개와 이미지 미러링 작업 시각 2개는 이전 기준선에서 보고된 같은 테스트이며, 이번 배치 테스트 3개는 모두 통과했습니다. 전체 검사 성공으로 기록하지 않습니다.
