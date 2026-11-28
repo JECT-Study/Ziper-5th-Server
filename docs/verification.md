@@ -138,3 +138,8 @@ Windows에서 `gradlew.bat check --console=plain`의 Spotless·Checkstyle·ArchU
 
 - `DELETE /api/v1/boards/{boardId}/products/{productId}` 통합 테스트에서 두 보드에 연결된 동일 카드를 순서대로 제거하면 첫 삭제 후 다른 보드에 남고 휴지통은 비어 있으며, 마지막 연결 해제 후 휴지통에 한 번만 나타나는 것을 확인했습니다. 미연결·타인 보드·재삭제 404와 미인증 401도 확인했습니다. 같은 테스트 클래스의 기존 보드 삭제 사례도 통과했습니다.
 - Windows Gradle `spotlessCheck`, `checkstyleMain`, `checkstyleTest`가 통과했습니다. 로컬 OpenAPI 테스트에서 새 DELETE 경로와 보드 한정 삭제 설명을 확인했습니다. 전체 Java 테스트는 이번 변경에 대해 재실행하지 않았습니다.
+
+## 2026-11-28 휴지통 상품 즉시 영구 삭제
+
+- PostgreSQL 17.6 Testcontainers 통합 테스트 3개가 통과했습니다. 삭제된 본인 카드의 `204`, 활성·타인·미존재 카드의 `404`, 미인증 `401`, 만료된 삭제 카드의 수동 삭제, 재삭제 `404`, 카드와 보드·태그·이벤트·이미지 작업 연결 행의 DB 삭제 및 휴지통 목록 반영을 확인했습니다.
+- 로컬 OpenAPI 테스트에서 `DELETE /api/v1/trash/products/{productId}`와 `204` 명세를 확인했습니다. Windows Gradle `spotlessCheck`, `checkstyleMain`, `checkstyleTest`가 통과했습니다. 전체 Java 테스트는 이번 변경에 대해 재실행하지 않았습니다.
